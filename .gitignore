@@ -1,0 +1,17 @@
+# Local credentials and generated output
+.env
+.env.*
+!.env.example
+web/node_modules/
+web/dist/
+backend/bin/
+coverage/
+*.out
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.DS_Store
+tmp/
