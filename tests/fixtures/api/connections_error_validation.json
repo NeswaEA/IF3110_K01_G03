@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Konfigurasi koneksi tidak valid.",
+    "fields": {
+      "config.port": "harus antara 1 dan 65535"
+    },
+    "request_id": "req-demo-002"
+  }
+}

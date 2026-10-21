@@ -1,0 +1,41 @@
+{
+  "data": [
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "name": "PostgreSQL latihan",
+      "driver": "postgres",
+      "revision": 1,
+      "active": true,
+      "migration_ready": true,
+      "config": {
+        "host": "target-postgres",
+        "port": 5432,
+        "database": "demo",
+        "username": "platform_runner",
+        "sslmode": "disable",
+        "editor_role": "platform_editor",
+        "has_credentials": true
+      },
+      "last_checked_at": "2026-10-21T01:00:00Z",
+      "last_error_code": null
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000002",
+      "name": "SQLite latihan",
+      "driver": "sqlite",
+      "revision": 1,
+      "active": true,
+      "migration_ready": false,
+      "config": {
+        "file": "demo.sqlite"
+      },
+      "last_checked_at": null,
+      "last_error_code": null
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "has_more": false
+  }
+}

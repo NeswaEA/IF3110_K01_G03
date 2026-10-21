@@ -1,0 +1,32 @@
+{
+  "data": {
+    "columns": [
+      {
+        "name": "message",
+        "data_type": "text",
+        "encoding": "text"
+      },
+      {
+        "name": "logged_at",
+        "data_type": "timestamp with time zone",
+        "encoding": "timestamp"
+      }
+    ],
+    "rows": [
+      [
+        "start",
+        "2026-10-21T01:00:00Z"
+      ],
+      [
+        "stop",
+        null
+      ]
+    ],
+    "order_stable": false
+  },
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "has_more": false
+  }
+}

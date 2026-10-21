@@ -1,0 +1,46 @@
+{
+  "data": {
+    "columns": [
+      {
+        "name": "id",
+        "data_type": "bigint",
+        "encoding": "decimal_string"
+      },
+      {
+        "name": "name",
+        "data_type": "text",
+        "encoding": "text"
+      },
+      {
+        "name": "note",
+        "data_type": "text",
+        "encoding": "text"
+      },
+      {
+        "name": "payload",
+        "data_type": "bytea",
+        "encoding": "base64"
+      }
+    ],
+    "rows": [
+      [
+        "2",
+        "Contoh kedua",
+        null,
+        "3q2+7w=="
+      ],
+      [
+        "9007199254740993",
+        "Contoh",
+        "bigint melebihi 2^53",
+        null
+      ]
+    ],
+    "order_stable": true
+  },
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "has_more": false
+  }
+}

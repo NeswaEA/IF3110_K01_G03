@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "UNAUTHENTICATED",
+    "message": "Sesi berakhir.",
+    "fields": {},
+    "request_id": "req-demo-005"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "UNSUPPORTED_SQL",
+    "message": "Pilih satu statement untuk dianalisis.",
+    "fields": {
+      "sql": "lebih dari satu statement"
+    },
+    "request_id": "req-demo-010"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "data": {
+    "driver": "postgres",
+    "mode": "estimate",
+    "nodes": [
+      {
+        "id": "0",
+        "parent_id": null,
+        "operation": "Index Scan",
+        "relation": "items",
+        "index": "items_pkey",
+        "estimated_rows": 1,
+        "estimated_cost": 8.17,
+        "actual_time_ms": null,
+        "actual_rows": null
+      }
+    ],
+    "raw": [
+      {
+        "Plan": {
+          "Node Type": "Index Scan",
+          "Relation Name": "items",
+          "Index Name": "items_pkey",
+          "Plan Rows": 1,
+          "Total Cost": 8.17
+        }
+      }
+    ],
+    "warnings": []
+  }
+}

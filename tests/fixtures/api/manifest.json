@@ -1,0 +1,34 @@
+{
+  "note": "Shared API fixtures. IDs are the shared fixture IDs. The fingerprint in viewer_schema_*.json is the real Fingerprint() of the snapshot, checked by backend/internal/database. Mock handlers and Go/TS tests read these files instead of copying payloads.",
+  "files": {
+    "connections_*": {
+      "producer": "samson",
+      "consumer": [
+        "samson",
+        "neswa"
+      ]
+    },
+    "databases_*": {
+      "producer": "samson",
+      "consumer": [
+        "neswa",
+        "argha",
+        "samson"
+      ]
+    },
+    "viewer_*": {
+      "producer": "samson",
+      "consumer": [
+        "samson",
+        "argha"
+      ]
+    },
+    "explain_*": {
+      "producer": "samson",
+      "consumer": [
+        "samson",
+        "argha"
+      ]
+    }
+  }
+}

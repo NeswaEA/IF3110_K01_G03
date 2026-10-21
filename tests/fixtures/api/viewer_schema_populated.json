@@ -1,0 +1,139 @@
+{
+  "data": {
+    "database_id": "30000000-0000-4000-8000-000000000001",
+    "driver": "postgres",
+    "fingerprint": "sha256:76eb673932df29c6c6bab62816bbc8d37001369b7dd7170d40152b7d331e623a",
+    "schemas": [
+      {
+        "name": "public",
+        "tables": [
+          {
+            "name": "items",
+            "columns": [
+              {
+                "name": "id",
+                "data_type": "bigint",
+                "nullable": false,
+                "default": null,
+                "ordinal": 1
+              },
+              {
+                "name": "name",
+                "data_type": "text",
+                "nullable": false,
+                "default": null,
+                "ordinal": 2
+              },
+              {
+                "name": "note",
+                "data_type": "text",
+                "nullable": true,
+                "default": null,
+                "ordinal": 3
+              }
+            ],
+            "constraints": [
+              {
+                "name": "items_pkey",
+                "kind": "primary_key",
+                "columns": [
+                  "id"
+                ],
+                "definition": "PRIMARY KEY (id)",
+                "references": null
+              },
+              {
+                "name": "items_name_key",
+                "kind": "unique",
+                "columns": [
+                  "name"
+                ],
+                "definition": "UNIQUE (name)",
+                "references": null
+              }
+            ],
+            "indexes": [
+              {
+                "name": "items_pkey",
+                "unique": true,
+                "primary": true,
+                "columns": [
+                  "id"
+                ],
+                "definition": "CREATE UNIQUE INDEX items_pkey ON public.items USING btree (id)"
+              },
+              {
+                "name": "items_name_key",
+                "unique": true,
+                "primary": false,
+                "columns": [
+                  "name"
+                ],
+                "definition": "CREATE UNIQUE INDEX items_name_key ON public.items USING btree (name)"
+              }
+            ]
+          },
+          {
+            "name": "shipments",
+            "columns": [
+              {
+                "name": "order_id",
+                "data_type": "bigint",
+                "nullable": false,
+                "default": null,
+                "ordinal": 1
+              },
+              {
+                "name": "line_no",
+                "data_type": "integer",
+                "nullable": false,
+                "default": null,
+                "ordinal": 2
+              },
+              {
+                "name": "carrier",
+                "data_type": "text",
+                "nullable": true,
+                "default": null,
+                "ordinal": 3
+              }
+            ],
+            "constraints": [
+              {
+                "name": "shipments_order_id_line_no_fkey",
+                "kind": "foreign_key",
+                "columns": [
+                  "order_id",
+                  "line_no"
+                ],
+                "definition": "FOREIGN KEY (order_id, line_no) REFERENCES order_lines(order_id, line_no)",
+                "references": {
+                  "schema": "public",
+                  "table": "order_lines",
+                  "columns": [
+                    "order_id",
+                    "line_no"
+                  ],
+                  "on_update": "NO ACTION",
+                  "on_delete": "NO ACTION"
+                }
+              }
+            ],
+            "indexes": [
+              {
+                "name": "shipments_carrier_order_idx",
+                "unique": false,
+                "primary": false,
+                "columns": [
+                  "carrier",
+                  "order_id"
+                ],
+                "definition": "CREATE INDEX shipments_carrier_order_idx ON public.shipments USING btree (carrier, order_id)"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

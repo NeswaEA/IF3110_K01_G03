@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Database tidak ditemukan.",
+    "fields": {},
+    "request_id": "req-demo-007"
+  }
+}

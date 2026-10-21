@@ -1,0 +1,12 @@
+{
+  "data": {
+    "reachable": true,
+    "latency_ms": 12,
+    "capabilities": {
+      "transactional_migrations": true,
+      "schema_diff": true,
+      "explain": true,
+      "explain_analyze": false
+    }
+  }
+}

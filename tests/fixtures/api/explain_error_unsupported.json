@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "PLAN_UNSUPPORTED",
+    "message": "Statement ini tidak mendukung rencana eksekusi.",
+    "fields": {},
+    "request_id": "req-demo-009"
+  }
+}

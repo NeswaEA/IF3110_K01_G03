@@ -1,0 +1,35 @@
+{
+  "data": [
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "name": "PostgreSQL latihan",
+      "driver": "postgres",
+      "revision": 1,
+      "effective_access": "edit",
+      "capabilities": {
+        "transactional_migrations": true,
+        "schema_diff": true,
+        "explain": true,
+        "explain_analyze": false
+      }
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000002",
+      "name": "SQLite latihan",
+      "driver": "sqlite",
+      "revision": 1,
+      "effective_access": "view",
+      "capabilities": {
+        "transactional_migrations": true,
+        "schema_diff": true,
+        "explain": true,
+        "explain_analyze": false
+      }
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "has_more": false
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Anda tidak memiliki akses ke database ini.",
+    "fields": {},
+    "request_id": "req-demo-006"
+  }
+}

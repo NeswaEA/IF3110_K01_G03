@@ -1,0 +1,8 @@
+{
+  "data": {
+    "database_id": "30000000-0000-4000-8000-000000000001",
+    "driver": "postgres",
+    "fingerprint": "sha256:90ce96299e02b1372ba8e27d9387a0c1e7c802b4ca20fe5fdf2978cd55e0b690",
+    "schemas": []
+  }
+}

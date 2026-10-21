@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "TARGET_UNAVAILABLE",
+    "message": "Target tidak dapat dihubungi.",
+    "fields": {},
+    "request_id": "req-demo-003"
+  }
+}

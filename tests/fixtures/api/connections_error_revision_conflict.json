@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "REVISION_CONFLICT",
+    "message": "Koneksi berubah sejak dibaca; muat ulang.",
+    "fields": {},
+    "request_id": "req-demo-004"
+  }
+}

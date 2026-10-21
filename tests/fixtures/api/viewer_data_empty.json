@@ -1,0 +1,23 @@
+{
+  "data": {
+    "columns": [
+      {
+        "name": "id",
+        "data_type": "integer",
+        "encoding": "number"
+      },
+      {
+        "name": "label",
+        "data_type": "text",
+        "encoding": "text"
+      }
+    ],
+    "rows": [],
+    "order_stable": true
+  },
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "has_more": false
+  }
+}

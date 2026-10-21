@@ -1,0 +1,30 @@
+{
+  "data": {
+    "driver": "sqlite",
+    "mode": "estimate",
+    "nodes": [
+      {
+        "id": "2",
+        "parent_id": null,
+        "operation": "SEARCH items USING INTEGER PRIMARY KEY (rowid=?)",
+        "relation": "items",
+        "index": null,
+        "estimated_rows": null,
+        "estimated_cost": null,
+        "actual_time_ms": null,
+        "actual_rows": null
+      }
+    ],
+    "raw": [
+      {
+        "id": 2,
+        "parent": 0,
+        "notused": 0,
+        "detail": "SEARCH items USING INTEGER PRIMARY KEY (rowid=?)"
+      }
+    ],
+    "warnings": [
+      "SQLite tidak menyediakan estimasi biaya atau jumlah baris."
+    ]
+  }
+}
