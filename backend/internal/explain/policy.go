@@ -1,19 +1,38 @@
 package explain
 
 import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
 	"strings"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database/sqlite"
 )
 
 // The explain policy is separate from the migration guard: it only
 // decides whether one statement may be planned. Any rejection happens before
-// the engine is touched.
+// a plan is requested.
 
-// classifyPostgres uses the PostgreSQL 17 parser, so semicolons in strings or
-// comments are not statement boundaries.
+// pgNoPlan are statement nodes that are valid DDL but have no plan.
+// Everything not plannable and not listed here is UNSUPPORTED_SQL.
+var pgNoPlan = map[string]bool{
+	"CreateStmt": true, "CreateTableAsStmt": true, "IndexStmt": true, "ViewStmt": true,
+	"CreateSchemaStmt": true, "CreateSeqStmt": true, "AlterSeqStmt": true,
+	"CreateFunctionStmt": true, "AlterFunctionStmt": true, "CreateTrigStmt": true,
+	"CreateEnumStmt": true, "AlterEnumStmt": true, "CompositeTypeStmt": true, "CreateDomainStmt": true,
+	"AlterDomainStmt": true, "CreateRangeStmt": true, "DefineStmt": true, "RuleStmt": true,
+	"CreatePolicyStmt": true, "AlterPolicyStmt": true, "CreateStatsStmt": true, "AlterStatsStmt": true,
+	"AlterTableStmt": true, "AlterTypeStmt": true, "RenameStmt": true, "AlterObjectSchemaStmt": true,
+	"AlterOwnerStmt": true, "DropStmt": true, "TruncateStmt": true, "CommentStmt": true, "ReindexStmt": true,
+	"MergeStmt": true,
+}
+
+// classifyPostgres uses the PostgreSQL 17 parser without touching the target,
+// so semicolons in strings or comments are not statement boundaries.
 func classifyPostgres(sql string) (string, error) {
 	tree, err := pg_query.Parse(sql)
 	if err != nil {
@@ -22,135 +41,98 @@ func classifyPostgres(sql string) (string, error) {
 	if len(tree.Stmts) != 1 {
 		return "", ErrMultipleStatements
 	}
-	raw := tree.Stmts[0]
-	switch raw.Stmt.Node.(type) {
-	case *pg_query.Node_SelectStmt, *pg_query.Node_InsertStmt, *pg_query.Node_UpdateStmt,
-		*pg_query.Node_DeleteStmt, *pg_query.Node_MergeStmt:
-		// slice the original text so EXPLAIN sees exactly what the user wrote
-		start, end := int(raw.StmtLocation), int(raw.StmtLocation+raw.StmtLen)
-		if raw.StmtLen == 0 || end > len(sql) {
-			end = len(sql)
-		}
-		return strings.TrimSpace(sql[start:end]), nil
-	case *pg_query.Node_ExplainStmt, *pg_query.Node_TransactionStmt, *pg_query.Node_VariableSetStmt,
-		*pg_query.Node_VariableShowStmt, *pg_query.Node_DiscardStmt, *pg_query.Node_DoStmt,
-		*pg_query.Node_CallStmt, *pg_query.Node_CopyStmt, *pg_query.Node_PrepareStmt,
-		*pg_query.Node_ExecuteStmt, *pg_query.Node_DeallocateStmt, *pg_query.Node_LockStmt,
-		*pg_query.Node_ListenStmt, *pg_query.Node_NotifyStmt, *pg_query.Node_UnlistenStmt,
-		*pg_query.Node_VacuumStmt, *pg_query.Node_CheckPointStmt, *pg_query.Node_LoadStmt:
-		return "", ErrUnsupportedSQL // control or utility commands: out of scope, never sent
-	}
-	return "", ErrPlanUnsupported // a valid statement (DDL, GRANT, ...) that has no plan
-}
-
-// classifySQLite splits on statement boundaries outside literals, quoted
-// identifiers and comments, then checks the leading keyword.
-func classifySQLite(sql string) (string, error) {
-	stmts := splitSQLite(sql)
-	if len(stmts) == 0 {
+	reserved, params, err := pgScan(sql)
+	if err != nil || reserved {
 		return "", ErrUnsupportedSQL
 	}
-	if len(stmts) != 1 {
+	if params {
+		// pgx would refuse to send it without arguments; report it as the engine's rejection
+		return "", &database.EngineError{Message: "parameter placeholder tanpa nilai tidak didukung"}
+	}
+	raw := tree.Stmts[0]
+	plannable := false
+	switch n := raw.Stmt.Node.(type) {
+	case *pg_query.Node_SelectStmt:
+		if n.SelectStmt.IntoClause != nil {
+			return "", ErrPlanUnsupported // SELECT ... INTO creates a table
+		}
+		plannable = true
+	case *pg_query.Node_InsertStmt, *pg_query.Node_UpdateStmt, *pg_query.Node_DeleteStmt:
+		plannable = true
+	}
+	if !plannable {
+		if pgNoPlan[strings.TrimPrefix(fmt.Sprintf("%T", raw.Stmt.Node), "*pg_query.Node_")] {
+			return "", ErrPlanUnsupported
+		}
+		return "", ErrUnsupportedSQL // control, session, privilege, utility and admin commands are never sent
+	}
+	// slice the original text so EXPLAIN sees exactly what the user wrote
+	start, end := int(raw.StmtLocation), int(raw.StmtLocation+raw.StmtLen)
+	if raw.StmtLen == 0 || end > len(sql) {
+		end = len(sql)
+	}
+	return strings.TrimSpace(sql[start:end]), nil
+}
+
+// pgScan walks the whole parse tree, subqueries and CTEs included. reserved is
+// a qualified reference to the _platform schema: a relation's schemaname, or a
+// dotted name (_platform.fn(), _platform.t.col, a type) where it is any part
+// but the last; a bare column or alias named _platform is not one. params is
+// any $n placeholder.
+func pgScan(sql string) (reserved, params bool, err error) {
+	out, err := pg_query.ParseToJSON(sql)
+	if err != nil {
+		return false, false, err
+	}
+	var tree any
+	if err := json.Unmarshal([]byte(out), &tree); err != nil {
+		return false, false, err
+	}
+	var walk func(v any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			if x["schemaname"] == "_platform" {
+				reserved = true
+			}
+			if _, ok := x["ParamRef"]; ok {
+				params = true
+			}
+			for _, c := range x {
+				walk(c)
+			}
+		case []any:
+			for i, c := range x {
+				if i < len(x)-1 {
+					if m, ok := c.(map[string]any); ok {
+						if s, ok := m["String"].(map[string]any); ok && s["sval"] == "_platform" {
+							reserved = true
+						}
+					}
+				}
+				walk(c)
+			}
+		}
+	}
+	walk(tree)
+	return reserved, params, nil
+}
+
+// classifySQLite asks the engine itself (see sqlite.Classify): there is no
+// SQLite AST parser, so statement kind comes from the authorizer at prepare
+// time and the statement boundary from the engine's tail.
+func classifySQLite(ctx context.Context, db *sql.DB, query string) (string, error) {
+	stmt, kind, err := sqlite.Classify(ctx, db, query)
+	if err != nil {
+		return "", err
+	}
+	switch kind {
+	case sqlite.Plannable:
+		return stmt, nil
+	case sqlite.NoPlan:
+		return "", ErrPlanUnsupported
+	case sqlite.Multiple:
 		return "", ErrMultipleStatements
 	}
-	stmt := stmts[0]
-	switch firstKeyword(stmt) {
-	case "SELECT", "VALUES", "WITH", "INSERT", "REPLACE", "UPDATE", "DELETE":
-		return stmt, nil
-	case "CREATE", "ALTER", "DROP", "REINDEX", "ANALYZE":
-		return "", ErrPlanUnsupported
-	}
-	// BEGIN/COMMIT/END/ROLLBACK/SAVEPOINT/RELEASE, EXPLAIN, PRAGMA, ATTACH, DETACH, VACUUM, unknown
 	return "", ErrUnsupportedSQL
-}
-
-func splitSQLite(s string) []string {
-	var out []string
-	start := 0
-	for i := 0; i < len(s); {
-		c := s[i]
-		switch {
-		case c == '\'' || c == '"' || c == '`':
-			i = skipQuoted(s, i, c)
-			continue
-		case c == '[':
-			if j := strings.IndexByte(s[i:], ']'); j >= 0 {
-				i += j + 1
-			} else {
-				i = len(s)
-			}
-			continue
-		case c == '-' && i+1 < len(s) && s[i+1] == '-':
-			if j := strings.IndexByte(s[i:], '\n'); j >= 0 {
-				i += j + 1
-			} else {
-				i = len(s)
-			}
-			continue
-		case c == '/' && i+1 < len(s) && s[i+1] == '*':
-			if j := strings.Index(s[i+2:], "*/"); j >= 0 {
-				i += j + 4
-			} else {
-				i = len(s)
-			}
-			continue
-		case c == ';':
-			if stmt := strings.TrimSpace(s[start:i]); hasCode(stmt) {
-				out = append(out, stmt)
-			}
-			start = i + 1
-		}
-		i++
-	}
-	if stmt := strings.TrimSpace(s[start:]); hasCode(stmt) {
-		out = append(out, stmt)
-	}
-	return out
-}
-
-func skipQuoted(s string, i int, q byte) int {
-	for j := i + 1; j < len(s); j++ {
-		if s[j] == q {
-			if j+1 < len(s) && s[j+1] == q {
-				j++
-				continue
-			}
-			return j + 1
-		}
-	}
-	return len(s)
-}
-
-// stripComments removes leading comments and whitespace.
-func stripComments(s string) string {
-	for {
-		s = strings.TrimSpace(s)
-		switch {
-		case strings.HasPrefix(s, "--"):
-			if j := strings.IndexByte(s, '\n'); j >= 0 {
-				s = s[j+1:]
-			} else {
-				return ""
-			}
-		case strings.HasPrefix(s, "/*"):
-			if j := strings.Index(s, "*/"); j >= 0 {
-				s = s[j+2:]
-			} else {
-				return ""
-			}
-		default:
-			return s
-		}
-	}
-}
-
-func hasCode(stmt string) bool { return stripComments(stmt) != "" }
-
-func firstKeyword(stmt string) string {
-	s := stripComments(stmt)
-	end := 0
-	for end < len(s) && (s[end] >= 'a' && s[end] <= 'z' || s[end] >= 'A' && s[end] <= 'Z') {
-		end++
-	}
-	return strings.ToUpper(s[:end])
 }

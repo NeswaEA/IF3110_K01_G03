@@ -6,7 +6,7 @@
       {
         "id": "2",
         "parent_id": null,
-        "operation": "SEARCH items USING INTEGER PRIMARY KEY (rowid=?)",
+        "operation": "SEARCH",
         "relation": "items",
         "index": null,
         "estimated_rows": null,
@@ -24,7 +24,7 @@
       }
     ],
     "warnings": [
-      "SQLite tidak menyediakan estimasi biaya atau jumlah baris."
+      "SQLite tidak menyediakan estimasi cost atau jumlah row pada EXPLAIN QUERY PLAN."
     ]
   }
 }

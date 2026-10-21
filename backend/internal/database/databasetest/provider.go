@@ -65,5 +65,16 @@ func (p *Provider) Acquire(ctx context.Context, id string) (database.TargetHandl
 	return h, func() { once.Do(func() { p.released.Add(1) }) }, nil
 }
 
+// Driver reports the driver of a known handle without counting a lease.
+func (p *Provider) Driver(ctx context.Context, id string) (database.Driver, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	h, ok := p.handles[id]
+	if !ok {
+		return "", database.ErrNotFound
+	}
+	return h.Driver, nil
+}
+
 func (p *Provider) Acquired() int64 { return p.acquired.Load() }
 func (p *Provider) Released() int64 { return p.released.Load() }

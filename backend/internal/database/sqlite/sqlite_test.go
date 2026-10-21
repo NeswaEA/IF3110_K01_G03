@@ -236,3 +236,53 @@ func TestReadOnlyAuthorizerIsScopedAndRemoved(t *testing.T) {
 		t.Fatalf("foreign_keys changed: %d %v", fk, err)
 	}
 }
+
+func TestDescribePlanDetail(t *testing.T) {
+	str := func(p *string) string {
+		if p == nil {
+			return "<nil>"
+		}
+		return *p
+	}
+	for detail, want := range map[string][3]string{
+		"SCAN items": {"SCAN", "items", "<nil>"},
+		"SEARCH items USING INTEGER PRIMARY KEY (rowid=?)":               {"SEARCH", "items", "<nil>"},
+		"SEARCH orders USING INDEX orders_item_idx (item_id=?)":          {"SEARCH", "orders", "orders_item_idx"},
+		"SEARCH orders USING COVERING INDEX orders_item_idx (item_id=?)": {"SEARCH", "orders", "orders_item_idx"},
+		"SEARCH o USING AUTOMATIC COVERING INDEX (item_id=?)":            {"SEARCH", "o", "<nil>"},
+		"SEARCH o USING AUTOMATIC PARTIAL COVERING INDEX (item_id=?)":    {"SEARCH", "o", "<nil>"},
+		"USE TEMP B-TREE FOR ORDER BY":                                   {"USE TEMP B-TREE FOR ORDER BY", "<nil>", "<nil>"},
+		"CORRELATED SCALAR SUBQUERY 1":                                   {"CORRELATED SCALAR SUBQUERY 1", "<nil>", "<nil>"},
+	} {
+		op, rel, ix := describe(detail)
+		if got := [3]string{op, str(rel), str(ix)}; got != want {
+			t.Errorf("%q: %v, want %v", detail, got, want)
+		}
+	}
+}
+
+// Statement boundaries come from the engine, so the driver's tail must stay readable.
+func TestClassifyReadsEngineTail(t *testing.T) {
+	h := fixtureDB(t)
+	cases := map[string]StatementKind{
+		"SELECT 1":                    Plannable,
+		"SELECT 1; -- done":           Plannable,
+		"SELECT 1; SELECT 2":          Multiple,
+		"SELECT ';' ; SELECT 2":       Multiple,
+		"CREATE TABLE z (a int)":      NoPlan,
+		"BEGIN":                       Unsupported,
+		"SELECT * FROM _platform_x_y": Unsupported,
+	}
+	if _, err := h.DB.Exec(`CREATE TABLE _platform_x_y (v int)`); err != nil {
+		t.Fatal(err)
+	}
+	for in, want := range cases {
+		if _, kind, err := Classify(ctx, h.DB, in); err != nil || kind != want {
+			t.Errorf("%q: kind %d err %v, want %d", in, kind, err, want)
+		}
+	}
+	var ee *database.EngineError
+	if _, _, err := Classify(ctx, h.DB, "SELECT ?"); !errors.As(err, &ee) {
+		t.Errorf("placeholder: %v", err)
+	}
+}
