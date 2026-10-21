@@ -129,7 +129,7 @@ func ErrorCode(err error) string {
 	case errors.Is(err, ErrInvalid):
 		return "INVALID_REQUEST"
 	case errors.Is(err, ErrRevisionConflict), errors.Is(err, ErrIdentityLocked):
-		return "REVISION_CONFLICT" // no dedicated code for a locked identity yet; confirm with neswa
+		return "REVISION_CONFLICT"
 	case errors.Is(err, ErrDuplicateTarget):
 		return "DUPLICATE_TARGET"
 	case errors.Is(err, database.ErrTargetTimeout):

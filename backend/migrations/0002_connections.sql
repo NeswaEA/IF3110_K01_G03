@@ -1,4 +1,4 @@
--- Registered target databases. Owner: samson.
+-- Registered target databases.
 -- config_encrypted is AES-GCM nonce||ciphertext; the key lives only in the environment.
 CREATE TABLE database_connections (
     id               uuid PRIMARY KEY,

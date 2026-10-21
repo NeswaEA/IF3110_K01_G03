@@ -20,7 +20,7 @@ func TestDecodeJSON(t *testing.T) {
 		name, body, contentType, code string
 		limit                         int64
 	}{
-		{"valid", `{"name":"Neswa"}`, "application/json", "", 0},
+		{"valid", `{"name":"Example"}`, "application/json", "", 0},
 		{"charset", `{}`, "application/json; charset=utf-8", "", 0},
 		{"exact limit", `{}`, "application/json", "", 2},
 		{"too large", `{} `, "application/json", "PAYLOAD_TOO_LARGE", 2},
@@ -53,7 +53,7 @@ func TestDecodeJSON(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if tt.name == "valid" && dst.Name != "Neswa" {
+				if tt.name == "valid" && dst.Name != "Example" {
 					t.Fatal("value not decoded")
 				}
 				return

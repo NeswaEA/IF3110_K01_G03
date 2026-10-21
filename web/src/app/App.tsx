@@ -6,8 +6,6 @@ import { DatabaseList } from "../features/viewer/DatabaseList";
 import { DatabaseViewer } from "../features/viewer/DatabaseViewer";
 import { SessionProvider, useSession } from "./session";
 
-// Feature pages are owned by their authors and plug into these routes:
-// auth/access -> neswa, connections/viewer/explain -> samson, migrations/schemadiff -> argha.
 function Pending({ feature }: { feature: string }) {
   return <p>Halaman {feature} belum tersedia.</p>;
 }

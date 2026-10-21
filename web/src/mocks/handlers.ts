@@ -1,9 +1,5 @@
-// Mock handlers for the connections / viewer / explain families, built on the
-// shared fixtures in tests/fixtures/api. Auth/access
-// and migrations/diff handlers are added by their owners next to these.
-// Routes not listed here must fail: start the worker/server with
-// onUnhandledFrame: "error" so a typo in a path is visible.
 import { http, HttpResponse, type RequestHandler } from "msw";
+import { createAuthHandlers } from "./auth";
 
 import connectionsList from "../../../tests/fixtures/api/connections_list.json";
 import connectionsTestOk from "../../../tests/fixtures/api/connections_test_ok.json";
@@ -29,6 +25,7 @@ const driverOf = (id: string) => databasesList.data.find((d) => d.id === id)?.dr
 const notFound = () => HttpResponse.json(viewerErrorNotFound, { status: 404 });
 
 export const handlers: RequestHandler[] = [
+  ...createAuthHandlers(),
   http.get(`${API}/admin/connections`, () => HttpResponse.json(connectionsList)),
 
   http.post(`${API}/admin/connections`, async ({ request }) => {
