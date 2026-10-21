@@ -25,6 +25,9 @@ type TargetHandle struct {
 	Revision       int64
 	MigrationReady bool
 	DB             *sql.DB
+	// EditorRole is the PostgreSQL role viewer reads, plans and user SQL switch
+	// to with SET LOCAL ROLE; empty for SQLite.
+	EditorRole string
 }
 
 type ConstraintKind string

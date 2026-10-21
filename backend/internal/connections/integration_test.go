@@ -466,6 +466,12 @@ func TestPoolInvalidationOnRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if h1.EditorRole != "platform_editor" {
+		t.Fatalf("editor role not carried on the lease: %q", h1.EditorRole)
+	}
+	if d, err := e.reg.Driver(ctx, c.ID); err != nil || d != database.Postgres {
+		t.Fatalf("driver lookup: %q %v", d, err)
+	}
 	name := "renamed"
 	if _, err := e.svc.Update(ctx, c.ID, UpdateInput{Revision: 1, Name: &name}); err != nil {
 		t.Fatal(err)

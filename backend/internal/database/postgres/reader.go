@@ -5,16 +5,54 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
 )
 
 // Reader returns table rows for the viewer. It never accepts SQL: the table is
 // looked up in the catalog first, identifiers are quoted, and only limit and
-// offset are bound as parameters. Reads run in a READ ONLY transaction.
+// offset are bound as parameters. Reads run in a READ ONLY transaction as the
+// target's editor role, so a table that role may not read is ErrTargetPermission.
 type Reader struct{}
+
+// beginAsEditor opens the READ ONLY transaction viewer reads and plans run in:
+// SET LOCAL ROLE to the handle's editor role, and statement_timeout bounded by
+// the request deadline. Setup failures are the target's, never the user's.
+func beginAsEditor(ctx context.Context, t database.TargetHandle) (*sql.Tx, error) {
+	if t.EditorRole == "" {
+		return nil, database.ErrTargetUnavailable // the registry always sets it; never fall back to the login role
+	}
+	tx, err := t.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, setupErr(ctx, err)
+	}
+	_, err = tx.ExecContext(ctx, `SET LOCAL ROLE `+QuoteIdent(t.EditorRole))
+	if err == nil {
+		if d, ok := ctx.Deadline(); ok {
+			ms := max(time.Until(d).Milliseconds(), 1)
+			_, err = tx.ExecContext(ctx, `SELECT set_config('statement_timeout', $1, true)`, strconv.FormatInt(ms, 10))
+		}
+	}
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, setupErr(ctx, err)
+	}
+	return tx, nil
+}
+
+// setupErr: a role the login cannot switch to is a broken registration, not a 403.
+func setupErr(ctx context.Context, err error) error {
+	err = database.ClassifyTargetError(ctx, err)
+	if errors.Is(err, database.ErrTargetPermission) {
+		return database.ErrTargetUnavailable
+	}
+	return err
+}
 
 type column struct {
 	name, dataType, typeName string
@@ -41,9 +79,12 @@ func encodingFor(typeName string) database.Encoding {
 }
 
 func (Reader) ReadTable(ctx context.Context, t database.TargetHandle, schema, table string, limit, offset int) (database.TableData, bool, error) {
-	tx, err := t.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if database.Reserved(schema, table) {
+		return database.TableData{}, false, database.ErrNotFound // before any round trip
+	}
+	tx, err := beginAsEditor(ctx, t)
 	if err != nil {
-		return database.TableData{}, false, database.ClassifyTargetError(ctx, err)
+		return database.TableData{}, false, err
 	}
 	defer tx.Rollback()
 	data, more, err := readTable(ctx, tx, schema, table, limit, offset)
@@ -54,9 +95,6 @@ func (Reader) ReadTable(ctx context.Context, t database.TargetHandle, schema, ta
 }
 
 func readTable(ctx context.Context, tx *sql.Tx, schema, table string, limit, offset int) (database.TableData, bool, error) {
-	if database.Reserved(schema, table) {
-		return database.TableData{}, false, database.ErrNotFound
-	}
 	var oid uint32
 	// same visibility rule as the inspector: no system catalogs, no reserved schema
 	err := tx.QueryRowContext(ctx, `

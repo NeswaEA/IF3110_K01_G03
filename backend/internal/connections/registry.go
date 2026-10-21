@@ -46,6 +46,7 @@ type poolEntry struct {
 	retired  bool
 	closed   bool
 	verified atomic.Bool
+	editor   string // PostgreSQL editor_role of this revision
 }
 
 var (
@@ -68,39 +69,39 @@ func (r *Registry) config(row Row) (Config, error) {
 	return decodeConfig(row.Driver, plain)
 }
 
-func (r *Registry) openDB(row Row) (*sql.DB, error) {
+func (r *Registry) openDB(row Row) (*sql.DB, string, error) {
 	cfg, err := r.config(row)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	switch row.Driver {
 	case database.Postgres:
 		db, err := sql.Open("pgx", cfg.Postgres.DSN(int(r.opts.ConnectTimeout/time.Second)))
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		db.SetMaxOpenConns(5)
 		db.SetMaxIdleConns(2)
 		db.SetConnMaxLifetime(30 * time.Minute)
-		return db, nil
+		return db, cfg.Postgres.EditorRole, nil
 	case database.SQLite:
 		path, err := ResolveSQLitePath(r.opts.SQLiteDir, cfg.SQLite.File)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		// mode=rw: a missing file is "unavailable", never silently created.
 		// _foreign_keys is a DSN option so every pooled connection enforces FKs.
 		q := url.Values{"mode": {"rw"}, "_foreign_keys": {"1"}, "_busy_timeout": {"5000"}}
 		db, err := sql.Open("sqlite3", "file:"+filepath.ToSlash(path)+"?"+q.Encode())
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		db.SetMaxOpenConns(1)
 		db.SetMaxIdleConns(1)
 		db.SetConnMaxLifetime(0)
-		return db, nil
+		return db, "", nil
 	}
-	return nil, fmt.Errorf("connections: unknown driver %q", row.Driver)
+	return nil, "", fmt.Errorf("connections: unknown driver %q", row.Driver)
 }
 
 // Acquire leases the pool of an active registration. Errors never contain a DSN.
@@ -129,8 +130,18 @@ func (r *Registry) Acquire(ctx context.Context, id string) (database.TargetHandl
 	release := func() { once.Do(func() { r.unlease(e) }) }
 	return database.TargetHandle{
 		DatabaseID: row.ID, Driver: row.Driver, Revision: row.Revision,
-		MigrationReady: row.MigrationReady, DB: e.db,
+		MigrationReady: row.MigrationReady, DB: e.db, EditorRole: e.editor,
 	}, release, nil
+}
+
+// Driver reports the engine of an active registration without opening the
+// target, so callers can reject input before any connection is made.
+func (r *Registry) Driver(ctx context.Context, id string) (database.Driver, error) {
+	row, err := r.activeRow(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return row.Driver, nil
 }
 
 func (r *Registry) ping(ctx context.Context, e *poolEntry) error {
@@ -160,12 +171,12 @@ func (r *Registry) lease(row Row) (*poolEntry, error) {
 		r.retireLocked(cur)
 		delete(r.pools, row.ID)
 	}
-	db, err := r.openDB(row)
+	db, editor, err := r.openDB(row)
 	if err != nil {
 		// undecryptable config or a SQLite path that no longer validates: report as unavailable, no detail
 		return nil, database.ErrTargetUnavailable
 	}
-	e := &poolEntry{id: row.ID, rev: row.Revision, db: db, leases: 1}
+	e := &poolEntry{id: row.ID, rev: row.Revision, db: db, leases: 1, editor: editor}
 	r.pools[row.ID] = e
 	return e, nil
 }

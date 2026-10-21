@@ -7,7 +7,9 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"strconv"
 	"testing"
+	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
@@ -17,7 +19,7 @@ import (
 var ctx = context.Background()
 
 // The target is the Compose demo database loaded from tests/fixtures/postgres/demo.sql,
-// reached as platform_runner. These tests only read it.
+// reached as platform_runner, with platform_editor as the editor role. These tests only read it.
 func target(t *testing.T) database.TargetHandle {
 	t.Helper()
 	dsn := os.Getenv("TEST_TARGET_DATABASE_URL")
@@ -32,7 +34,8 @@ func target(t *testing.T) database.TargetHandle {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	return database.TargetHandle{DatabaseID: "30000000-0000-4000-8000-000000000001", Driver: database.Postgres, DB: db}
+	return database.TargetHandle{DatabaseID: "30000000-0000-4000-8000-000000000001", Driver: database.Postgres, DB: db,
+		EditorRole: "platform_editor"}
 }
 
 func find(t *testing.T, s database.SchemaSnapshot, schema, name string) database.Table {
@@ -215,4 +218,56 @@ func TestReadTable(t *testing.T) {
 			t.Errorf("%v: %v", bad, err)
 		}
 	}
+}
+
+// Reads run as the editor role with the request deadline as statement_timeout.
+func TestBeginAsEditor(t *testing.T) {
+	h := target(t)
+	c, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	tx, err := beginAsEditor(c, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	var user, timeout string
+	var platform, readOnly bool
+	if err := tx.QueryRow(`SELECT current_user, current_setting('statement_timeout'), current_setting('transaction_read_only') = 'on',
+		has_schema_privilege('_platform', 'USAGE')`).Scan(&user, &timeout, &readOnly, &platform); err != nil {
+		t.Fatal(err)
+	}
+	if user != "platform_editor" || !readOnly || platform {
+		t.Fatalf("user=%s read_only=%v _platform usage=%v", user, readOnly, platform)
+	}
+	ms, err := strconv.Atoi(timeout[:len(timeout)-2]) // "2999ms"
+	if err != nil || timeout[len(timeout)-2:] != "ms" || ms < 1 || ms > 3000 {
+		t.Fatalf("statement_timeout %q", timeout)
+	}
+
+	for _, role := range []string{"", "no_such_role"} {
+		bad := h
+		bad.EditorRole = role
+		if _, err := beginAsEditor(ctx, bad); !errors.Is(err, database.ErrTargetUnavailable) {
+			t.Errorf("role %q: %v", role, err)
+		}
+	}
+}
+
+// A table the editor role may not read is a fixed permission error, not data or engine text.
+func TestReadTableWithoutEditorPrivilege(t *testing.T) {
+	h := target(t)
+	// created by the login role, so platform_editor has no SELECT on it
+	if _, err := h.DB.Exec(`CREATE TABLE public.runner_only (id int PRIMARY KEY); INSERT INTO public.runner_only VALUES (1)`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = h.DB.Exec(`DROP TABLE IF EXISTS public.runner_only`) })
+	_, _, err := Reader{}.ReadTable(ctx, h, "public", "runner_only", 10, 0)
+	if err != database.ErrTargetPermission {
+		t.Fatalf("want bare ErrTargetPermission, got %v", err)
+	}
+	snap, err := Inspector{}.Inspect(ctx, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	find(t, snap, "public", "runner_only") // still listed: the inspector reads the catalog as the login role
 }

@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"strconv"
@@ -13,21 +12,23 @@ import (
 )
 
 // Planner runs EXPLAIN (FORMAT JSON) without ANALYZE inside a READ ONLY
-// transaction that is always rolled back. The caller (explain package) has
-// already checked that sql is exactly one plannable statement.
+// transaction, as the target's editor role, that is always rolled back. The
+// planner can evaluate parts of expressions, so privileges must match the role
+// user SQL runs as. The caller (explain package) has already checked that sql
+// is exactly one plannable statement.
 type Planner struct{}
 
 func (Planner) Explain(ctx context.Context, t database.TargetHandle, stmt string) (database.PlanResult, error) {
-	tx, err := t.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := beginAsEditor(ctx, t)
 	if err != nil {
-		return database.PlanResult{}, database.ClassifyTargetError(ctx, err)
+		return database.PlanResult{}, err
 	}
 	defer tx.Rollback()
 
 	var out string
 	if err := tx.QueryRowContext(ctx, "EXPLAIN (FORMAT JSON) "+stmt).Scan(&out); err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
+		if errors.As(err, &pgErr) && pgErr.Code != "57014" { // 57014: statement_timeout, a timeout rather than the user's SQL
 			return database.PlanResult{}, &database.EngineError{Message: pgErr.Message}
 		}
 		return database.PlanResult{}, database.ClassifyTargetError(ctx, err)

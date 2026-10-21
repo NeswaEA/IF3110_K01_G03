@@ -3,6 +3,7 @@ package database_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -228,5 +229,31 @@ func TestDispatchInspectorRoutesByDriver(t *testing.T) {
 	}
 	if _, err := d.Inspect(context.Background(), database.TargetHandle{Driver: "mysql"}); err == nil {
 		t.Fatal("unknown driver must error")
+	}
+}
+
+type stateErr string
+
+func (e stateErr) Error() string    { return "engine said: host=secret " + string(e) }
+func (e stateErr) SQLState() string { return string(e) }
+
+func TestClassifyTargetError(t *testing.T) {
+	ctx := context.Background()
+	cases := map[error]error{
+		stateErr("42501"):                         database.ErrTargetPermission,
+		fmt.Errorf("wrap: %w", stateErr("42501")): database.ErrTargetPermission,
+		stateErr("57014"):                         database.ErrTargetTimeout,
+		stateErr("08006"):                         database.ErrTargetUnavailable,
+		errors.New("dial tcp: host=secret"):       database.ErrTargetUnavailable,
+		context.DeadlineExceeded:                  database.ErrTargetTimeout,
+		database.ErrNotFound:                      database.ErrNotFound,
+	}
+	for in, want := range cases {
+		if got := database.ClassifyTargetError(ctx, in); got != want {
+			t.Errorf("%v: got %v, want %v", in, got, want)
+		}
+	}
+	if got := database.ClassifyTargetError(ctx, context.Canceled); !errors.Is(got, context.Canceled) {
+		t.Errorf("cancel: %v", got)
 	}
 }

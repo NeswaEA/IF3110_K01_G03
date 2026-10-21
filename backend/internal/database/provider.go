@@ -8,12 +8,15 @@ import (
 
 // Sentinel errors for adapters and providers. This package cannot import
 // contracts, so callers map them to DomainError codes (NOT_FOUND,
-// TARGET_UNAVAILABLE, TARGET_TIMEOUT, LEDGER_INCOMPATIBLE, DIFF_UNSUPPORTED,
-// INVALID_REQUEST).
+// TARGET_UNAVAILABLE, TARGET_TIMEOUT, FORBIDDEN, LEDGER_INCOMPATIBLE,
+// DIFF_UNSUPPORTED, INVALID_REQUEST).
 var (
-	ErrNotFound           = errors.New("database: registration not found or inactive")
-	ErrTargetUnavailable  = errors.New("database: target unavailable")
-	ErrTargetTimeout      = errors.New("database: target timeout")
+	ErrNotFound          = errors.New("database: registration not found or inactive")
+	ErrTargetUnavailable = errors.New("database: target unavailable")
+	ErrTargetTimeout     = errors.New("database: target timeout")
+	// ErrTargetPermission: the target role may not read the object (viewer
+	// reads only; on user SQL the engine message is an EngineError instead).
+	ErrTargetPermission   = errors.New("database: target role lacks privilege")
 	ErrLedgerIncompatible = errors.New("database: ledger incompatible")
 	ErrDiffUnsupported    = errors.New("database: diff unsupported for driver")
 	ErrInvalidSnapshot    = errors.New("database: invalid schema snapshot")
