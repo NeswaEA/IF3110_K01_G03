@@ -1,18 +1,35 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	cfg, err := platform.LoadConfig()
+	if err != nil {
+		return err
+	}
+	db, err := platform.OpenMetadataDB(context.Background(), cfg.MetadataDatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    cfg.HTTPAddr,
 		Handler: http.NewServeMux(),
 	}
 
 	log.Printf("HTTP server listening on %s", server.Addr)
-	if err := server.ListenAndServe(); err != nil {
-		log.Fatal(err)
-	}
+	return server.ListenAndServe()
 }
