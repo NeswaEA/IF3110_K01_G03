@@ -1,6 +1,3 @@
-// EXPLAIN panel. Owned by samson; the migration
-// editor (argha) mounts it with one selected statement. It requests a plan only
-// on click, clears the result when the input changes, and ignores late responses.
 import { useEffect, useRef, useState } from "react";
 import { isAbortError, request } from "../../api/client";
 import type { PlanNode, PlanResult } from "../../api/types";

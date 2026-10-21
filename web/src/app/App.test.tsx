@@ -8,6 +8,8 @@ import { ErrorState } from "../components/StatusViews";
 import { AppRoutes } from "./App";
 import { SessionProvider } from "./session";
 import { handlers } from "../mocks/handlers";
+import { createAuthHandlers } from "../mocks/auth";
+import authenticated from "../../../tests/fixtures/api/auth_me_edit.json";
 
 const B = "http://localhost/api/v1";
 const server = setupServer(...handlers);
@@ -31,15 +33,14 @@ const me = (is_platform_admin: boolean, username: string) =>
   );
 
 describe("app shell", () => {
+  it("opens the database page with the shared authenticated mock", async () => {
+    renderAt("/databases");
+    expect(await screen.findByText(authenticated.data.username)).toBeInTheDocument();
+    expect(screen.queryByText(/Halaman login belum tersedia/)).not.toBeInTheDocument();
+  });
+
   it("sends anonymous users to the login route", async () => {
-    server.use(
-      http.get(`${B}/auth/me`, () =>
-        HttpResponse.json(
-          { error: { code: "UNAUTHENTICATED", message: "x", fields: {}, request_id: "r" } },
-          { status: 401 },
-        ),
-      ),
-    );
+    server.use(...createAuthHandlers(null));
     renderAt("/databases");
     expect(await screen.findByText(/Halaman login belum tersedia/)).toBeInTheDocument();
   });

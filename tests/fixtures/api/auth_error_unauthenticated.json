@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "UNAUTHENTICATED",
+    "message": "Silakan login untuk melanjutkan.",
+    "fields": {},
+    "request_id": "req-auth-001"
+  }
+}
