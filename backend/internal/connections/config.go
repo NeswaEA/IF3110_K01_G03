@@ -1,7 +1,7 @@
 // Package connections is the registry of target databases: encrypted config,
 // revisioned lifecycle, and the TargetProvider/DiffConfigProvider that hand out
-// pooled leases. It imports database but not contracts;
-// the HTTP layer maps its errors to DomainError.
+// pooled leases. The registry core imports database only; handler.go maps
+// its errors to DomainError.
 package connections
 
 import (

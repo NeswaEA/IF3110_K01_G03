@@ -12,8 +12,8 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
 )
 
-// AccessLifecycle is satisfied by contracts.DatabaseAccessLifecycle (declared
-// here because this package must not import contracts).
+// AccessLifecycle is satisfied by contracts.DatabaseAccessLifecycle; the
+// registry core keeps its own copy so it depends on database only.
 type AccessLifecycle interface {
 	Disable(ctx context.Context, tx *sql.Tx, databaseID string) error
 }
