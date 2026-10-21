@@ -1,9 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { setCsrfToken } from "../../api/client";
+import connectionsList from "../../../../tests/fixtures/api/connections_list.json";
 import { handlers } from "../../mocks/handlers";
 import { ConnectionsPage } from "./ConnectionsPage";
 
@@ -84,5 +85,60 @@ describe("ConnectionsPage", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("dinonaktifkan");
     expect(deleted).toBe(1);
     expect(confirm).toHaveBeenCalledTimes(2);
+  });
+
+  it("edits with the opened revision and sends only changed fields, keeping the password", async () => {
+    server.use(
+      http.patch("*/api/v1/admin/connections/:id", async ({ request }) => {
+        posted = await request.json();
+        return HttpResponse.json({ data: {} });
+      }),
+    );
+    render(<ConnectionsPage />);
+    await screen.findByText("PostgreSQL latihan");
+    await userEvent.click(screen.getAllByRole("button", { name: "Ubah" })[0]);
+    const form = screen.getByRole("form", { name: "Ubah koneksi PostgreSQL latihan" });
+    const edit = within(form);
+    expect(edit.getByLabelText("Host")).toHaveValue("target-postgres");
+    expect(edit.getByLabelText("Password")).toHaveValue("");
+    expect(edit.getByLabelText("Password")).not.toBeRequired();
+    await userEvent.clear(edit.getByLabelText("Port"));
+    await userEvent.type(edit.getByLabelText("Port"), "5433");
+    await userEvent.click(edit.getByRole("button", { name: "Simpan perubahan" }));
+    await vi.waitFor(() => expect(posted).toEqual({ revision: 1, config: { port: 5433 } }));
+    expect(await screen.findByRole("status")).toHaveTextContent("PostgreSQL latihan diperbarui.");
+    expect(screen.queryByRole("form", { name: /Ubah koneksi/ })).not.toBeInTheDocument();
+  });
+
+  it("does not send a request when nothing changed", async () => {
+    let patched = 0;
+    server.use(
+      http.patch("*/api/v1/admin/connections/:id", () => {
+        patched++;
+        return HttpResponse.json({ data: {} });
+      }),
+    );
+    render(<ConnectionsPage />);
+    await screen.findByText("SQLite latihan");
+    await userEvent.click(screen.getAllByRole("button", { name: "Ubah" })[1]);
+    await userEvent.click(screen.getByRole("button", { name: "Simpan perubahan" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("tidak ada perubahan");
+    expect(patched).toBe(0);
+  });
+
+  it("shows a revision conflict instead of overwriting", async () => {
+    server.use(
+      http.get("*/api/v1/admin/connections", () =>
+        HttpResponse.json({ data: [{ ...connectionsList.data[1], revision: 3 }], page: connectionsList.page }),
+      ),
+    );
+    render(<ConnectionsPage />);
+    await screen.findByText("SQLite latihan");
+    await userEvent.click(screen.getByRole("button", { name: "Ubah" }));
+    await userEvent.clear(screen.getByLabelText(/Berkas SQLite/));
+    await userEvent.type(screen.getByLabelText(/Berkas SQLite/), "lain.sqlite");
+    await userEvent.click(screen.getByRole("button", { name: "Simpan perubahan" }));
+    expect(await screen.findByText(/Koneksi berubah sejak dibaca/)).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: /Ubah koneksi/ })).toBeInTheDocument();
   });
 });

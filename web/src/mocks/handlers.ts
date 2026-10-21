@@ -7,6 +7,7 @@ import { http, HttpResponse, type RequestHandler } from "msw";
 
 import connectionsList from "../../../tests/fixtures/api/connections_list.json";
 import connectionsTestOk from "../../../tests/fixtures/api/connections_test_ok.json";
+import connectionsErrorRevisionConflict from "../../../tests/fixtures/api/connections_error_revision_conflict.json";
 import connectionsErrorValidation from "../../../tests/fixtures/api/connections_error_validation.json";
 import databasesList from "../../../tests/fixtures/api/databases_list.json";
 import explainErrorMultiple from "../../../tests/fixtures/api/explain_error_multiple_statements.json";
@@ -41,6 +42,16 @@ export const handlers: RequestHandler[] = [
   }),
 
   http.post(`${API}/admin/connections/:id/test`, () => HttpResponse.json(connectionsTestOk)),
+
+  http.patch(`${API}/admin/connections/:id`, async ({ params, request }) => {
+    const current = connectionsList.data.find((c) => c.id === params.id);
+    if (!current) return notFound();
+    const body = (await request.json()) as { revision?: number; name?: string };
+    if (body.revision !== current.revision) {
+      return HttpResponse.json(connectionsErrorRevisionConflict, { status: 409 });
+    }
+    return HttpResponse.json({ data: { ...current, name: body.name ?? current.name, revision: current.revision + 1 } });
+  }),
 
   http.delete(`${API}/admin/connections/:id`, ({ params }) =>
     connectionsList.data.some((c) => c.id === params.id) ? new HttpResponse(null, { status: 204 }) : notFound(),
