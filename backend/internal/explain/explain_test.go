@@ -140,7 +140,7 @@ func count(t *testing.T, db *sql.DB, q string) int {
 	return n
 }
 
-// BONUS-12..BONUS-16, BONUS-18 on real engines.
+// Plans, rejections and no side effects, on real engines.
 func TestExplainEngines(t *testing.T) {
 	lite := sqliteTarget(t)
 	handles := []database.TargetHandle{lite}

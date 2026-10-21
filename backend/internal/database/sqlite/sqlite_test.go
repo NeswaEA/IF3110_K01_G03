@@ -73,7 +73,7 @@ func TestParseChecks(t *testing.T) {
 	}
 }
 
-// DB-09, DB-10, DB-15, DB-20.
+// Full fixture schema: constraints, composite order, quoted names, hidden reserved objects.
 func TestInspectFixture(t *testing.T) {
 	h := fixtureDB(t)
 	snap, err := Inspector{}.Inspect(ctx, h)
@@ -151,7 +151,7 @@ func TestInspectFixture(t *testing.T) {
 	}
 }
 
-// DB-11..DB-14, DB-10.
+// Encodings without precision loss, pagination, empty and PK-less tables, quoted names.
 func TestReadTable(t *testing.T) {
 	h := fixtureDB(t)
 	r := Reader{}

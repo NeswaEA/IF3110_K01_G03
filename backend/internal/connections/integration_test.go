@@ -186,7 +186,7 @@ func sqliteJSON(file string) json.RawMessage {
 
 var ctx = context.Background()
 
-// DB-01: stored encrypted, DTO sanitised, not migration_ready.
+// Config is stored encrypted, the DTO is sanitised, and a new registration is not migration_ready.
 func TestRegisterStoresEncryptedConfig(t *testing.T) {
 	e := newEnv(t, nil)
 	cfg := pgJSON(func(m map[string]any) { m["password"] = "very-secret-pw" })
@@ -210,7 +210,7 @@ func TestRegisterStoresEncryptedConfig(t *testing.T) {
 	}
 }
 
-// DB-06/DB-07: metadata as target and duplicate identity are rejected.
+// The metadata database and a duplicate target identity are rejected.
 func TestRegisterRejectsMetadataAndDuplicates(t *testing.T) {
 	e := newEnv(t, nil)
 	mu, _ := url.Parse(os.Getenv("TEST_METADATA_DATABASE_URL"))
@@ -265,7 +265,7 @@ func TestListPaginatesAndIncludesInactive(t *testing.T) {
 	}
 }
 
-// DB-04 and PATCH rules.
+// Stale revisions conflict; PATCH needs a change, keeps an omitted password, rejects an empty one.
 func TestUpdateRevisionAndPasswordRules(t *testing.T) {
 	e := newEnv(t, nil)
 	c, _ := e.svc.Register(ctx, RegisterInput{Name: "pg", Driver: database.Postgres, Config: pgJSON(nil)})
@@ -349,7 +349,7 @@ func TestIdentityLockedAfterHistory(t *testing.T) {
 	}
 }
 
-// DB-17: deactivation is atomic with access revocation, keeps the row, blocks leases.
+// Deactivation is atomic with access revocation, keeps the row, and blocks leases.
 func TestDeactivate(t *testing.T) {
 	e := newEnv(t, nil)
 	sqliteFixture(t, e.dir, "demo.sqlite")
@@ -385,7 +385,7 @@ func TestDeactivate(t *testing.T) {
 	}
 }
 
-// DB-18: the outcome of a connection test is recorded; failures keep the row.
+// The outcome of a connection test is recorded; failures keep the row.
 func TestConnectionTestRecordsReadiness(t *testing.T) {
 	e := newEnv(t, nil)
 	sqliteFixture(t, e.dir, "demo.sqlite")
@@ -411,7 +411,7 @@ func TestConnectionTestRecordsReadiness(t *testing.T) {
 	}
 }
 
-// DB-08 at the registry level and mode=rw: a missing file is not created.
+// Path checks hold at the registry level, and mode=rw never creates a missing file.
 func TestSQLiteAcquireBoundaries(t *testing.T) {
 	e := newEnv(t, nil)
 	c, _ := e.svc.Register(ctx, RegisterInput{Name: "s", Driver: database.SQLite, Config: sqliteJSON("missing.sqlite")})
@@ -431,7 +431,7 @@ func TestSQLiteAcquireBoundaries(t *testing.T) {
 	}
 }
 
-// DB-19: foreign keys are enforced on every pooled SQLite connection.
+// Foreign keys are enforced on every pooled SQLite connection.
 func TestSQLiteForeignKeysOnEveryConnection(t *testing.T) {
 	e := newEnv(t, nil)
 	sqliteFixture(t, e.dir, "demo.sqlite")
@@ -455,7 +455,7 @@ func TestSQLiteForeignKeysOnEveryConnection(t *testing.T) {
 
 // PostgreSQL target tests (TEST_TARGET_DATABASE_URL).
 
-// DB-05: a config update gives new leases a new pool; the old pool closes after its last lease.
+// A config update gives new leases a new pool; the old pool closes after its last lease.
 func TestPoolInvalidationOnRevision(t *testing.T) {
 	e := newEnv(t, nil)
 	c, err := e.svc.Register(ctx, RegisterInput{Name: "pg", Driver: database.Postgres, Config: targetConfig(t, nil)})
@@ -495,7 +495,7 @@ func TestPoolInvalidationOnRevision(t *testing.T) {
 	}
 }
 
-// DB-02: wrong credentials give a controlled error without DSN or password.
+// Wrong credentials give a controlled error without DSN or password.
 func TestWrongCredentialsAreSanitised(t *testing.T) {
 	e := newEnv(t, nil)
 	c, _ := e.svc.Register(ctx, RegisterInput{Name: "pg", Driver: database.Postgres,
@@ -514,7 +514,7 @@ func TestWrongCredentialsAreSanitised(t *testing.T) {
 	}
 }
 
-// DB-03: an unreachable target fails within the connect deadline.
+// An unreachable target fails within the connect deadline.
 func TestUnreachableTargetHonoursDeadline(t *testing.T) {
 	e := newEnv(t, nil)
 	e.reg.opts.ConnectTimeout = 700 * time.Millisecond

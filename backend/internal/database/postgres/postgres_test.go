@@ -60,7 +60,7 @@ func constraint(tb database.Table, name string) *database.Constraint {
 	return nil
 }
 
-// DB-09, DB-10, DB-15, DB-20.
+// Full fixture schema: constraints, composite order, quoted names, hidden reserved objects.
 func TestInspectFixture(t *testing.T) {
 	h := target(t)
 	// a reserved ledger must stay out of the snapshot and the fingerprint
@@ -163,7 +163,7 @@ func TestInspectWithUsesCallerTransaction(t *testing.T) {
 	}
 }
 
-// DB-11..DB-14, DB-10.
+// Encodings without precision loss, pagination, empty and PK-less tables, quoted names.
 func TestReadTable(t *testing.T) {
 	h := target(t)
 	r := Reader{}
