@@ -6,7 +6,7 @@ name: if3110
 
 services:
   metadata-postgres:
-    image: postgres:17.11
+    image: postgres:17.11@sha256:c469d92cbb89e123ba7c2c7c1a8815572943584085c37b007bacb43150a8c9e4
     environment:
       POSTGRES_DB: metadata
       POSTGRES_USER: metadata_owner
@@ -22,7 +22,7 @@ services:
       retries: 10
 
   target-postgres:
-    image: postgres:17.11
+    image: postgres:17.11@sha256:c469d92cbb89e123ba7c2c7c1a8815572943584085c37b007bacb43150a8c9e4
     environment:
       POSTGRES_DB: demo
       POSTGRES_USER: target_admin

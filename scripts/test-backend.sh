@@ -18,5 +18,5 @@ MSYS_NO_PATHCONV=1 exec docker run --rm \
   -e TEST_METADATA_DATABASE_URL="${TEST_METADATA_DATABASE_URL:-}" \
   -e TEST_TARGET_DATABASE_URL="${TEST_TARGET_DATABASE_URL:-}" \
   -v if3110-gomodcache:/go/pkg/mod -v if3110-gobuildcache:/root/.cache/go-build \
-  -v "$src:/src" -w /src/backend golang:1.27.2 \
+  -v "$src:/src" -w /src/backend golang:1.27.2@sha256:820153096fda4de6ac1b7194d12e416b7dd8f4e9a33d17e0345b111b945162d8 \
   sh -c 'test -z "$(gofmt -l .)" || { gofmt -l .; echo "gofmt needed" >&2; exit 1; }; go vet ./... && go test -count=1 "$@"' sh "$@"

@@ -4,5 +4,5 @@
 set -eu
 cd "$(dirname "$0")/.."
 src=$(pwd -W 2>/dev/null || pwd) # Git Bash on Windows needs the Windows path for -v
-MSYS_NO_PATHCONV=1 exec docker run --rm -v "$src:/repo" -v if3110-web-node-modules:/repo/web/node_modules -w /repo/web node:24.22.0 \
+MSYS_NO_PATHCONV=1 exec docker run --rm -v "$src:/repo" -v if3110-web-node-modules:/repo/web/node_modules -w /repo/web node:24.22.0@sha256:14078204b6bb268c107ceff6d3c43f45a888105e5c2b18b14c32b3409d93a1b0 \
   sh -c 'npm ci && npm run lint && npm test && npm run build'
