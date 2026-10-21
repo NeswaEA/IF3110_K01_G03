@@ -1,0 +1,66 @@
+# Run from the repository root:
+#   cp .env.example .env   # then fill the secrets
+#   docker compose --env-file .env -f infra/docker/compose.yml up -d metadata-postgres target-postgres
+# Metadata and target databases are separate servers with separate credentials.
+name: if3110
+
+services:
+  metadata-postgres:
+    image: postgres:17.11
+    environment:
+      POSTGRES_DB: metadata
+      POSTGRES_USER: metadata_owner
+      POSTGRES_PASSWORD: ${METADATA_DB_PASSWORD:?set METADATA_DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - metadata-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metadata_owner -d metadata"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  target-postgres:
+    image: postgres:17.11
+    environment:
+      POSTGRES_DB: demo
+      POSTGRES_USER: target_admin
+      POSTGRES_PASSWORD: ${TARGET_ADMIN_PASSWORD:?set TARGET_ADMIN_PASSWORD in .env}
+      TARGET_RUNNER_PASSWORD: ${TARGET_RUNNER_PASSWORD:?set TARGET_RUNNER_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:15433:5432"
+    volumes:
+      - target-data:/var/lib/postgresql/data
+      # roles + reserved schema first, then the shared demo fixture (see tests/fixtures/postgres)
+      - ../postgres/init/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+      - ../../tests/fixtures/postgres/demo.sql:/docker-entrypoint-initdb.d/10-demo.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U target_admin -d demo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    profiles: ["app"]
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+    env_file: ../../.env
+    environment:
+      HTTP_ADDR: ":8080"
+      SQLITE_TARGET_DIR: /data/sqlite
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - sqlite-data:/data/sqlite
+    depends_on:
+      metadata-postgres:
+        condition: service_healthy
+      target-postgres:
+        condition: service_healthy
+
+volumes:
+  metadata-data:
+  target-data:
+  sqlite-data:
