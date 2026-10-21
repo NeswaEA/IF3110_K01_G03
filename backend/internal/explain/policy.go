@@ -10,7 +10,6 @@ import (
 	pg_query "github.com/pganalyze/pg_query_go/v6"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
-	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database/sqlite"
 )
 
 // The explain policy is separate from the migration guard: it only
@@ -118,20 +117,18 @@ func pgScan(sql string) (reserved, params bool, err error) {
 	return reserved, params, nil
 }
 
-// classifySQLite asks the engine itself (see sqlite.Classify): there is no
-// SQLite AST parser, so statement kind comes from the authorizer at prepare
-// time and the statement boundary from the engine's tail.
+// classifySQLite asks the engine itself (see sqliteClassify).
 func classifySQLite(ctx context.Context, db *sql.DB, query string) (string, error) {
-	stmt, kind, err := sqlite.Classify(ctx, db, query)
+	stmt, kind, err := sqliteClassify(ctx, db, query)
 	if err != nil {
 		return "", err
 	}
 	switch kind {
-	case sqlite.Plannable:
+	case sqlitePlannable:
 		return stmt, nil
-	case sqlite.NoPlan:
+	case sqliteNoPlan:
 		return "", ErrPlanUnsupported
-	case sqlite.Multiple:
+	case sqliteMultiple:
 		return "", ErrMultipleStatements
 	}
 	return "", ErrUnsupportedSQL
