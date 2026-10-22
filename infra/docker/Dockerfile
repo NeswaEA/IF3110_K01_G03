@@ -15,7 +15,9 @@ WORKDIR /src/backend
 COPY backend/go.mod backend/go.sum* ./
 RUN go mod download
 COPY backend/ ./
-RUN go build -o /out/server ./cmd/server
+RUN go build -o /out/server ./cmd/server \
+ && go build -o /out/migrate ./cmd/migrate \
+ && go build -o /out/seed ./cmd/seed
 
 FROM debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
 RUN apt-get update \
@@ -24,6 +26,8 @@ RUN apt-get update \
  && useradd --system --uid 10001 app
 WORKDIR /app
 COPY --from=backend /out/server /app/server
+COPY --from=backend /out/migrate /app/migrate
+COPY --from=backend /out/seed /app/seed
 COPY --from=web /repo/web/dist /app/web/dist
 USER app
 EXPOSE 8080

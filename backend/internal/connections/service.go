@@ -136,6 +136,8 @@ func ErrorCode(err error) string {
 		return "TARGET_TIMEOUT"
 	case errors.Is(err, database.ErrTargetUnavailable):
 		return "TARGET_UNAVAILABLE"
+	case errors.Is(err, database.ErrTargetNotReady):
+		return "TARGET_NOT_READY"
 	case errors.Is(err, database.ErrLedgerIncompatible):
 		return "LEDGER_INCOMPATIBLE"
 	}
@@ -486,7 +488,7 @@ func (s *Service) checkEditorRole(ctx context.Context, h database.TargetHandle, 
 // classify maps driver errors to the sentinel set without keeping their text.
 func classify(ctx context.Context, err error) error {
 	switch {
-	case errors.Is(err, database.ErrLedgerIncompatible), errors.Is(err, database.ErrTargetTimeout),
+	case errors.Is(err, database.ErrTargetNotReady), errors.Is(err, database.ErrLedgerIncompatible), errors.Is(err, database.ErrTargetTimeout),
 		errors.Is(err, database.ErrTargetUnavailable), errors.Is(err, database.ErrNotFound):
 		return err
 	case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):

@@ -13,6 +13,7 @@ import (
 var (
 	ErrNotFound          = errors.New("database: registration not found or inactive")
 	ErrTargetUnavailable = errors.New("database: target unavailable")
+	ErrTargetNotReady    = errors.New("database: target initialization is not available")
 	ErrTargetTimeout     = errors.New("database: target timeout")
 	// ErrTargetPermission: the target role may not read the object (viewer
 	// reads only; on user SQL the engine message is an EngineError instead).

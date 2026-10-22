@@ -304,6 +304,7 @@ const (
 )
 
 var messages = map[string]string{
+	"TARGET_NOT_READY":    "Layanan migrasi belum siap untuk memeriksa target.",
 	"INVALID_REQUEST":     msgInvalid,
 	"REVISION_CONFLICT":   "Koneksi berubah sejak dibaca; muat ulang.",
 	"DUPLICATE_TARGET":    "Target yang sama sudah terdaftar.",
