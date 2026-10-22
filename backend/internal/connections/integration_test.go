@@ -601,3 +601,35 @@ func TestWithDiffConfig(t *testing.T) {
 		t.Fatalf("sqlite: %v", err)
 	}
 }
+
+type initializerFunc func(context.Context, database.TargetHandle) error
+
+func (f initializerFunc) EnsureReady(ctx context.Context, h database.TargetHandle) error {
+	return f(ctx, h)
+}
+
+func TestConnectionReadinessDoesNotCrossRevisions(t *testing.T) {
+	e := newEnv(t, nil)
+	sqliteFixture(t, e.dir, "first.sqlite")
+	connection, err := e.svc.Register(ctx, RegisterInput{Name: "revision probe", Driver: database.SQLite, Config: sqliteJSON("first.sqlite")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	e.svc.init = initializerFunc(func(context.Context, database.TargetHandle) error { close(entered); <-release; return nil })
+	finished := make(chan error, 1)
+	go func() { _, err := e.svc.Test(ctx, connection.ID); finished <- err }()
+	<-entered
+	_, updateErr := e.svc.Update(ctx, connection.ID, UpdateInput{Revision: 1, Config: sqliteJSON("second.sqlite")})
+	close(release)
+	if updateErr != nil {
+		t.Fatal(updateErr)
+	}
+	if err := <-finished; !errors.Is(err, ErrRevisionConflict) {
+		t.Fatal("stale probe marked new revision ready", err)
+	}
+	current, err := e.svc.Get(ctx, connection.ID)
+	if err != nil || current.MigrationReady {
+		t.Fatal("new target falsely ready")
+	}
+}

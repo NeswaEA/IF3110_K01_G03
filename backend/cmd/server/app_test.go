@@ -15,6 +15,7 @@ import (
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/auth"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/connections"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/migrations"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 	metadata "github.com/NeswaEA/IF3110_K01_G03/backend/migrations"
 	"github.com/jackc/pgx/v5"
@@ -108,13 +109,13 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		}
 	}
 	cfg := platform.Config{AppEnv: "test", AppOrigin: "http://localhost:8080", MetadataDatabaseURL: dsn, SessionIdleTimeout: 30 * time.Minute, SessionAbsoluteTimeout: 8 * time.Hour, SessionRotationInterval: 15 * time.Minute, SessionGracePeriod: 30 * time.Second}
-	h, close, err := newApp(db, cfg, runtimeConfig{EncryptionKey: key, SQLiteDir: dir, WebDir: testWeb(t), ConnectTimeout: time.Second, QueryTimeout: time.Second})
+	h, close, err := newApp(t.Context(), db, cfg, runtimeConfig{EncryptionKey: key, SQLiteDir: dir, WebDir: testWeb(t), ConnectTimeout: time.Second, QueryTimeout: time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer close()
 	h = platform.RequestID(h)
-	request := func(method, path, body string, cookie *http.Cookie, csrf string) *httptest.ResponseRecorder {
+	request := func(method, path, body string, cookie *http.Cookie, csrf string, extra ...map[string]string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
 		r.Header.Set("Origin", cfg.AppOrigin)
 		r.Header.Set("Content-Type", "application/json")
@@ -124,6 +125,11 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		}
 		if csrf != "" {
 			r.Header.Set("X-CSRF-Token", csrf)
+		}
+		for _, headers := range extra {
+			for name, value := range headers {
+				r.Header.Set(name, value)
+			}
 		}
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
@@ -178,9 +184,9 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		{"POST", base + "/explain", `{}`, loginState{edit.cookie, ""}, 403, "CSRF_REJECTED"},
 		{"GET", "/api/v1/admin/connections", "", view, 403, "FORBIDDEN"},
 		{"GET", "/api/v1/admin/connections", "", admin, 200, "demo"},
-		{"POST", "/api/v1/admin/connections/" + databaseID + "/test", `{}`, admin, 503, "TARGET_NOT_READY"},
+		{"POST", "/api/v1/admin/connections/" + databaseID + "/test", `{}`, admin, 200, `"reachable":true`},
 		{"GET", "/api/v1/missing", "", edit, 404, "NOT_FOUND"},
-		{"GET", base + "/migration-runs", "", edit, 404, "NOT_FOUND"},
+		{"GET", base + "/migration-runs", "", edit, 200, `"data":[]`},
 		{"GET", "/databases/example", "", loginState{}, 200, "application"},
 	} {
 		w := request(tc.method, tc.path, tc.body, tc.who.cookie, tc.who.csrf)
@@ -189,8 +195,77 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		}
 	}
 	w := request("GET", "/api/v1/databases", "", edit.cookie, "")
-	if !strings.Contains(w.Body.String(), `"transactional_migrations":false`) || !strings.Contains(w.Body.String(), `"schema_diff":false`) {
+	if !strings.Contains(w.Body.String(), `"transactional_migrations":true`) || !strings.Contains(w.Body.String(), `"schema_diff":false`) {
 		t.Fatal("unavailable capabilities advertised")
+	}
+	draftBody := `{"title":"HTTP migration","sql":"CREATE TABLE migrated(id INTEGER PRIMARY KEY); INSERT INTO migrated VALUES(1);","expected_version":0}`
+	for _, denied := range []struct {
+		who    loginState
+		status int
+	}{{view, 403}, {loginState{}, 401}, {loginState{edit.cookie, ""}, 403}} {
+		if w := request("POST", base+"/migration-drafts", draftBody, denied.who.cookie, denied.who.csrf); w.Code != denied.status {
+			t.Fatalf("migration access: %d %s", w.Code, w.Body.String())
+		}
+	}
+	w = request("POST", base+"/migration-drafts", draftBody, edit.cookie, edit.csrf)
+	var draft struct {
+		Data migrations.MigrationDraft `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &draft); err != nil || w.Code != 201 {
+		t.Fatal("create draft", w.Code, w.Body.String())
+	}
+	executePath := base + "/migration-drafts/" + draft.Data.ID + "/execute"
+	idempotencyHeaders := map[string]string{"Idempotency-Key": "70000000-0000-4000-8000-000000000001"}
+	for _, denied := range []struct {
+		who    loginState
+		status int
+	}{{view, 403}, {loginState{}, 401}, {loginState{edit.cookie, ""}, 403}} {
+		w := request("POST", executePath, `{"revision":1,"expected_version":0}`, denied.who.cookie, denied.who.csrf, idempotencyHeaders)
+		if w.Code != denied.status {
+			t.Fatalf("execute access: %d %s", w.Code, w.Body.String())
+		}
+	}
+	w = request("POST", executePath, `{"revision":1,"expected_version":0}`, edit.cookie, edit.csrf, idempotencyHeaders)
+	var run struct {
+		Data migrations.MigrationRun `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil || w.Code != 200 || run.Data.Status != migrations.Succeeded {
+		t.Fatal("execute", w.Code, w.Body.String())
+	}
+	firstRun := run.Data.ID
+	if w := request("POST", base+"/migration-runs/"+firstRun+"/reconcile", `{}`, view.cookie, view.csrf); w.Code != 403 {
+		t.Fatal("view reconciled run", w.Code)
+	}
+	w = request("POST", executePath, `{"revision":1,"expected_version":0}`, edit.cookie, edit.csrf, idempotencyHeaders)
+	if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil || w.Code != 200 || run.Data.ID != firstRun {
+		t.Fatal("duplicate execute", w.Code, w.Body.String())
+	}
+	if w := request("GET", base+"/migration-runs/"+firstRun, "", view.cookie, ""); w.Code != 200 || !strings.Contains(w.Body.String(), `"username":"editor"`) {
+		t.Fatal("view history", w.Code, w.Body.String())
+	}
+	if w := request("GET", base+"/migration-drafts/"+draft.Data.ID, "", view.cookie, ""); w.Code != 403 {
+		t.Fatal("view read draft", w.Code)
+	}
+	w = request("PATCH", "/api/v1/admin/connections/"+databaseID, `{"revision":1,"config":{"file":"different.sqlite"}}`, admin.cookie, admin.csrf)
+	if w.Code != 409 || !strings.Contains(w.Body.String(), "REVISION_CONFLICT") {
+		t.Fatal("history did not lock target", w.Code, w.Body.String())
+	}
+	w = request("POST", base+"/migration-drafts", `{"title":"HTTP rollback","sql":"INSERT INTO migrated VALUES(2); INSERT INTO missing_table VALUES(3);","expected_version":1}`, edit.cookie, edit.csrf)
+	if err := json.Unmarshal(w.Body.Bytes(), &draft); err != nil || w.Code != 201 {
+		t.Fatal("create rollback draft", w.Code, w.Body.String())
+	}
+	idempotencyHeaders["Idempotency-Key"] = "70000000-0000-4000-8000-000000000002"
+	w = request("POST", base+"/migration-drafts/"+draft.Data.ID+"/execute", `{"revision":1,"expected_version":1}`, edit.cookie, edit.csrf, idempotencyHeaders)
+	if w.Code != 422 || !strings.Contains(w.Body.String(), `"run_id"`) {
+		t.Fatal("failed execution", w.Code, w.Body.String())
+	}
+	var count int
+	if err := target.QueryRow("SELECT count(*) FROM migrated").Scan(&count); err != nil || count != 1 {
+		t.Fatal("HTTP execution did not roll back")
+	}
+	w = request("GET", base+"/migration-head", "", view.cookie, "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"version":1`) {
+		t.Fatal("failed run advanced head", w.Code, w.Body.String())
 	}
 	if w := request("DELETE", "/api/v1/admin/connections/"+databaseID, "", admin.cookie, admin.csrf); w.Code != 204 {
 		t.Fatal("disable failed", w.Code)
@@ -202,8 +277,5 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 	}
 	if w := request("GET", "/api/v1/auth/me", "", admin.cookie, ""); w.Code != 200 {
 		t.Fatal("unrelated admin revoked")
-	}
-	if _, err := (unavailableMigrations{}).HasHistory(t.Context(), databaseID); err == nil {
-		t.Fatal("missing history checker allowed target replacement")
 	}
 }

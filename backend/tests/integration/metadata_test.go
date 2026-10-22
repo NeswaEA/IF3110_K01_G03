@@ -43,7 +43,7 @@ func TestMetadataSchema(t *testing.T) {
 	if _, err := tx.ExecContext(ctx, `SET LOCAL search_path TO "`+schema+`"`); err != nil {
 		t.Fatal(err)
 	}
-	for _, file := range []string{"0001_identity.sql", "0002_connections.sql", "0003_sessions_access.sql"} {
+	for _, file := range []string{"0001_identity.sql", "0002_connections.sql", "0003_sessions_access.sql", "0004_migrations.sql"} {
 		ddl, err := os.ReadFile(filepath.Join("..", "..", "migrations", file))
 		if err != nil {
 			t.Fatal(err)

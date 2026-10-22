@@ -17,20 +17,22 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database/postgres"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database/sqlite"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/explain"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/migrations"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/viewer"
 )
 
 type runtimeConfig struct {
-	EncryptionKey  string `json:"-"`
-	SQLiteDir      string
-	WebDir         string
-	ConnectTimeout time.Duration
-	QueryTimeout   time.Duration
+	EncryptionKey    string `json:"-"`
+	SQLiteDir        string
+	WebDir           string
+	ConnectTimeout   time.Duration
+	QueryTimeout     time.Duration
+	MigrationTimeout time.Duration
 }
 
 func loadRuntimeConfig() (runtimeConfig, error) {
-	cfg := runtimeConfig{EncryptionKey: os.Getenv("CONNECTION_ENCRYPTION_KEY"), SQLiteDir: os.Getenv("SQLITE_TARGET_DIR"), WebDir: os.Getenv("WEB_DIST_DIR"), ConnectTimeout: 5 * time.Second, QueryTimeout: 10 * time.Second}
+	cfg := runtimeConfig{EncryptionKey: os.Getenv("CONNECTION_ENCRYPTION_KEY"), SQLiteDir: os.Getenv("SQLITE_TARGET_DIR"), WebDir: os.Getenv("WEB_DIST_DIR"), ConnectTimeout: 5 * time.Second, QueryTimeout: 10 * time.Second, MigrationTimeout: 30 * time.Second}
 	if !filepath.IsAbs(cfg.SQLiteDir) {
 		return runtimeConfig{}, errors.New("SQLITE_TARGET_DIR must be an absolute directory")
 	}
@@ -44,7 +46,7 @@ func loadRuntimeConfig() (runtimeConfig, error) {
 	for _, setting := range []struct {
 		name  string
 		value *time.Duration
-	}{{"TARGET_CONNECT_TIMEOUT", &cfg.ConnectTimeout}, {"TARGET_QUERY_TIMEOUT", &cfg.QueryTimeout}} {
+	}{{"TARGET_CONNECT_TIMEOUT", &cfg.ConnectTimeout}, {"TARGET_QUERY_TIMEOUT", &cfg.QueryTimeout}, {"MIGRATION_TIMEOUT", &cfg.MigrationTimeout}} {
 		if raw := os.Getenv(setting.name); raw != "" {
 			value, err := time.ParseDuration(raw)
 			if err != nil || value <= 0 {
@@ -56,7 +58,7 @@ func loadRuntimeConfig() (runtimeConfig, error) {
 	return cfg, nil
 }
 
-func newApp(db *sql.DB, cfg platform.Config, runtime runtimeConfig) (http.Handler, func(), error) {
+func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtimeConfig) (http.Handler, func(), error) {
 	cipher, err := connections.NewCipher(runtime.EncryptionKey)
 	if err != nil {
 		return nil, nil, errors.New("CONNECTION_ENCRYPTION_KEY must encode 32 bytes in base64")
@@ -81,18 +83,23 @@ func newApp(db *sql.DB, cfg platform.Config, runtime runtimeConfig) (http.Handle
 	cleanup := func() { registry.Close(); closeFrontend() }
 	policy := access.NewPolicy(db)
 	lifecycle := access.NewDatabaseAccessLifecycle(sessions)
-	pending := unavailableMigrations{}
-	connectionService := connections.NewService(db, cipher, registry, pending, lifecycle, pending, connections.ServiceOptions{
+	connectionService := connections.NewService(db, cipher, registry, migrations.LedgerInitializer{}, lifecycle, migrations.NewStore(db), connections.ServiceOptions{
 		Policy: connections.Policy{AllowInsecureSSL: cfg.AppEnv != "production"}, SQLiteDir: runtime.SQLiteDir, MetadataIdentity: identity, QueryTimeout: runtime.QueryTimeout,
-		Features: connections.Features{Explain: map[database.Driver]bool{database.Postgres: true, database.SQLite: true}},
+		Features: connections.Features{Runner: map[database.Driver]bool{database.Postgres: true, database.SQLite: true}, Explain: map[database.Driver]bool{database.Postgres: true, database.SQLite: true}},
 	})
 	inspector := database.DispatchInspector{ByDriver: map[database.Driver]database.Inspector{database.Postgres: postgres.Inspector{}, database.SQLite: sqlite.Inspector{}}}
+	migrationService := migrations.NewService(db, registry, inspector, policy, platform.SystemClock{}, migrations.Options{Timeout: runtime.MigrationTimeout})
+	if err := migrationService.Recover(ctx); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	viewService := viewer.NewService(registry, inspector, map[database.Driver]viewer.TableReader{database.Postgres: postgres.Reader{}, database.SQLite: sqlite.Reader{}}, runtime.QueryTimeout)
 	explainService := explain.NewService(registry, registry, map[database.Driver]explain.Planner{database.Postgres: postgres.Planner{}, database.SQLite: sqlite.Planner{}}, runtime.QueryTimeout)
 	protected := http.NewServeMux()
 	connections.RegisterRoutes(protected, connections.NewHandler(connectionService, policy, auth.PrincipalFromContext))
 	viewer.RegisterRoutes(protected, viewer.NewHandler(viewService, policy, auth.PrincipalFromContext))
 	explain.RegisterRoutes(protected, explain.NewHandler(explainService, policy, auth.PrincipalFromContext))
+	migrations.RegisterRoutes(protected, migrations.NewHandler(migrationService, auth.PrincipalFromContext))
 	protected.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, &contracts.DomainError{Code: "NOT_FOUND", Message: "Endpoint tidak ditemukan."})
 	})
@@ -104,14 +111,4 @@ func newApp(db *sql.DB, cfg platform.Config, runtime runtimeConfig) (http.Handle
 	mux.Handle("/api", secured)
 	mux.Handle("/", frontend)
 	return mux, cleanup, nil
-}
-
-type unavailableMigrations struct{}
-
-func (unavailableMigrations) EnsureReady(context.Context, database.TargetHandle) error {
-	return database.ErrTargetNotReady
-}
-
-func (unavailableMigrations) HasHistory(context.Context, string) (bool, error) {
-	return false, &contracts.DomainError{Code: "TARGET_NOT_READY", Message: "Pemeriksaan history belum tersedia; target belum dapat diganti."}
 }

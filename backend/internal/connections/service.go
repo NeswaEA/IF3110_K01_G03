@@ -345,6 +345,9 @@ func (s *Service) Update(ctx context.Context, id string, in UpdateInput) (AdminC
 	if err := s.lock(ctx, tx); err != nil {
 		return AdminConnection{}, err
 	}
+	if _, err := tx.ExecContext(ctx, `SELECT id FROM database_connections WHERE id=$1 FOR UPDATE`, id); err != nil {
+		return AdminConnection{}, err
+	}
 	row, err := s.store.Get(ctx, tx, id)
 	if err != nil {
 		return AdminConnection{}, err
@@ -437,7 +440,9 @@ func (s *Service) Test(ctx context.Context, id string) (TestResult, error) {
 		code = &c
 	}
 	ready := probeErr == nil
-	if merr := s.store.MarkChecked(context.WithoutCancel(ctx), s.meta, id, ready, code, s.opts.Now().UTC()); merr != nil && probeErr == nil {
+	checkCtx, checkCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer checkCancel()
+	if merr := s.store.MarkChecked(checkCtx, s.meta, id, row.Revision, ready, code, s.opts.Now().UTC()); merr != nil && probeErr == nil {
 		return TestResult{}, merr
 	}
 	if probeErr != nil {
@@ -452,6 +457,9 @@ func (s *Service) probe(ctx context.Context, row Row) error {
 		return err
 	}
 	defer release()
+	if h.Revision != row.Revision {
+		return ErrRevisionConflict
+	}
 	if row.Driver == database.Postgres {
 		if err := s.checkEditorRole(ctx, h, row); err != nil {
 			return err

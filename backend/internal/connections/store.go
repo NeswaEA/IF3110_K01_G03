@@ -171,15 +171,25 @@ func (s *Store) Deactivate(ctx context.Context, q Querier, id string) error {
 
 // MarkChecked records a connection test. It does not bump the revision, so it
 // neither replaces pools nor invalidates an admin's pending edit.
-func (s *Store) MarkChecked(ctx context.Context, q Querier, id string, ready bool, errCode *string, at time.Time) error {
+func (s *Store) MarkChecked(ctx context.Context, q Querier, id string, revision int64, ready bool, errCode *string, at time.Time) error {
 	var code any
 	if errCode != nil {
 		code = *errCode
 	}
-	_, err := q.ExecContext(ctx,
+	result, err := q.ExecContext(ctx,
 		`UPDATE database_connections SET migration_ready = $2, last_checked_at = $3, last_error_code = $4
-		  WHERE id = $1`, id, ready, at, code)
-	return err
+		  WHERE id = $1 AND revision = $5 AND active`, id, ready, at, code, revision)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrRevisionConflict
+	}
+	return nil
 }
 
 // newUUID returns a random lowercase UUID v4.

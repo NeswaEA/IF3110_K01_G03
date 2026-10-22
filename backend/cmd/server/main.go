@@ -32,7 +32,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	handler, cleanup, err := newApp(db, cfg, runtime)
+	handler, cleanup, err := newApp(ctx, db, cfg, runtime)
 	if err != nil {
 		return err
 	}

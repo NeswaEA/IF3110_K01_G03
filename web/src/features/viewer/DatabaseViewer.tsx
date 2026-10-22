@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import type { DataColumn, DatabaseSummary, JSONValue, SchemaSnapshot, Table, TableData } from "../../api/types";
 import { useApi } from "../../api/useApi";
 import { EmptyState, ErrorState, Loading } from "../../components/StatusViews";
@@ -142,6 +142,7 @@ export function DatabaseViewer() {
   return (
     <section>
       <h1>{db.name}</h1>
+      <Link to={`/databases/${db.id}/migrations`}>Migrasi dan riwayat</Link>
       <p>
         Engine {db.driver}; fingerprint <code>{snap.fingerprint}</code>
       </p>

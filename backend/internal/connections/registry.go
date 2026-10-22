@@ -264,7 +264,7 @@ func (r *Registry) WithDiffConfig(ctx context.Context, sourceID, desiredID strin
 	if err != nil {
 		return err
 	}
-	_, werr := fmt.Fprintf(f, "env \"source\" {\n  url = %q\n}\n\nenv \"desired\" {\n  url = %q\n}\n", srcURL, dstURL)
+	_, werr := fmt.Fprintf(f, "env \"source\" {\n  url = %q\n  schema {\n    src = %q\n  }\n}\n\nenv \"desired\" {\n  url = %q\n}\n", srcURL, dstURL, dstURL)
 	if cerr := f.Close(); werr == nil {
 		werr = cerr
 	}

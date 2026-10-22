@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "REVISION_CONFLICT",
+    "message": "Draft berubah sejak dibaca; muat ulang tanpa menimpa SQL lokal.",
+    "fields": {},
+    "request_id": "req-migration-conflict"
+  }
+}

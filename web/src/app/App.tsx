@@ -1,10 +1,12 @@
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Link, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { Loading } from "../components/StatusViews";
 import { ConnectionsPage } from "../features/connections/ConnectionsPage";
 import { DatabaseList } from "../features/viewer/DatabaseList";
 import { DatabaseViewer } from "../features/viewer/DatabaseViewer";
 import { SessionProvider, useSession } from "./session";
+
+const MigrationsPage = lazy(() => import("../features/migrations/MigrationsPage").then((module) => ({ default: module.MigrationsPage })));
 
 function Pending({ feature }: { feature: string }) {
   return <p>Halaman {feature} belum tersedia.</p>;
@@ -44,6 +46,7 @@ export function AppRoutes(): ReactNode {
         <Route index element={<Navigate to="/databases" replace />} />
         <Route path="/databases" element={<DatabaseList />} />
         <Route path="/databases/:id" element={<DatabaseViewer />} />
+        <Route path="/databases/:id/migrations" element={<Suspense fallback={<Loading />}><MigrationsPage /></Suspense>} />
         <Route path="/admin/connections" element={<ConnectionsPage />} />
         <Route path="/admin/*" element={<Pending feature="administrasi" />} />
       </Route>

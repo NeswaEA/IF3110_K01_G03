@@ -84,11 +84,11 @@ func TestMetadataMigrationsReplayAndRerun(t *testing.T) {
 		}
 	}
 	var count int
-	if err := db.QueryRow("SELECT count(*) FROM app_schema_migrations WHERE length(checksum)=64 AND applied_at IS NOT NULL").Scan(&count); err != nil || count != 3 {
+	if err := db.QueryRow("SELECT count(*) FROM app_schema_migrations WHERE length(checksum)=64 AND applied_at IS NOT NULL").Scan(&count); err != nil || count != 4 {
 		t.Fatal("migration ledger is incomplete")
 	}
 	var tables int
-	if err := db.QueryRow("SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('users','groups','database_connections','sessions','session_tokens','group_memberships','group_database_access')").Scan(&tables); err != nil || tables != 7 {
+	if err := db.QueryRow("SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('users','groups','database_connections','sessions','session_tokens','group_memberships','group_database_access','migration_drafts','migration_runs')").Scan(&tables); err != nil || tables != 9 {
 		t.Fatal("metadata tables are incomplete")
 	}
 }
