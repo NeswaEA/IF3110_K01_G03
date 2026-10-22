@@ -7,13 +7,19 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
-	AppEnv              string
-	HTTPAddr            string
-	AppOrigin           string
-	MetadataDatabaseURL string `json:"-"`
+	AppEnv                  string
+	HTTPAddr                string
+	AppOrigin               string
+	MetadataDatabaseURL     string `json:"-"`
+	SessionIdleTimeout      time.Duration
+	SessionAbsoluteTimeout  time.Duration
+	SessionRotationInterval time.Duration
+	SessionGracePeriod      time.Duration
+	CookieSecure            bool
 }
 
 func LoadConfig() (Config, error) {
@@ -53,6 +59,33 @@ func LoadConfig() (Config, error) {
 	if strings.TrimSpace(cfg.MetadataDatabaseURL) == "" {
 		return Config{}, errors.New("METADATA_DATABASE_URL is required")
 	}
+	for _, setting := range []struct {
+		name     string
+		value    *time.Duration
+		fallback time.Duration
+	}{
+		{"SESSION_IDLE_TIMEOUT", &cfg.SessionIdleTimeout, 30 * time.Minute},
+		{"SESSION_ABSOLUTE_TIMEOUT", &cfg.SessionAbsoluteTimeout, 8 * time.Hour},
+		{"SESSION_ROTATION_INTERVAL", &cfg.SessionRotationInterval, 15 * time.Minute},
+		{"SESSION_GRACE_PERIOD", &cfg.SessionGracePeriod, 30 * time.Second},
+	} {
+		*setting.value = setting.fallback
+		if raw := os.Getenv(setting.name); raw != "" {
+			value, err := time.ParseDuration(raw)
+			if err != nil || value < time.Microsecond || value%time.Microsecond != 0 {
+				return Config{}, errors.New(setting.name + " must be a positive duration in whole microseconds")
+			}
+			*setting.value = value
+		}
+	}
+	if raw := os.Getenv("COOKIE_SECURE"); raw != "" {
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			return Config{}, errors.New("COOKIE_SECURE must be a boolean")
+		}
+		cfg.CookieSecure = value
+	}
+	cfg.CookieSecure = cfg.CookieSecure || cfg.AppEnv == "production" || origin.Scheme == "https"
 	return cfg, nil
 }
 
