@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"unicode/utf8"
@@ -127,6 +128,11 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) error {
 				response.Fields = domain.Fields
 			}
 		}
+	}
+	if status == http.StatusInternalServerError {
+		slog.ErrorContext(r.Context(), "HTTP request failed",
+			"request_id", response.RequestID, "action", "http.error",
+			"status", status, "code", response.Code)
 	}
 	return writeJSON(w, status, struct {
 		Error any `json:"error"`

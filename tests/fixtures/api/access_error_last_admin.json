@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "LAST_ADMIN",
+    "message": "Admin aktif terakhir harus tetap aktif dan memiliki hak admin.",
+    "fields": {},
+    "request_id": "req-access-last-admin"
+  }
+}

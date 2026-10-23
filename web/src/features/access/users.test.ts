@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { setCsrfToken } from "../../api/client";
 import { bindUsers } from "./users";
+import lastAdminError from "../../../../tests/fixtures/api/access_error_last_admin.json";
 
 const base = "http://localhost/api/v1";
 const accountId = "10000000-0000-4000-8000-000000000002";
@@ -143,11 +144,13 @@ describe("user administration forms", () => {
   });
 
   it.each([
-    [409, "LAST_ADMIN", "Admin aktif terakhir harus tetap aktif dan memiliki hak admin."],
+    [409, lastAdminError.error.code, lastAdminError.error.message],
     [403, "FORBIDDEN", "Akses ditolak."],
     [429, "RATE_LIMITED", "Pemrosesan password sedang penuh. Coba lagi."],
   ])("shows %s errors and leaves manual retry available", async (status, code, message) => {
-    server.use(http.patch(`${base}/admin/users/${accountId}`, () => apiError(status, code, message)));
+    server.use(http.patch(`${base}/admin/users/${accountId}`, () => code === lastAdminError.error.code
+      ? HttpResponse.json(lastAdminError, { status })
+      : apiError(status, code, message)));
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Simpan perubahan" }));
     await waitFor(() => expect(document.querySelector("#update-user-message")).toHaveTextContent(message));

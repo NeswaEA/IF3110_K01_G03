@@ -1,9 +1,11 @@
 package platform_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +16,58 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 )
+
+func TestWriteErrorLogsInternalFailuresSafely(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	const secret = "private-credential"
+	for _, failure := range []error{
+		errors.New(secret),
+		&contracts.DomainError{Code: "INTERNAL_ERROR", Message: secret, Fields: map[string]string{"password": secret}, Cause: errors.New(secret)},
+		&contracts.DomainError{Code: "UNRECOGNIZED", Message: secret, Cause: errors.New(secret)},
+	} {
+		logs.Reset()
+		r := httptest.NewRequest("POST", "/private/"+secret+"?token="+secret, strings.NewReader(secret))
+		r.Header.Set("Cookie", "session="+secret)
+		r.Header.Set("X-CSRF-Token", secret)
+		w := httptest.NewRecorder()
+		platform.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := platform.WriteError(w, r, failure); err != nil {
+				t.Fatal(err)
+			}
+		})).ServeHTTP(w, r)
+		var logged map[string]any
+		if err := json.Unmarshal(logs.Bytes(), &logged); err != nil {
+			t.Fatal(err)
+		}
+		var response struct {
+			Error struct {
+				RequestID string `json:"request_id"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if w.Code != 500 || response.Error.RequestID == "" || logged["request_id"] != response.Error.RequestID || w.Header().Get("X-Request-ID") != response.Error.RequestID {
+			t.Fatal("internal error must share one request ID across log, header, and response")
+		}
+		if logged["status"] != float64(500) || logged["code"] != "INTERNAL_ERROR" || logged["action"] != "http.error" || logged["level"] != "ERROR" {
+			t.Fatalf("unexpected internal error log: %v", logged)
+		}
+		if strings.Contains(logs.String(), secret) || strings.Contains(w.Body.String(), secret) {
+			t.Fatal("internal details must not reach logs or responses")
+		}
+	}
+	logs.Reset()
+	if err := platform.WriteError(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil), &contracts.DomainError{Code: "FORBIDDEN", Message: "Akses ditolak."}); err != nil {
+		t.Fatal(err)
+	}
+	if logs.Len() != 0 {
+		t.Fatal("expected client errors must not be logged as internal failures")
+	}
+}
 
 func TestDecodeJSON(t *testing.T) {
 	for _, tt := range []struct {

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +18,32 @@ import (
 
 const usersPath = "/api/v1/admin/users"
 const usersOrigin = "http://localhost:8080"
+
+func TestUserHTTPLastAdminFixture(t *testing.T) {
+	fixture, err := os.ReadFile("../../../tests/fixtures/api/access_error_last_admin.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var expected map[string]map[string]any
+	if err := json.Unmarshal(fixture, &expected); err != nil {
+		t.Fatal(err)
+	}
+	f := newUserHTTPFixture(t)
+	w := f.request("PATCH", usersPath+"/"+testkit.UserAdmin, `{"active":false}`, &f.admin, true)
+	assertUserHTTPError(t, w, 409, "LAST_ADMIN")
+	var actual map[string]map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &actual); err != nil {
+		t.Fatal(err)
+	}
+	requestID := w.Header().Get("X-Request-ID")
+	if requestID == "" || actual["error"]["request_id"] != requestID {
+		t.Fatal("error response must carry its request ID")
+	}
+	expected["error"]["request_id"] = requestID
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("last admin response differs from shared fixture: %s", w.Body.String())
+	}
+}
 
 type userHTTPFixture struct {
 	userFixture
