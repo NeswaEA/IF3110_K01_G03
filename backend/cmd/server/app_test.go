@@ -192,6 +192,7 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		{"GET", "/databases", "", view, 200, `data-widget="database-list"`},
 		{"GET", "/databases/" + databaseID, "", view, 200, `data-database-id="` + databaseID + `"`},
 		{"GET", "/databases/" + databaseID, "", admin, 404, "Halaman tidak ditemukan"},
+		{"GET", "/databases/" + databaseID + "/migrations", "", view, 200, `data-widget="migrations"`},
 		{"GET", "/admin/connections", "", view, 403, "Akses ditolak"},
 		{"GET", "/admin/connections", "", admin, 200, `data-widget="connections"`},
 		{"GET", "/unknown", "", loginState{}, 404, "Halaman tidak ditemukan"},

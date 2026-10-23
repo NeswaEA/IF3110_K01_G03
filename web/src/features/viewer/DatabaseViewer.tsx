@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
 import type { DataColumn, DatabaseSummary, JSONValue, SchemaSnapshot, Table, TableData } from "../../api/types";
 import { useApi } from "../../api/useApi";
 import { EmptyState, ErrorState, Loading } from "../../components/StatusViews";
@@ -123,8 +122,7 @@ function TableDetail({ table }: { table: Table }) {
   );
 }
 
-export function DatabaseViewer() {
-  const { id = "" } = useParams();
+export function DatabaseViewer({ databaseId: id }: { databaseId: string }) {
   const [summary] = useApi<DatabaseSummary>(`/databases/${encodeURIComponent(id)}`);
   const [schema] = useApi<SchemaSnapshot>(`/databases/${encodeURIComponent(id)}/schema`);
   const [selected, setSelected] = useState<{ schema: string; table: string } | null>(null);
@@ -141,8 +139,8 @@ export function DatabaseViewer() {
 
   return (
     <section>
-      <h1>{db.name}</h1>
-      <Link to={`/databases/${db.id}/migrations`}>Migrasi dan riwayat</Link>
+      <h2>{db.name}</h2>
+      <a href={`/databases/${db.id}/migrations`}>Migrasi dan riwayat</a>
       <p>
         Engine {db.driver}; fingerprint <code>{snap.fingerprint}</code>
       </p>

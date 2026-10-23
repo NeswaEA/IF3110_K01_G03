@@ -33,6 +33,7 @@ func RegisterRoutes(mux *http.ServeMux, p *Pages, guard func(http.Handler) http.
 	}))
 	mux.Handle("GET /databases", page(p.databases))
 	mux.Handle("GET /databases/{id}", page(p.database))
+	mux.Handle("GET /databases/{id}/migrations", page(p.migrations))
 	mux.Handle("GET /admin/connections", page(p.connections))
 }
 
@@ -95,6 +96,18 @@ func (p *Pages) database(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.render.Render(w, http.StatusOK, "viewer/database", Page{Title: "Database", User: user, Active: "databases", Entry: "database",
+		Data: struct{ ID string }{id}})
+}
+
+// migrations needs only view access: history is readable by viewers, and the
+// widget enables editing from the database's effective access.
+func (p *Pages) migrations(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	user, ok := p.authorize(w, r, contracts.ViewDatabase, id)
+	if !ok {
+		return
+	}
+	p.render.Render(w, http.StatusOK, "migrations/index", Page{Title: "Migrasi", User: user, Active: "databases", Entry: "migrations",
 		Data: struct{ ID string }{id}})
 }
 

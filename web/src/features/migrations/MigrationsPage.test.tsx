@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { EditorView } from "@codemirror/view";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { onUnauthorized, setCsrfToken } from "../../api/client";
 import { handlers } from "../../mocks/handlers";
@@ -30,7 +29,7 @@ afterEach(() => { vi.restoreAllMocks(); });
 afterAll(() => { server.close(); vi.unstubAllGlobals(); });
 
 function open() {
-  return render(<MemoryRouter initialEntries={[`/databases/${db.id}/migrations`]}><Routes><Route path="/databases/:id/migrations" element={<MigrationsPage />} /></Routes></MemoryRouter>);
+  return render(<MigrationsPage databaseId={db.id} />);
 }
 
 async function editSQL(value: string, selection?: { anchor: number; head: number }) {

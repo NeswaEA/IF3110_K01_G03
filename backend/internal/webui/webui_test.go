@@ -19,7 +19,8 @@ const manifest = `{
   "src/pages/layout.ts": {"file": "assets/layout-1.js", "name": "layout", "isEntry": true, "imports": ["_shared.js"]},
   "src/pages/databases.ts": {"file": "assets/databases-1.js", "name": "databases", "isEntry": true, "imports": ["_shared.js"], "css": ["assets/databases-1.css"]},
   "src/pages/database.ts": {"file": "assets/database-1.js", "name": "database", "isEntry": true},
-  "src/pages/connections.ts": {"file": "assets/connections-1.js", "name": "connections", "isEntry": true}
+  "src/pages/connections.ts": {"file": "assets/connections-1.js", "name": "connections", "isEntry": true},
+  "src/pages/migrations.ts": {"file": "assets/migrations-1.js", "name": "migrations", "isEntry": true}
 }`
 
 func writeManifest(t *testing.T, body string) string {
@@ -103,6 +104,9 @@ func TestPagesRenderWithPolicy(t *testing.T) {
 		{"root redirects", viewer, nil, "/", 302, nil, nil},
 		{"database page", viewer, nil, "/databases/" + databaseID, 200,
 			[]string{`data-database-id="` + databaseID + `"`, "/assets/database-1.js"}, nil},
+		{"migrations page", viewer, nil, "/databases/" + databaseID + "/migrations", 200,
+			[]string{`data-widget="migrations"`, `data-database-id="` + databaseID + `"`, "/assets/migrations-1.js"}, nil},
+		{"migrations without grant", viewer, notFound, "/databases/" + databaseID + "/migrations", 404, []string{"Halaman tidak ditemukan"}, []string{"data-widget"}},
 		{"database without grant", viewer, notFound, "/databases/" + databaseID, 404, []string{"Halaman tidak ditemukan"}, []string{"data-widget"}},
 		{"malformed database id", viewer, nil, "/databases/not-a-uuid", 404, []string{"Halaman tidak ditemukan"}, nil},
 		{"connections for admin", admin, nil, "/admin/connections", 200,

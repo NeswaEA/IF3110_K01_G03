@@ -2,7 +2,6 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { handlers } from "../../mocks/handlers";
 import forbidden from "../../../../tests/fixtures/api/viewer_error_forbidden.json";
@@ -16,15 +15,10 @@ beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 afterEach(() => server.resetHandlers(...handlers));
 afterAll(() => server.close());
 
+// Each page mounts its own widget; the server passes the database id from the URL.
 function at(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/databases" element={<DatabaseList />} />
-        <Route path="/databases/:id" element={<DatabaseViewer />} />
-      </Routes>
-    </MemoryRouter>,
-  );
+  const id = path.split("/")[2];
+  return render(id ? <DatabaseViewer databaseId={id} /> : <DatabaseList />);
 }
 
 describe("DatabaseList", () => {

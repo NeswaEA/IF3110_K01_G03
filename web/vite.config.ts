@@ -1,11 +1,21 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
-// Dev server proxies /api to the Go backend (single origin in production).
+// Pages are rendered by the Go server; Vite only bundles one script per page.
+// The manifest lets the server resolve each entry name to its hashed files.
 export default defineConfig({
   plugins: [react()],
-  server: {
-    proxy: { "/api": { target: process.env.VITE_DEV_PROXY_TARGET ?? "http://localhost:8080", changeOrigin: false } },
+  build: {
+    manifest: true,
+    rolldownOptions: {
+      input: {
+        layout: "src/pages/layout.ts",
+        databases: "src/pages/databases.tsx",
+        database: "src/pages/database.tsx",
+        connections: "src/pages/connections.tsx",
+        migrations: "src/pages/migrations.tsx",
+      },
+    },
   },
   test: {
     environment: "jsdom",

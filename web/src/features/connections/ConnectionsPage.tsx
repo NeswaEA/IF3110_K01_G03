@@ -263,7 +263,6 @@ export function ConnectionsPage() {
 
   return (
     <section>
-      <h1>Koneksi database</h1>
       {notice && <p role={notice.kind === "error" ? "alert" : "status"}>{notice.text}</p>}
       {q.status === "loading" && <Loading />}
       {q.status === "error" && <ErrorState error={q.error} />}

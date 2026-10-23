@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
 import { ApiRequestError, isAbortError, request } from "../../api/client";
 import type { DatabaseSummary, MigrationDraft, MigrationHead, MigrationRun } from "../../api/types";
 import { useApi } from "../../api/useApi";
@@ -13,9 +12,8 @@ const pending = (run: MigrationRun) => run.status === "running" || run.status ==
 const statusLabel = { running: "Berjalan", succeeded: "Berhasil", failed: "Gagal", outcome_unknown: "Hasil belum pasti" } as const;
 const date = (value: string | null) => value ? new Date(value).toLocaleString("id-ID") : "belum tersedia";
 
-export function MigrationsPage() {
-  const { id = "" } = useParams();
-  return <DatabaseMigrations key={id} id={id} />;
+export function MigrationsPage({ databaseId }: { databaseId: string }) {
+  return <DatabaseMigrations key={databaseId} id={databaseId} />;
 }
 
 function DatabaseMigrations({ id }: { id: string }) {
@@ -137,8 +135,8 @@ function Workbench({ db }: { db: DatabaseSummary }) {
 
   return (
     <section className="migrations">
-      <h1>Migrasi: {db.name}</h1>
-      <Link to={`/databases/${db.id}`}>Lihat schema dan data</Link>
+      <h2>Migrasi: {db.name}</h2>
+      <a href={`/databases/${db.id}`}>Lihat schema dan data</a>
       {head.status === "success" && <p>Versi committed: {head.response.data.version}</p>}
       {head.status === "error" && <ErrorState error={head.error} />}
       {notice && <p role="status">{notice}</p>}

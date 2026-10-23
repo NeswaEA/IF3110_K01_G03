@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import type { DatabaseSummary } from "../../api/types";
 import { useApi } from "../../api/useApi";
 import { EmptyState, ErrorState, Loading } from "../../components/StatusViews";
@@ -12,14 +11,13 @@ export function DatabaseList() {
   const dbs = q.response.data;
   return (
     <section>
-      <h1>Database</h1>
       {dbs.length === 0 ? (
         <EmptyState message="Belum ada database yang dapat Anda akses." />
       ) : (
         <ul>
           {dbs.map((d) => (
             <li key={d.id}>
-              <Link to={`/databases/${d.id}`}>{d.name}</Link> ({d.driver}, akses {accessLabel[d.effective_access]})
+              <a href={`/databases/${d.id}`}>{d.name}</a> ({d.driver}, akses {accessLabel[d.effective_access]})
             </li>
           ))}
         </ul>
