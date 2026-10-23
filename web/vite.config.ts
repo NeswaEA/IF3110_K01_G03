@@ -14,6 +14,7 @@ export default defineConfig({
         users: "src/pages/users.ts",
         groups: "src/pages/groups.ts",
         members: "src/pages/members.ts",
+        grants: "src/pages/grants.ts",
         connections: "src/pages/connections.tsx",
         migrations: "src/pages/migrations.tsx",
       },

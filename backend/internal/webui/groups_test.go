@@ -43,6 +43,10 @@ func (*groupSource) Members(context.Context, contracts.Principal, string, int, i
 	return nil, false, errors.New("unexpected member lookup")
 }
 
+func (*groupSource) Grants(context.Context, contracts.Principal, string, int, int) ([]access.Grant, bool, error) {
+	return nil, false, errors.New("unexpected grant lookup")
+}
+
 func groupPage(t *testing.T, source *groupSource, principal *contracts.Principal, policyErr error, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	renderer, err := webui.NewRenderer(webui.Assets{
@@ -90,6 +94,7 @@ func TestGroupsPageRendersNamesAndForms(t *testing.T) {
 		`name="confirm" type="checkbox"`, `required`, `type="submit" disabled`, `seluruh sesi`,
 		`Nama grup berhasil diperbarui.`, `/assets/groups.js`,
 		`href="/admin/groups/` + groupID + `/members"`,
+		`href="/admin/groups/` + groupID + `/grants"`,
 	}, "private-session", "SessionID", "password_hash", `<script>alert`)
 	if source.calls != 1 || source.actor != *principal {
 		t.Fatal("page did not pass the principal to the group service")

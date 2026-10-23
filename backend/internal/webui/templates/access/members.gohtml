@@ -1,6 +1,6 @@
 {{define "content"}}
 <div class="members-admin access-admin" data-group-id="{{.Data.Group.ID}}" data-return-to="{{.Data.ReturnTo}}">
-<nav class="admin-tabs" aria-label="Administrasi"><a href="/admin/users">Pengguna</a><a href="/admin/groups">Grup</a></nav>
+<nav class="admin-tabs" aria-label="Administrasi"><a href="/admin/users">Pengguna</a><a href="/admin/groups">Grup</a><a href="/admin/groups/{{.Data.Group.ID}}/grants">Hak akses grup ini</a></nav>
 <div class="admin-toolbar">
 <p>Anggota memperoleh akses database sesuai grant grup. Keanggotaan tidak mengubah hak admin platform.</p>
 <a href="#add-member">Tambah anggota</a>

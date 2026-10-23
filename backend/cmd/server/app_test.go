@@ -240,6 +240,12 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/members?member=10000000-0000-4000-8000-000000000002", "", admin, 200, `data-operation="remove"`},
 		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/members?users_offset=bad", "", admin, 400, "Permintaan tidak valid"},
 		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000099/members", "", admin, 404, "Halaman tidak ditemukan"},
+		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/grants", "", loginState{}, 302, ""},
+		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/grants", "", view, 403, "Akses ditolak"},
+		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/grants", "", admin, 200, `<caption>Grant pada halaman ini</caption>`},
+		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/grants?database=" + databaseID, "", admin, 200, `data-operation="update"`},
+		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/grants?databases_offset=bad", "", admin, 400, "Permintaan tidak valid"},
+		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000099/grants", "", admin, 404, "Halaman tidak ditemukan"},
 		{"GET", "/unknown", "", loginState{}, 404, "Halaman tidak ditemukan"},
 		{"GET", "/assets/missing.js", "", view, 404, "Halaman tidak ditemukan"},
 	} {

@@ -117,6 +117,15 @@ func (s *sources) List(context.Context, int, int) ([]connections.AdminConnection
 	return s.conns, false, nil
 }
 
+func (s *sources) Get(_ context.Context, id string) (connections.AdminConnection, error) {
+	for _, connection := range s.conns {
+		if connection.ID == id {
+			return connection, nil
+		}
+	}
+	return connections.AdminConnection{}, database.ErrNotFound
+}
+
 func (s *sources) Schema(context.Context, string) (database.SchemaSnapshot, error) {
 	return s.snap, s.schemaErr
 }

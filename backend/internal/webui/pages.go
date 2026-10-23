@@ -21,6 +21,7 @@ type DatabaseSource interface {
 	Visible(ctx context.Context, access contracts.AccessChecker, userID string) ([]connections.Database, error)
 	Database(ctx context.Context, access contracts.AccessChecker, userID, id string) (connections.Database, error)
 	List(ctx context.Context, limit, offset int) ([]connections.AdminConnection, bool, error)
+	Get(ctx context.Context, id string) (connections.AdminConnection, error)
 }
 
 // SchemaSource is the viewer service as the pages read it.
@@ -61,6 +62,7 @@ func RegisterRoutes(mux *http.ServeMux, p *Pages, guard func(http.Handler) http.
 	mux.Handle("GET /admin/users", page(p.usersPage))
 	mux.Handle("GET /admin/groups", page(p.groupsPage))
 	mux.Handle("GET /admin/groups/{id}/members", page(p.membersPage))
+	mux.Handle("GET /admin/groups/{id}/grants", page(p.grantsPage))
 }
 
 var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

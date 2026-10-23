@@ -1,0 +1,92 @@
+{{define "content"}}
+<div class="grants-admin access-admin" data-group-id="{{.Data.Group.ID}}" data-return-to="{{.Data.ReturnTo}}">
+<nav class="admin-tabs" aria-label="Administrasi"><a href="/admin/users">Pengguna</a><a href="/admin/groups">Grup</a><a href="/admin/groups/{{.Data.Group.ID}}/members">Anggota grup ini</a></nav>
+<div class="admin-toolbar">
+<p>Hak akses diberikan melalui grup. Pengguna memperoleh level tertinggi dari seluruh grupnya. Admin platform tetap membutuhkan grant untuk mengakses database.</p>
+<a href="#set-grant">Tetapkan hak akses</a>
+</div>
+{{if .Data.Notice}}<p role="status">{{.Data.Notice}}</p>{{end}}
+<section id="grants" aria-labelledby="grants-heading" tabindex="-1">
+<h2 id="grants-heading">Hak akses database</h2>
+{{if .Data.Rows}}
+<div class="scroll-x" role="region" aria-label="Hak akses database grup" tabindex="0">
+<table>
+<caption>Grant pada halaman ini</caption>
+<thead><tr><th scope="col">Database</th><th scope="col">Engine</th><th scope="col">Koneksi</th><th scope="col">Hak akses</th><th scope="col">Pengaturan</th></tr></thead>
+<tbody>
+{{range .Data.Rows}}
+<tr><th scope="row">{{.Database.Name}}<br><code>{{.Database.ID}}</code></th><td>{{.Database.Driver}}</td><td>{{if .Database.Active}}Aktif{{else}}Nonaktif{{end}}</td><td>{{if eq .Level "edit"}}Edit (edit){{else}}Lihat (view){{end}}</td><td><a href="{{.URL}}">Kelola <span class="resource-name">{{.Database.Name}}</span></a></td></tr>
+{{end}}
+</tbody>
+</table>
+</div>
+<p>Menampilkan grant {{.Data.Grants.First}} sampai {{.Data.Grants.Last}}.</p>
+{{else}}
+<p>Tidak ada grant pada halaman ini. Buka halaman pertama atau tetapkan hak akses baru.</p>
+{{end}}
+<nav class="pager" aria-label="Halaman grant">
+{{if .Data.Grants.Prev}}<a href="{{.Data.Grants.Start}}">Halaman pertama</a><a href="{{.Data.Grants.Prev}}">Sebelumnya</a>{{end}}
+{{if .Data.Grants.Next}}<a href="{{.Data.Grants.Next}}">Berikutnya</a>{{end}}
+</nav>
+</section>
+{{if .Data.Selected}}
+<section id="grant-settings" aria-labelledby="grant-settings-heading" tabindex="-1">
+<h2 id="grant-settings-heading">Hak akses {{.Data.Selected.Database.Name}}</h2>
+<form id="update-grant-form" action="/api/v1/admin/groups/{{.Data.Group.ID}}/grants/{{.Data.Selected.Database.ID}}" method="post" data-operation="update" data-database-id="{{.Data.Selected.Database.ID}}" aria-describedby="update-grant-message">
+<fieldset>
+<legend>Ubah hak akses</legend>
+<label for="update-grant-level">Hak akses baru</label>
+<select id="update-grant-level" name="level" aria-describedby="update-grant-help" required>
+<option value="view"{{if eq .Data.Selected.Level "view"}} selected{{end}}>Lihat (view)</option>
+<option value="edit"{{if eq .Data.Selected.Level "edit"}} selected{{end}}>Edit (edit)</option>
+</select>
+<p id="update-grant-help">Lihat mengizinkan pembacaan schema, data, dan riwayat. Edit juga mengizinkan migrasi dan EXPLAIN. Menurunkan edit ke view mencabut seluruh sesi anggota. Jika Anda anggota grup ini, Anda harus login kembali.</p>
+<button type="submit" disabled>Simpan hak akses</button>
+</fieldset>
+<p id="update-grant-message" role="status" aria-live="polite"></p>
+</form>
+<form id="remove-grant-form" action="/api/v1/admin/groups/{{.Data.Group.ID}}/grants/{{.Data.Selected.Database.ID}}" method="post" data-operation="remove" data-database-id="{{.Data.Selected.Database.ID}}" aria-describedby="remove-grant-message">
+<fieldset>
+<legend>Cabut hak akses</legend>
+<p id="remove-grant-warning">Pencabutan menghapus grant database dari grup ini dan mencabut seluruh sesi anggotanya. Grant dari grup lain tetap berlaku. Jika Anda anggota grup ini, Anda harus login kembali. Database dan datanya tetap tersimpan.</p>
+<label class="admin-check"><input name="confirm" type="checkbox" aria-describedby="remove-grant-warning" required> Saya ingin mencabut hak akses grup ini ke {{.Data.Selected.Database.Name}}.</label>
+<button type="submit" disabled>Cabut hak akses</button>
+</fieldset>
+<p id="remove-grant-message" role="status" aria-live="polite"></p>
+</form>
+</section>
+{{end}}
+<section id="set-grant" aria-labelledby="set-grant-heading" tabindex="-1">
+<h2 id="set-grant-heading">Tetapkan hak akses</h2>
+{{if .Data.Candidates}}
+<form id="set-grant-form" action="/api/v1/admin/groups/{{.Data.Group.ID}}/grants" method="post" data-operation="set" aria-describedby="set-grant-message">
+<fieldset>
+<legend>Pilih database dan hak akses</legend>
+<label for="grant-database">Database</label>
+<select id="grant-database" name="database_id" aria-describedby="grant-database-help" required>
+<option value="" disabled selected>Pilih database</option>
+{{range .Data.Candidates}}<option value="{{.ID}}">{{.Name}} ({{.Driver}}{{if not .Active}}, nonaktif{{end}})</option>{{end}}
+</select>
+<p id="grant-database-help">Gunakan navigasi di bawah untuk memilih database lain. Grant pada koneksi nonaktif tetap tersimpan, tetapi tidak memberikan akses sampai koneksi diaktifkan.</p>
+<label for="grant-level">Hak akses</label>
+<select id="grant-level" name="level" aria-describedby="grant-level-help" required>
+<option value="view">Lihat (view)</option>
+<option value="edit">Edit (edit)</option>
+</select>
+<p id="grant-level-help">Memilih database yang sudah memiliki grant akan mengganti levelnya. Lihat mengizinkan pembacaan schema, data, dan riwayat. Edit juga mengizinkan migrasi dan EXPLAIN. Penurunan edit ke view mencabut seluruh sesi anggota, termasuk sesi Anda jika Anda anggota grup ini.</p>
+<button type="submit" disabled>Tetapkan hak akses</button>
+</fieldset>
+<p id="set-grant-message" role="status" aria-live="polite"></p>
+</form>
+<p>Menampilkan pilihan database {{.Data.Databases.First}} sampai {{.Data.Databases.Last}}.</p>
+{{else}}
+<p>Tidak ada pilihan database pada halaman ini. Buka halaman pertama atau daftarkan koneksi pada halaman koneksi.</p>
+{{end}}
+<nav class="pager" aria-label="Halaman pilihan database">
+{{if .Data.Databases.Prev}}<a href="{{.Data.Databases.Start}}">Halaman pertama</a><a href="{{.Data.Databases.Prev}}">Sebelumnya</a>{{end}}
+{{if .Data.Databases.Next}}<a href="{{.Data.Databases.Next}}">Berikutnya</a>{{end}}
+</nav>
+</section>
+<noscript><p>Daftar dan navigasi grant dapat dibaca tanpa JavaScript. Aktifkan JavaScript untuk menetapkan, mengubah, dan mencabut hak akses.</p></noscript>
+</div>
+{{end}}
