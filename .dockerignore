@@ -1,0 +1,13 @@
+# Local secrets, host-built dependencies and generated output stay out of the image build:
+# the image installs and builds everything itself for Linux.
+.git
+.env
+.env.*
+!.env.example
+tmp/
+web/node_modules/
+web/dist/
+backend/bin/
+**/*.sqlite
+**/*.sqlite-*
+**/*.db

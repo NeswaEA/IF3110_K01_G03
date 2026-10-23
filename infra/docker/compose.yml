@@ -1,6 +1,9 @@
 # Run from the repository root:
-#   cp .env.example .env   # then fill the secrets
+#   scripts/init-env.sh     # or copy .env.example to .env and fill the secrets
 #   docker compose --env-file .env -f infra/docker/compose.yml up -d metadata-postgres target-postgres
+# The app container (profile "app") needs the metadata schema first:
+#   docker compose --env-file .env -f infra/docker/compose.yml --profile app run --rm --entrypoint /app/migrate backend up
+#   docker compose --env-file .env -f infra/docker/compose.yml --profile app up -d --build backend
 # Metadata and target databases are separate servers with separate credentials.
 name: if3110
 
@@ -50,6 +53,9 @@ services:
     environment:
       HTTP_ADDR: ":8080"
       SQLITE_TARGET_DIR: /data/sqlite
+      WEB_DIST_DIR: /app/web/dist
+      # .env points at the host port; inside the Compose network the metadata server is metadata-postgres:5432
+      METADATA_DATABASE_URL: postgres://metadata_owner:${METADATA_DB_PASSWORD}@metadata-postgres:5432/metadata?sslmode=disable
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
