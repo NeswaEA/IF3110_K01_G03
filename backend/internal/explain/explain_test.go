@@ -231,15 +231,6 @@ func pgTarget(t *testing.T) database.TargetHandle {
 	return database.TargetHandle{DatabaseID: "pg", Driver: database.Postgres, DB: db, EditorRole: "platform_editor"}
 }
 
-func count(t *testing.T, db *sql.DB, q string) int {
-	t.Helper()
-	var n int
-	if err := db.QueryRow(q).Scan(&n); err != nil {
-		t.Fatal(err)
-	}
-	return n
-}
-
 // checksum reads a one-value digest of a table so a change to any row is visible.
 func checksum(t *testing.T, db *sql.DB, q string) string {
 	t.Helper()
@@ -353,7 +344,7 @@ func TestExplainEngines(t *testing.T) {
 	t.Run("postgres explain of DML changes nothing", func(t *testing.T) {
 		const sum = `SELECT md5(string_agg(id::text || ':' || coalesce(note, '-'), ',' ORDER BY id)) FROM public.items`
 		before := checksum(t, pg.DB, sum)
-		ledger := count(t, pg.DB, `SELECT count(*) FROM pg_tables WHERE schemaname = '_platform'`)
+		// No _platform table count here: other packages create the ledger and probe tables there in parallel.
 		for _, q := range []string{"DELETE FROM public.items", "UPDATE public.items SET note = 'changed'",
 			"INSERT INTO public.items (id, name) VALUES (424242, 'explain only')"} {
 			if _, err := s.Explain(ctx, "pg", q, "estimate"); err != nil {
@@ -362,9 +353,6 @@ func TestExplainEngines(t *testing.T) {
 		}
 		if checksum(t, pg.DB, sum) != before {
 			t.Fatal("explain modified data")
-		}
-		if count(t, pg.DB, `SELECT count(*) FROM pg_tables WHERE schemaname = '_platform'`) != ledger {
-			t.Fatal("explain touched the ledger namespace")
 		}
 	})
 	t.Run("postgres rejections", func(t *testing.T) {
