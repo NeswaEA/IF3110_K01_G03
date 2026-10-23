@@ -25,17 +25,9 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any, maxBytes int64)
 	if err != nil || mediaType != "application/json" || (params["charset"] != "" && params["charset"] != "utf-8" && params["charset"] != "UTF-8") {
 		return &contracts.DomainError{Code: "INVALID_REQUEST", Message: "Content-Type harus application/json dengan UTF-8."}
 	}
-	if maxBytes <= 0 {
-		maxBytes = DefaultMaxBodyBytes
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
-	body, err := io.ReadAll(r.Body)
+	body, err := readRequestBody(w, r, maxBytes)
 	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			return &contracts.DomainError{Code: "PAYLOAD_TOO_LARGE", Message: "Body melebihi batas ukuran."}
-		}
-		return invalidJSON()
+		return err
 	}
 	body = bytes.TrimSpace(body)
 	if len(body) == 0 || body[0] != '{' || !utf8.Valid(body) {
@@ -51,6 +43,33 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any, maxBytes int64)
 		return invalidJSON()
 	}
 	return nil
+}
+
+func RequireEmptyBody(w http.ResponseWriter, r *http.Request, maxBytes int64) error {
+	body, err := readRequestBody(w, r, maxBytes)
+	if err != nil {
+		return err
+	}
+	if len(body) != 0 {
+		return &contracts.DomainError{Code: "INVALID_REQUEST", Message: "Request ini tidak menerima body."}
+	}
+	return nil
+}
+
+func readRequestBody(w http.ResponseWriter, r *http.Request, maxBytes int64) ([]byte, error) {
+	if maxBytes <= 0 {
+		maxBytes = DefaultMaxBodyBytes
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			return nil, &contracts.DomainError{Code: "PAYLOAD_TOO_LARGE", Message: "Body melebihi batas ukuran."}
+		}
+		return nil, &contracts.DomainError{Code: "INVALID_REQUEST", Message: "Body tidak dapat dibaca."}
+	}
+	return body, nil
 }
 
 func invalidJSON() error {

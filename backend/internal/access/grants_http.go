@@ -8,7 +8,8 @@ import (
 )
 
 func (h *GroupHandler) grants(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
 	limit, offset, err := parsePage(r)
@@ -16,7 +17,7 @@ func (h *GroupHandler) grants(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, err)
 		return
 	}
-	grants, more, err := h.groups.Grants(r.Context(), r.PathValue("groupId"), limit, offset)
+	grants, more, err := h.groups.Grants(r.Context(), principal, r.PathValue("groupId"), limit, offset)
 	if err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
@@ -25,7 +26,8 @@ func (h *GroupHandler) grants(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GroupHandler) setGrant(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
 	var body struct {
@@ -35,7 +37,7 @@ func (h *GroupHandler) setGrant(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, err)
 		return
 	}
-	grant, err := h.groups.SetGrant(r.Context(), r.PathValue("groupId"), r.PathValue("databaseId"), body.Level)
+	grant, err := h.groups.SetGrant(r.Context(), principal, r.PathValue("groupId"), r.PathValue("databaseId"), body.Level)
 	if err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
@@ -44,10 +46,15 @@ func (h *GroupHandler) setGrant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GroupHandler) removeGrant(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
-	if err := h.groups.RemoveGrant(r.Context(), r.PathValue("groupId"), r.PathValue("databaseId")); err != nil {
+	if err := platform.RequireEmptyBody(w, r, 0); err != nil {
+		_ = platform.WriteError(w, r, err)
+		return
+	}
+	if err := h.groups.RemoveGrant(r.Context(), principal, r.PathValue("groupId"), r.PathValue("databaseId")); err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
 	}

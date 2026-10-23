@@ -39,8 +39,8 @@ func newUserHTTPFixture(t *testing.T) userHTTPFixture {
 		t.Fatal(err)
 	}
 	protected := http.NewServeMux()
-	access.RegisterUserRoutes(protected, access.NewUserHandler(f.users, access.NewPolicy(f.db), auth.PrincipalFromContext))
-	access.RegisterGroupRoutes(protected, access.NewGroupHandler(groupService(f), access.NewPolicy(f.db), auth.PrincipalFromContext))
+	access.RegisterUserRoutes(protected, access.NewUserHandler(f.users, auth.PrincipalFromContext))
+	access.RegisterGroupRoutes(protected, access.NewGroupHandler(groupService(f), auth.PrincipalFromContext))
 	mux := http.NewServeMux()
 	authHandler.RegisterRoutes(mux)
 	mux.Handle("/api/", authHandler.RequireSession(authHandler.RequireCSRF(protected)))
@@ -242,7 +242,7 @@ func TestUserHTTPValidation(t *testing.T) {
 
 func TestUserHTTPResetPromotionAndDeactivation(t *testing.T) {
 	f := newUserHTTPFixture(t)
-	user, err := f.users.Create(t.Context(), access.CreateUserInput{Username: "managed", Password: userPassword})
+	user, err := f.users.Create(t.Context(), adminPrincipal, access.CreateUserInput{Username: "managed", Password: userPassword})
 	if err != nil {
 		t.Fatal(err)
 	}

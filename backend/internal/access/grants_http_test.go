@@ -30,7 +30,7 @@ func TestGrantHTTPAuthorizationAndCSRF(t *testing.T) {
 				map[string]string{"X-CSRF-Token": "invalid"}), 403, "CSRF_REJECTED")
 		}
 	}
-	grants, _, err := groupService(f.userFixture).Grants(t.Context(), viewGroup, 50, 0)
+	grants, _, err := groupService(f.userFixture).Grants(t.Context(), adminPrincipal, viewGroup, 50, 0)
 	if err != nil || len(grants) != 1 || grants[0].Level != contracts.AccessView {
 		t.Fatal("denied requests changed grant records", grants, err)
 	}
@@ -114,7 +114,7 @@ func TestGrantHTTPLifecycleAndDTO(t *testing.T) {
 	if err != nil || level != contracts.AccessView {
 		t.Fatal("removal changed another database's grant", err)
 	}
-	empty, err := groupService(f.userFixture).Create(t.Context(), "no grants")
+	empty, err := groupService(f.userFixture).Create(t.Context(), adminPrincipal, "no grants")
 	if err != nil {
 		t.Fatal(err)
 	}

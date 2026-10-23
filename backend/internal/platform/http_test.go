@@ -69,6 +69,42 @@ func TestDecodeJSON(t *testing.T) {
 	}
 }
 
+func TestRequireEmptyBody(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, code string
+		limit            int64
+		chunked          bool
+	}{
+		{"absent", "", "", 0, false},
+		{"empty_chunked", "", "", 0, true},
+		{"object", "{}", "INVALID_REQUEST", 0, false},
+		{"whitespace", " ", "INVALID_REQUEST", 0, false},
+		{"malformed", "{", "INVALID_REQUEST", 0, false},
+		{"custom_limit", "abc", "PAYLOAD_TOO_LARGE", 2, false},
+		{"default_limit", strings.Repeat("x", 1<<20+1), "PAYLOAD_TOO_LARGE", 0, false},
+		{"chunked_limit", "abc", "PAYLOAD_TOO_LARGE", 2, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodDelete, "/", strings.NewReader(tc.body))
+			if tc.chunked {
+				r.ContentLength = -1
+				r.TransferEncoding = []string{"chunked"}
+			}
+			err := platform.RequireEmptyBody(httptest.NewRecorder(), r, tc.limit)
+			if tc.code == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			var domain *contracts.DomainError
+			if !errors.As(err, &domain) || domain.Code != tc.code {
+				t.Fatalf("expected %s, got %v", tc.code, err)
+			}
+		})
+	}
+}
+
 func TestSuccessResponses(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()

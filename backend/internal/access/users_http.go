@@ -11,12 +11,11 @@ import (
 
 type UserHandler struct {
 	users     *UserService
-	access    contracts.AccessChecker
 	principal func(context.Context) (contracts.Principal, bool)
 }
 
-func NewUserHandler(users *UserService, policy contracts.AccessChecker, principal func(context.Context) (contracts.Principal, bool)) *UserHandler {
-	return &UserHandler{users: users, access: policy, principal: principal}
+func NewUserHandler(users *UserService, principal func(context.Context) (contracts.Principal, bool)) *UserHandler {
+	return &UserHandler{users: users, principal: principal}
 }
 
 func RegisterUserRoutes(mux *http.ServeMux, h *UserHandler) {
@@ -26,21 +25,18 @@ func RegisterUserRoutes(mux *http.ServeMux, h *UserHandler) {
 	mux.HandleFunc("PUT /api/v1/admin/users/{userId}/password", h.resetPassword)
 }
 
-func authorizeAdmin(w http.ResponseWriter, r *http.Request, policy contracts.AccessChecker, principalFromContext func(context.Context) (contracts.Principal, bool)) bool {
+func requestPrincipal(w http.ResponseWriter, r *http.Request, principalFromContext func(context.Context) (contracts.Principal, bool)) (contracts.Principal, bool) {
 	principal, ok := principalFromContext(r.Context())
-	if !ok {
+	if !ok || principal.UserID == "" {
 		_ = platform.WriteError(w, r, &contracts.DomainError{Code: "UNAUTHENTICATED", Message: "Silakan login untuk melanjutkan."})
-		return false
+		return contracts.Principal{}, false
 	}
-	if err := policy.Require(r.Context(), principal, contracts.ManagePlatform, ""); err != nil {
-		_ = platform.WriteError(w, r, err)
-		return false
-	}
-	return true
+	return principal, true
 }
 
 func (h *UserHandler) list(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
 	limit, offset, err := parsePage(r)
@@ -48,7 +44,7 @@ func (h *UserHandler) list(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, err)
 		return
 	}
-	users, more, err := h.users.List(r.Context(), limit, offset)
+	users, more, err := h.users.List(r.Context(), principal, limit, offset)
 	if err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
@@ -57,7 +53,8 @@ func (h *UserHandler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UserHandler) create(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
 	var body struct {
@@ -78,7 +75,7 @@ func (h *UserHandler) create(w http.ResponseWriter, r *http.Request) {
 	if admin != nil {
 		input.IsPlatformAdmin = *admin
 	}
-	user, err := h.users.Create(r.Context(), input)
+	user, err := h.users.Create(r.Context(), principal, input)
 	if err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
@@ -87,7 +84,8 @@ func (h *UserHandler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UserHandler) update(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
 	var body struct {
@@ -108,7 +106,7 @@ func (h *UserHandler) update(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, err)
 		return
 	}
-	user, err := h.users.Update(r.Context(), r.PathValue("userId"), UpdateUserInput{Active: active, IsPlatformAdmin: admin})
+	user, err := h.users.Update(r.Context(), principal, r.PathValue("userId"), UpdateUserInput{Active: active, IsPlatformAdmin: admin})
 	if err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
@@ -117,7 +115,8 @@ func (h *UserHandler) update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *UserHandler) resetPassword(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
 	var body struct {
@@ -127,7 +126,7 @@ func (h *UserHandler) resetPassword(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, err)
 		return
 	}
-	if err := h.users.ResetPassword(r.Context(), r.PathValue("userId"), body.Password); err != nil {
+	if err := h.users.ResetPassword(r.Context(), principal, r.PathValue("userId"), body.Password); err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
 	}

@@ -14,7 +14,10 @@ type Grant struct {
 	Level      contracts.AccessLevel `json:"level"`
 }
 
-func (s *GroupService) Grants(ctx context.Context, groupID string, limit, offset int) ([]Grant, bool, error) {
+func (s *GroupService) Grants(ctx context.Context, actor contracts.Principal, groupID string, limit, offset int) ([]Grant, bool, error) {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return nil, false, err
+	}
 	if err := validGroupID(groupID); err != nil {
 		return nil, false, err
 	}
@@ -49,7 +52,10 @@ func (s *GroupService) Grants(ctx context.Context, groupID string, limit, offset
 	return grants, more, nil
 }
 
-func (s *GroupService) SetGrant(ctx context.Context, groupID, databaseID string, level contracts.AccessLevel) (Grant, error) {
+func (s *GroupService) SetGrant(ctx context.Context, actor contracts.Principal, groupID, databaseID string, level contracts.AccessLevel) (Grant, error) {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return Grant{}, err
+	}
 	if level != contracts.AccessView && level != contracts.AccessEdit {
 		return Grant{}, invalidGrantField("level", "Gunakan view atau edit.")
 	}
@@ -59,7 +65,10 @@ func (s *GroupService) SetGrant(ctx context.Context, groupID, databaseID string,
 	return Grant{DatabaseID: databaseID, Level: level}, nil
 }
 
-func (s *GroupService) RemoveGrant(ctx context.Context, groupID, databaseID string) error {
+func (s *GroupService) RemoveGrant(ctx context.Context, actor contracts.Principal, groupID, databaseID string) error {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return err
+	}
 	return s.changeGrant(ctx, groupID, databaseID, contracts.AccessNone)
 }
 

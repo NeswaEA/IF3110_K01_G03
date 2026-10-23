@@ -15,19 +15,19 @@ import (
 func TestGrantsListAndValidation(t *testing.T) {
 	f := newUserFixture(t)
 	svc := groupService(f)
-	grant, err := svc.SetGrant(t.Context(), viewGroup, testkit.DBSQLite, contracts.AccessEdit)
+	grant, err := svc.SetGrant(t.Context(), adminPrincipal, viewGroup, testkit.DBSQLite, contracts.AccessEdit)
 	if err != nil || grant.DatabaseID != testkit.DBSQLite || grant.Level != contracts.AccessEdit {
 		t.Fatal("grant creation failed", grant, err)
 	}
-	grants, more, err := svc.Grants(t.Context(), viewGroup, 1, 0)
+	grants, more, err := svc.Grants(t.Context(), adminPrincipal, viewGroup, 1, 0)
 	if err != nil || !more || len(grants) != 1 || grants[0].DatabaseID != testkit.DBPG || grants[0].Level != contracts.AccessView {
 		t.Fatal("incorrect first grant page", grants, more, err)
 	}
-	grants, more, err = svc.Grants(t.Context(), viewGroup, 1, 1)
+	grants, more, err = svc.Grants(t.Context(), adminPrincipal, viewGroup, 1, 1)
 	if err != nil || more || len(grants) != 1 || grants[0] != grant {
 		t.Fatal("incorrect final grant page", grants, more, err)
 	}
-	grants, more, err = svc.Grants(t.Context(), viewGroup, 50, 100000)
+	grants, more, err = svc.Grants(t.Context(), adminPrincipal, viewGroup, 50, 100000)
 	if err != nil || more || grants == nil || len(grants) != 0 {
 		t.Fatal("empty grant page must be an empty array", err)
 	}
@@ -42,20 +42,20 @@ func TestGrantsListAndValidation(t *testing.T) {
 	if err != nil || level != contracts.AccessNone {
 		t.Fatal("platform admin received target access without membership", err)
 	}
-	empty, err := svc.Create(t.Context(), "empty grants")
+	empty, err := svc.Create(t.Context(), adminPrincipal, "empty grants")
 	if err != nil {
 		t.Fatal(err)
 	}
-	grants, more, err = svc.Grants(t.Context(), empty.ID, 50, 0)
+	grants, more, err = svc.Grants(t.Context(), adminPrincipal, empty.ID, 50, 0)
 	if err != nil || more || grants == nil || len(grants) != 0 {
 		t.Fatal("empty group must have no grants", err)
 	}
 	for _, level := range []contracts.AccessLevel{contracts.AccessNone, "", "VIEW", "admin"} {
-		_, err := svc.SetGrant(t.Context(), viewGroup, testkit.DBPG, level)
+		_, err := svc.SetGrant(t.Context(), adminPrincipal, viewGroup, testkit.DBPG, level)
 		requireCode(t, err, "INVALID_REQUEST")
 	}
 	for _, page := range [][2]int{{0, 0}, {201, 0}, {50, -1}, {50, 100001}} {
-		_, _, err := svc.Grants(t.Context(), viewGroup, page[0], page[1])
+		_, _, err := svc.Grants(t.Context(), adminPrincipal, viewGroup, page[0], page[1])
 		requireCode(t, err, "INVALID_REQUEST")
 	}
 	for _, id := range []string{"bad-id", missingUser} {
@@ -63,14 +63,14 @@ func TestGrantsListAndValidation(t *testing.T) {
 		if id == "bad-id" {
 			code = "INVALID_REQUEST"
 		}
-		_, _, err := svc.Grants(t.Context(), id, 50, 0)
+		_, _, err := svc.Grants(t.Context(), adminPrincipal, id, 50, 0)
 		requireCode(t, err, code)
-		_, err = svc.SetGrant(t.Context(), id, testkit.DBPG, contracts.AccessView)
+		_, err = svc.SetGrant(t.Context(), adminPrincipal, id, testkit.DBPG, contracts.AccessView)
 		requireCode(t, err, code)
-		_, err = svc.SetGrant(t.Context(), viewGroup, id, contracts.AccessView)
+		_, err = svc.SetGrant(t.Context(), adminPrincipal, viewGroup, id, contracts.AccessView)
 		requireCode(t, err, code)
-		requireCode(t, svc.RemoveGrant(t.Context(), id, testkit.DBPG), code)
-		requireCode(t, svc.RemoveGrant(t.Context(), viewGroup, id), code)
+		requireCode(t, svc.RemoveGrant(t.Context(), adminPrincipal, id, testkit.DBPG), code)
+		requireCode(t, svc.RemoveGrant(t.Context(), adminPrincipal, viewGroup, id), code)
 	}
 }
 
@@ -88,7 +88,7 @@ func TestGrantIncreaseRotatesAllMembersAndNoopPreservesSessions(t *testing.T) {
 	other := createSession(t, f.db, f.sessions, testkit.UserNone)
 	admin := createSession(t, f.db, f.sessions, testkit.UserAdmin)
 	prelogin := createSession(t, f.db, f.sessions, "")
-	if _, err := svc.SetGrant(t.Context(), viewGroup, testkit.DBPG, contracts.AccessEdit); err != nil {
+	if _, err := svc.SetGrant(t.Context(), adminPrincipal, viewGroup, testkit.DBPG, contracts.AccessEdit); err != nil {
 		t.Fatal(err)
 	}
 	_, err = f.sessions.Resolve(t.Context(), reader.Token)
@@ -114,7 +114,7 @@ func TestGrantIncreaseRotatesAllMembersAndNoopPreservesSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.clock.Advance(time.Minute)
-	if _, err := svc.SetGrant(t.Context(), viewGroup, testkit.DBPG, contracts.AccessEdit); err != nil {
+	if _, err := svc.SetGrant(t.Context(), adminPrincipal, viewGroup, testkit.DBPG, contracts.AccessEdit); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.db.QueryRow(`SELECT updated_at FROM group_database_access WHERE group_id=$1 AND database_id=$2`, viewGroup, testkit.DBPG).Scan(&after); err != nil || !after.Equal(before) {
@@ -134,7 +134,7 @@ func TestGrantDowngradeAndRemovalRevokeMembers(t *testing.T) {
 	reader := createSession(t, f.db, f.sessions, testkit.UserView)
 	writer := createSession(t, f.db, f.sessions, testkit.UserEdit)
 	other := createSession(t, f.db, f.sessions, testkit.UserNone)
-	if _, err := svc.SetGrant(t.Context(), editGroup, testkit.DBPG, contracts.AccessView); err != nil {
+	if _, err := svc.SetGrant(t.Context(), adminPrincipal, editGroup, testkit.DBPG, contracts.AccessView); err != nil {
 		t.Fatal(err)
 	}
 	_, err := f.sessions.Resolve(t.Context(), writer.Token)
@@ -148,7 +148,7 @@ func TestGrantDowngradeAndRemovalRevokeMembers(t *testing.T) {
 		t.Fatal(err)
 	}
 	freshWriter := createSession(t, f.db, f.sessions, testkit.UserEdit)
-	if err := svc.RemoveGrant(t.Context(), viewGroup, testkit.DBPG); err != nil {
+	if err := svc.RemoveGrant(t.Context(), adminPrincipal, viewGroup, testkit.DBPG); err != nil {
 		t.Fatal(err)
 	}
 	for _, token := range []string{reader.Token, rotated.Token, freshWriter.Token} {
@@ -166,7 +166,7 @@ func TestGrantDowngradeAndRemovalRevokeMembers(t *testing.T) {
 		t.Fatal("removal revoked an unrelated user's session", err)
 	}
 	freshReader := createSession(t, f.db, f.sessions, testkit.UserView)
-	if err := svc.RemoveGrant(t.Context(), viewGroup, testkit.DBPG); err != nil {
+	if err := svc.RemoveGrant(t.Context(), adminPrincipal, viewGroup, testkit.DBPG); err != nil {
 		t.Fatal("repeated grant removal failed", err)
 	}
 	if _, err := f.sessions.Resolve(t.Context(), freshReader.Token); err != nil {
@@ -176,7 +176,7 @@ func TestGrantDowngradeAndRemovalRevokeMembers(t *testing.T) {
 
 func TestGrantSessionFailuresRollBackChanges(t *testing.T) {
 	f := newUserFixture(t)
-	broken := access.NewGroupService(f.db, failingUserSessions{f.sessions}, f.clock)
+	broken := access.NewGroupService(f.db, failingUserSessions{f.sessions}, access.NewPolicy(f.db), f.clock)
 	reader := createSession(t, f.db, f.sessions, testkit.UserView)
 	writer := createSession(t, f.db, f.sessions, testkit.UserEdit)
 	for _, change := range []struct {
@@ -187,12 +187,12 @@ func TestGrantSessionFailuresRollBackChanges(t *testing.T) {
 		{editGroup, testkit.DBPG, contracts.AccessView},
 		{viewGroup, testkit.DBSQLite, contracts.AccessView},
 	} {
-		_, err := broken.SetGrant(t.Context(), change.group, change.database, change.level)
+		_, err := broken.SetGrant(t.Context(), adminPrincipal, change.group, change.database, change.level)
 		requireCode(t, err, "INTERNAL_ERROR")
 	}
-	requireCode(t, broken.RemoveGrant(t.Context(), viewGroup, testkit.DBPG), "INTERNAL_ERROR")
+	requireCode(t, broken.RemoveGrant(t.Context(), adminPrincipal, viewGroup, testkit.DBPG), "INTERNAL_ERROR")
 	for group, want := range map[string]contracts.AccessLevel{viewGroup: contracts.AccessView, editGroup: contracts.AccessEdit} {
-		grants, more, err := groupService(f).Grants(t.Context(), group, 50, 0)
+		grants, more, err := groupService(f).Grants(t.Context(), adminPrincipal, group, 50, 0)
 		if err != nil || more || len(grants) != 1 || grants[0].DatabaseID != testkit.DBPG || grants[0].Level != want {
 			t.Fatal("grant change survived rollback", group, grants, err)
 		}
@@ -203,10 +203,10 @@ func TestGrantSessionFailuresRollBackChanges(t *testing.T) {
 			t.Fatal("session change survived grant rollback", err)
 		}
 	}
-	if _, err := broken.SetGrant(t.Context(), viewGroup, testkit.DBPG, contracts.AccessView); err != nil {
+	if _, err := broken.SetGrant(t.Context(), adminPrincipal, viewGroup, testkit.DBPG, contracts.AccessView); err != nil {
 		t.Fatal("no-op grant should not call the invalidator", err)
 	}
-	if err := broken.RemoveGrant(t.Context(), viewGroup, testkit.DBSQLite); err != nil {
+	if err := broken.RemoveGrant(t.Context(), adminPrincipal, viewGroup, testkit.DBSQLite); err != nil {
 		t.Fatal("missing grant should not call the invalidator", err)
 	}
 }
@@ -217,10 +217,10 @@ func TestGrantsOnInactiveConnections(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc := groupService(f)
-	if _, err := svc.SetGrant(t.Context(), viewGroup, testkit.DBSQLite, contracts.AccessEdit); err != nil {
+	if _, err := svc.SetGrant(t.Context(), adminPrincipal, viewGroup, testkit.DBSQLite, contracts.AccessEdit); err != nil {
 		t.Fatal("admin should be able to manage an inactive connection's metadata", err)
 	}
-	grants, _, err := svc.Grants(t.Context(), viewGroup, 50, 0)
+	grants, _, err := svc.Grants(t.Context(), adminPrincipal, viewGroup, 50, 0)
 	if err != nil || len(grants) != 2 {
 		t.Fatal("inactive connection grant was hidden from administration", err)
 	}
@@ -228,7 +228,7 @@ func TestGrantsOnInactiveConnections(t *testing.T) {
 	if err != nil || level != contracts.AccessNone {
 		t.Fatal("grant made an inactive connection accessible", err)
 	}
-	if err := svc.RemoveGrant(t.Context(), viewGroup, testkit.DBSQLite); err != nil {
+	if err := svc.RemoveGrant(t.Context(), adminPrincipal, viewGroup, testkit.DBSQLite); err != nil {
 		t.Fatal("inactive connection grant could not be removed", err)
 	}
 }
@@ -238,12 +238,12 @@ func TestGrantConcurrentChanges(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			f := newUserFixture(t)
 			svc := groupService(f)
-			group, err := svc.Create(t.Context(), "concurrent grant")
+			group, err := svc.Create(t.Context(), adminPrincipal, "concurrent grant")
 			if err != nil {
 				t.Fatal(err)
 			}
 			if mode != "add member" {
-				if err := svc.AddMember(t.Context(), group.ID, testkit.UserNone); err != nil {
+				if err := svc.AddMember(t.Context(), adminPrincipal, group.ID, testkit.UserNone); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -254,16 +254,16 @@ func TestGrantConcurrentChanges(t *testing.T) {
 			granted, changed := make(chan error, 1), make(chan error, 1)
 			go func() {
 				<-start
-				_, err := svc.SetGrant(ctx, group.ID, testkit.DBPG, contracts.AccessEdit)
+				_, err := svc.SetGrant(ctx, adminPrincipal, group.ID, testkit.DBPG, contracts.AccessEdit)
 				granted <- err
 			}()
 			go func() {
 				<-start
 				switch mode {
 				case "add member":
-					changed <- svc.AddMember(ctx, group.ID, testkit.UserNone)
+					changed <- svc.AddMember(ctx, adminPrincipal, group.ID, testkit.UserNone)
 				case "delete group":
-					changed <- svc.Delete(ctx, group.ID)
+					changed <- svc.Delete(ctx, adminPrincipal, group.ID)
 				case "disable connection":
 					registry := connections.NewRegistry(f.db, nil, connections.RegistryOptions{})
 					defer registry.Close()
@@ -310,13 +310,13 @@ func TestGrantFailuresPreserveCause(t *testing.T) {
 	svc := groupService(f)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, _, err := svc.Grants(ctx, viewGroup, 50, 0)
+	_, _, err := svc.Grants(ctx, adminPrincipal, viewGroup, 50, 0)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatal("cancellation cause was lost", err)
 	}
 	if err := f.db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	_, err = svc.SetGrant(t.Context(), viewGroup, testkit.DBPG, contracts.AccessView)
+	_, err = svc.SetGrant(t.Context(), adminPrincipal, viewGroup, testkit.DBPG, contracts.AccessView)
 	requireCode(t, err, "INTERNAL_ERROR")
 }

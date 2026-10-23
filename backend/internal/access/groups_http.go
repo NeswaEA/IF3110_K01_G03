@@ -10,12 +10,11 @@ import (
 
 type GroupHandler struct {
 	groups    *GroupService
-	access    contracts.AccessChecker
 	principal func(context.Context) (contracts.Principal, bool)
 }
 
-func NewGroupHandler(groups *GroupService, policy contracts.AccessChecker, principal func(context.Context) (contracts.Principal, bool)) *GroupHandler {
-	return &GroupHandler{groups: groups, access: policy, principal: principal}
+func NewGroupHandler(groups *GroupService, principal func(context.Context) (contracts.Principal, bool)) *GroupHandler {
+	return &GroupHandler{groups: groups, principal: principal}
 }
 
 func RegisterGroupRoutes(mux *http.ServeMux, h *GroupHandler) {
@@ -32,7 +31,8 @@ func RegisterGroupRoutes(mux *http.ServeMux, h *GroupHandler) {
 }
 
 func (h *GroupHandler) list(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
 	limit, offset, err := parsePage(r)
@@ -40,7 +40,7 @@ func (h *GroupHandler) list(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, err)
 		return
 	}
-	groups, more, err := h.groups.List(r.Context(), limit, offset)
+	groups, more, err := h.groups.List(r.Context(), principal, limit, offset)
 	if err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
@@ -49,7 +49,8 @@ func (h *GroupHandler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GroupHandler) create(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
 	var body struct {
@@ -59,7 +60,7 @@ func (h *GroupHandler) create(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, err)
 		return
 	}
-	group, err := h.groups.Create(r.Context(), body.Name)
+	group, err := h.groups.Create(r.Context(), principal, body.Name)
 	if err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
@@ -68,7 +69,8 @@ func (h *GroupHandler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GroupHandler) update(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
 	var body struct {
@@ -78,7 +80,7 @@ func (h *GroupHandler) update(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, err)
 		return
 	}
-	group, err := h.groups.Update(r.Context(), r.PathValue("groupId"), body.Name)
+	group, err := h.groups.Update(r.Context(), principal, r.PathValue("groupId"), body.Name)
 	if err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
@@ -87,10 +89,15 @@ func (h *GroupHandler) update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GroupHandler) delete(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
-	if err := h.groups.Delete(r.Context(), r.PathValue("groupId")); err != nil {
+	if err := platform.RequireEmptyBody(w, r, 0); err != nil {
+		_ = platform.WriteError(w, r, err)
+		return
+	}
+	if err := h.groups.Delete(r.Context(), principal, r.PathValue("groupId")); err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
 	}
@@ -98,7 +105,8 @@ func (h *GroupHandler) delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GroupHandler) members(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
 	limit, offset, err := parsePage(r)
@@ -106,7 +114,7 @@ func (h *GroupHandler) members(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, err)
 		return
 	}
-	users, more, err := h.groups.Members(r.Context(), r.PathValue("groupId"), limit, offset)
+	users, more, err := h.groups.Members(r.Context(), principal, r.PathValue("groupId"), limit, offset)
 	if err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
@@ -115,7 +123,8 @@ func (h *GroupHandler) members(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GroupHandler) addMember(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
 	var body struct{}
@@ -123,7 +132,7 @@ func (h *GroupHandler) addMember(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, err)
 		return
 	}
-	if err := h.groups.AddMember(r.Context(), r.PathValue("groupId"), r.PathValue("userId")); err != nil {
+	if err := h.groups.AddMember(r.Context(), principal, r.PathValue("groupId"), r.PathValue("userId")); err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
 	}
@@ -131,10 +140,15 @@ func (h *GroupHandler) addMember(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GroupHandler) removeMember(w http.ResponseWriter, r *http.Request) {
-	if !authorizeAdmin(w, r, h.access, h.principal) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
 		return
 	}
-	if err := h.groups.RemoveMember(r.Context(), r.PathValue("groupId"), r.PathValue("userId")); err != nil {
+	if err := platform.RequireEmptyBody(w, r, 0); err != nil {
+		_ = platform.WriteError(w, r, err)
+		return
+	}
+	if err := h.groups.RemoveMember(r.Context(), principal, r.PathValue("groupId"), r.PathValue("userId")); err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
 	}

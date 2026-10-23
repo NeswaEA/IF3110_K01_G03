@@ -34,6 +34,7 @@ type UpdateUserInput struct {
 type UserService struct {
 	db                *sql.DB
 	sessions          contracts.SessionInvalidator
+	policy            contracts.AccessChecker
 	clock             contracts.Clock
 	normalizeUsername func(string) (string, error)
 	hashPassword      func(context.Context, string) (string, error)
@@ -42,12 +43,13 @@ type UserService struct {
 func NewUserService(
 	db *sql.DB,
 	sessions contracts.SessionInvalidator,
+	policy contracts.AccessChecker,
 	clock contracts.Clock,
 	normalizeUsername func(string) (string, error),
 	hashPassword func(context.Context, string) (string, error),
 ) *UserService {
 	return &UserService{
-		db: db, sessions: sessions, clock: clock,
+		db: db, sessions: sessions, policy: policy, clock: clock,
 		normalizeUsername: normalizeUsername, hashPassword: hashPassword,
 	}
 }
@@ -70,7 +72,10 @@ func scanUser(row interface{ Scan(...any) error }) (User, error) {
 	return user, err
 }
 
-func (s *UserService) List(ctx context.Context, limit, offset int) ([]User, bool, error) {
+func (s *UserService) List(ctx context.Context, actor contracts.Principal, limit, offset int) ([]User, bool, error) {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return nil, false, err
+	}
 	if err := validatePage(limit, offset); err != nil {
 		return nil, false, err
 	}
@@ -97,7 +102,10 @@ func (s *UserService) List(ctx context.Context, limit, offset int) ([]User, bool
 	return users, more, nil
 }
 
-func (s *UserService) Create(ctx context.Context, input CreateUserInput) (User, error) {
+func (s *UserService) Create(ctx context.Context, actor contracts.Principal, input CreateUserInput) (User, error) {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return User{}, err
+	}
 	username, err := s.normalizeUsername(input.Username)
 	if err != nil {
 		return User{}, err
@@ -122,7 +130,10 @@ func (s *UserService) Create(ctx context.Context, input CreateUserInput) (User, 
 	return user, nil
 }
 
-func (s *UserService) Update(ctx context.Context, id string, input UpdateUserInput) (User, error) {
+func (s *UserService) Update(ctx context.Context, actor contracts.Principal, id string, input UpdateUserInput) (User, error) {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return User{}, err
+	}
 	if err := validUserID(id); err != nil {
 		return User{}, err
 	}
@@ -180,7 +191,10 @@ func (s *UserService) Update(ctx context.Context, id string, input UpdateUserInp
 	return updated, nil
 }
 
-func (s *UserService) ResetPassword(ctx context.Context, id, password string) error {
+func (s *UserService) ResetPassword(ctx context.Context, actor contracts.Principal, id, password string) error {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return err
+	}
 	if err := validUserID(id); err != nil {
 		return err
 	}

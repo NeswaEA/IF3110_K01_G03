@@ -13,6 +13,44 @@ import (
 
 const groupsPath = "/api/v1/admin/groups"
 
+func TestGroupHTTPDeleteRejectsBodiesBeforeMutation(t *testing.T) {
+	f := newUserHTTPFixture(t)
+	for _, route := range []struct{ name, path string }{
+		{"group", groupsPath + "/" + viewGroup},
+		{"member", groupsPath + "/" + viewGroup + "/members/" + testkit.UserView},
+		{"grant", groupsPath + "/" + viewGroup + "/grants/" + testkit.DBPG},
+	} {
+		t.Run(route.name, func(t *testing.T) {
+			for _, body := range []struct {
+				name, value, code string
+				status            int
+			}{
+				{"unknown_field", `{"actor_id":"forged"}`, "INVALID_REQUEST", 400},
+				{"malformed_json", "{", "INVALID_REQUEST", 400},
+				{"empty_object", "{}", "INVALID_REQUEST", 400},
+				{"too_large", strings.Repeat(" ", 1<<20) + "{}", "PAYLOAD_TOO_LARGE", 413},
+			} {
+				t.Run(body.name, func(t *testing.T) {
+					response := f.request("DELETE", route.path, body.value, &f.admin, true)
+					assertUserHTTPError(t, response, body.status, body.code)
+					var groupCount, memberCount, grantCount int
+					err := f.db.QueryRow(`SELECT
+						(SELECT count(*) FROM groups WHERE id=$1),
+						(SELECT count(*) FROM group_memberships WHERE group_id=$1),
+						(SELECT count(*) FROM group_database_access WHERE group_id=$1)`, viewGroup).
+						Scan(&groupCount, &memberCount, &grantCount)
+					if err != nil || groupCount != 1 || memberCount != 2 || grantCount != 1 {
+						t.Fatal("invalid DELETE body changed stored access", err)
+					}
+					if _, err := f.sessions.Resolve(t.Context(), f.viewer.Token); err != nil {
+						t.Fatal("invalid DELETE body revoked a session", err)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestGroupHTTPAuthorizationAndCSRF(t *testing.T) {
 	f := newUserHTTPFixture(t)
 	for _, route := range []struct{ method, path, body string }{
@@ -184,7 +222,7 @@ func TestGroupHTTPValidation(t *testing.T) {
 
 func TestGroupHTTPDeletionRevokesAdminMember(t *testing.T) {
 	f := newUserHTTPFixture(t)
-	if err := groupService(f.userFixture).AddMember(t.Context(), viewGroup, testkit.UserAdmin); err != nil {
+	if err := groupService(f.userFixture).AddMember(t.Context(), adminPrincipal, viewGroup, testkit.UserAdmin); err != nil {
 		t.Fatal(err)
 	}
 	current := createSession(t, f.db, f.sessions, testkit.UserAdmin)

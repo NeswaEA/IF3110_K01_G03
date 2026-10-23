@@ -18,6 +18,8 @@ import (
 const userPassword = "example password 123"
 const missingUser = "10000000-0000-4000-8000-000000000099"
 
+var adminPrincipal = contracts.Principal{UserID: testkit.UserAdmin, IsPlatformAdmin: true}
+
 type userFixture struct {
 	db       *sql.DB
 	clock    *testkit.Clock
@@ -37,14 +39,14 @@ func newUserFixture(t *testing.T) userFixture {
 		t.Fatal(err)
 	}
 	return userFixture{db: db, clock: clock, sessions: sessions,
-		users: access.NewUserService(db, sessions, clock, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)}
+		users: access.NewUserService(db, sessions, access.NewPolicy(db), clock, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)}
 }
 
 func flag(value bool) *bool { return &value }
 
 func TestUsersCreateStopsOnNormalizationError(t *testing.T) {
 	want := &contracts.DomainError{Code: "INVALID_REQUEST", Fields: map[string]string{"username": "Invalid username."}}
-	users := access.NewUserService(nil, nil, nil, func(username string) (string, error) {
+	users := access.NewUserService(nil, nil, testkit.NewFixtureAccessChecker(), nil, func(username string) (string, error) {
 		if username != "invalid username" {
 			t.Fatal("normalizer did not receive the original username")
 		}
@@ -53,7 +55,7 @@ func TestUsersCreateStopsOnNormalizationError(t *testing.T) {
 		t.Fatal("password hashing ran after normalization failed")
 		return "", nil
 	})
-	_, err := users.Create(t.Context(), access.CreateUserInput{Username: "invalid username", Password: userPassword})
+	_, err := users.Create(t.Context(), adminPrincipal, access.CreateUserInput{Username: "invalid username", Password: userPassword})
 	if err != want {
 		t.Fatal("normalization error was changed", err)
 	}
@@ -64,7 +66,7 @@ func TestUsersPasswordHashErrorsStopBeforeStorage(t *testing.T) {
 		t.Run(operation, func(t *testing.T) {
 			ctx := t.Context()
 			want := &contracts.DomainError{Code: "RATE_LIMITED", Message: "Password hashing is busy."}
-			users := access.NewUserService(nil, nil, nil, auth.NormalizeUsername, func(got context.Context, password string) (string, error) {
+			users := access.NewUserService(nil, nil, testkit.NewFixtureAccessChecker(), nil, auth.NormalizeUsername, func(got context.Context, password string) (string, error) {
 				if got != ctx || password != userPassword {
 					t.Fatal("hasher did not receive the request context and original password")
 				}
@@ -72,9 +74,9 @@ func TestUsersPasswordHashErrorsStopBeforeStorage(t *testing.T) {
 			})
 			var err error
 			if operation == "create" {
-				_, err = users.Create(ctx, access.CreateUserInput{Username: "valid-user", Password: userPassword})
+				_, err = users.Create(ctx, adminPrincipal, access.CreateUserInput{Username: "valid-user", Password: userPassword})
 			} else {
-				err = users.ResetPassword(ctx, testkit.UserView, userPassword)
+				err = users.ResetPassword(ctx, adminPrincipal, testkit.UserView, userPassword)
 			}
 			if err != want {
 				t.Fatal("password hashing error was changed", err)
@@ -85,7 +87,7 @@ func TestUsersPasswordHashErrorsStopBeforeStorage(t *testing.T) {
 
 func TestUsersCreateAndList(t *testing.T) {
 	f := newUserFixture(t)
-	user, err := f.users.Create(t.Context(), access.CreateUserInput{Username: "  New.User  ", Password: userPassword})
+	user, err := f.users.Create(t.Context(), adminPrincipal, access.CreateUserInput{Username: "  New.User  ", Password: userPassword})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,9 +102,9 @@ func TestUsersCreateAndList(t *testing.T) {
 	if match, err := (auth.PasswordHasher{}).Verify(t.Context(), userPassword, hash); err != nil || !match {
 		t.Fatal("password was not stored as a valid hash")
 	}
-	_, err = f.users.Create(t.Context(), access.CreateUserInput{Username: "NEW.USER", Password: userPassword})
+	_, err = f.users.Create(t.Context(), adminPrincipal, access.CreateUserInput{Username: "NEW.USER", Password: userPassword})
 	requireCode(t, err, "ALREADY_EXISTS")
-	admin, err := f.users.Create(t.Context(), access.CreateUserInput{Username: "z-admin", Password: userPassword, IsPlatformAdmin: true})
+	admin, err := f.users.Create(t.Context(), adminPrincipal, access.CreateUserInput{Username: "z-admin", Password: userPassword, IsPlatformAdmin: true})
 	if err != nil || !admin.IsPlatformAdmin || !admin.Active {
 		t.Fatal("admin creation failed", err)
 	}
@@ -110,15 +112,15 @@ func TestUsersCreateAndList(t *testing.T) {
 	if err != nil || level != contracts.AccessNone {
 		t.Fatal("admin was granted target access automatically")
 	}
-	users, more, err := f.users.List(t.Context(), 2, 1)
+	users, more, err := f.users.List(t.Context(), adminPrincipal, 2, 1)
 	if err != nil || !more || len(users) != 2 || users[0].Username != "editor" || users[1].Username != "new.user" {
 		t.Fatal("incorrect ordered page", users, more, err)
 	}
-	users, more, err = f.users.List(t.Context(), 6, 0)
+	users, more, err = f.users.List(t.Context(), adminPrincipal, 6, 0)
 	if err != nil || more || len(users) != 6 {
 		t.Fatal("exact final page has_more is incorrect", err)
 	}
-	users, more, err = f.users.List(t.Context(), 50, 100000)
+	users, more, err = f.users.List(t.Context(), adminPrincipal, 50, 100000)
 	if err != nil || more || users == nil || len(users) != 0 {
 		t.Fatal("empty page is not an empty collection", err)
 	}
@@ -132,25 +134,25 @@ func TestUsersValidateInputAndMissingRecords(t *testing.T) {
 		{Username: "valid", Password: "short"},
 		{Username: "valid", Password: strings.Repeat("p", 129)},
 	} {
-		_, err := f.users.Create(t.Context(), input)
+		_, err := f.users.Create(t.Context(), adminPrincipal, input)
 		requireCode(t, err, "INVALID_REQUEST")
 	}
 	for _, page := range [][2]int{{0, 0}, {201, 0}, {50, -1}, {50, 100001}} {
-		_, _, err := f.users.List(t.Context(), page[0], page[1])
+		_, _, err := f.users.List(t.Context(), adminPrincipal, page[0], page[1])
 		requireCode(t, err, "INVALID_REQUEST")
 	}
-	_, err := f.users.Update(t.Context(), testkit.UserView, access.UpdateUserInput{})
+	_, err := f.users.Update(t.Context(), adminPrincipal, testkit.UserView, access.UpdateUserInput{})
 	requireCode(t, err, "INVALID_REQUEST")
 	for _, id := range []string{"not-a-uuid", missingUser} {
 		code := "INVALID_REQUEST"
 		if id == missingUser {
 			code = "NOT_FOUND"
 		}
-		_, err := f.users.Update(t.Context(), id, access.UpdateUserInput{Active: flag(false)})
+		_, err := f.users.Update(t.Context(), adminPrincipal, id, access.UpdateUserInput{Active: flag(false)})
 		requireCode(t, err, code)
-		requireCode(t, f.users.ResetPassword(t.Context(), id, userPassword), code)
+		requireCode(t, f.users.ResetPassword(t.Context(), adminPrincipal, id, userPassword), code)
 	}
-	requireCode(t, f.users.ResetPassword(t.Context(), testkit.UserView, "short"), "INVALID_REQUEST")
+	requireCode(t, f.users.ResetPassword(t.Context(), adminPrincipal, testkit.UserView, "short"), "INVALID_REQUEST")
 }
 
 func TestUsersDeactivateAndReactivate(t *testing.T) {
@@ -164,7 +166,7 @@ func TestUsersDeactivateAndReactivate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	user, err := f.users.Update(t.Context(), testkit.UserView, access.UpdateUserInput{Active: flag(false)})
+	user, err := f.users.Update(t.Context(), adminPrincipal, testkit.UserView, access.UpdateUserInput{Active: flag(false)})
 	if err != nil || user.Active {
 		t.Fatal("deactivation failed", err)
 	}
@@ -183,7 +185,7 @@ func TestUsersDeactivateAndReactivate(t *testing.T) {
 	if err := f.db.QueryRow(`SELECT count(*) FROM group_memberships WHERE user_id=$1`, testkit.UserView).Scan(&memberships); err != nil || memberships != 1 {
 		t.Fatal("deactivation removed membership or user history", err)
 	}
-	user, err = f.users.Update(t.Context(), testkit.UserView, access.UpdateUserInput{Active: flag(true)})
+	user, err = f.users.Update(t.Context(), adminPrincipal, testkit.UserView, access.UpdateUserInput{Active: flag(true)})
 	if err != nil || !user.Active {
 		t.Fatal("reactivation failed", err)
 	}
@@ -200,7 +202,7 @@ func TestUsersPromotionRotatesAndDemotionRevokes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = f.users.Update(t.Context(), testkit.UserView, access.UpdateUserInput{IsPlatformAdmin: flag(true)})
+	_, err = f.users.Update(t.Context(), adminPrincipal, testkit.UserView, access.UpdateUserInput{IsPlatformAdmin: flag(true)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +212,7 @@ func TestUsersPromotionRotatesAndDemotionRevokes(t *testing.T) {
 	if err != nil || elevated.Token == "" || elevated.Token == current.Token || !elevated.Principal.IsPlatformAdmin || !elevated.AbsoluteExpiresAt.Equal(session.AbsoluteExpiresAt) {
 		t.Fatal("promotion did not rotate before granting admin privileges", err)
 	}
-	_, err = f.users.Update(t.Context(), testkit.UserView, access.UpdateUserInput{IsPlatformAdmin: flag(false)})
+	_, err = f.users.Update(t.Context(), adminPrincipal, testkit.UserView, access.UpdateUserInput{IsPlatformAdmin: flag(false)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,14 +229,14 @@ func TestUsersNoopAndLastAdmin(t *testing.T) {
 	f := newUserFixture(t)
 	session := createSession(t, f.db, f.sessions, testkit.UserAdmin)
 	f.clock.Advance(time.Minute)
-	user, err := f.users.Update(t.Context(), testkit.UserAdmin, access.UpdateUserInput{Active: flag(true), IsPlatformAdmin: flag(true)})
+	user, err := f.users.Update(t.Context(), adminPrincipal, testkit.UserAdmin, access.UpdateUserInput{Active: flag(true), IsPlatformAdmin: flag(true)})
 	if err != nil || !user.UpdatedAt.Equal(f.clock.Now().Add(-time.Minute)) {
 		t.Fatal("no-op changed the user timestamp", err)
 	}
 	for _, input := range []access.UpdateUserInput{
 		{Active: flag(false)}, {IsPlatformAdmin: flag(false)}, {Active: flag(false), IsPlatformAdmin: flag(false)},
 	} {
-		_, err := f.users.Update(t.Context(), testkit.UserAdmin, input)
+		_, err := f.users.Update(t.Context(), adminPrincipal, testkit.UserAdmin, input)
 		requireCode(t, err, "INVALID_REQUEST")
 	}
 	resolved, err := f.sessions.Resolve(t.Context(), session.Token)
@@ -262,7 +264,7 @@ func TestUsersConcurrentLastAdminChanges(t *testing.T) {
 					if mode == "demote" || (mode == "mixed" && i == 1) {
 						input = access.UpdateUserInput{IsPlatformAdmin: flag(false)}
 					}
-					_, err := f.users.Update(ctx, id, input)
+					_, err := f.users.Update(ctx, adminPrincipal, id, input)
 					results <- err
 				})
 			}
@@ -274,7 +276,10 @@ func TestUsersConcurrentLastAdminChanges(t *testing.T) {
 				if err == nil {
 					succeeded++
 				} else {
-					requireCode(t, err, "INVALID_REQUEST")
+					var domain *contracts.DomainError
+					if !errors.As(err, &domain) || (domain.Code != "INVALID_REQUEST" && domain.Code != "UNAUTHENTICATED" && domain.Code != "FORBIDDEN") {
+						t.Fatal("unexpected concurrent admin change error", err)
+					}
 				}
 			}
 			var remaining int
@@ -303,10 +308,10 @@ func (f failingUserSessions) RequireRotation(ctx context.Context, tx *sql.Tx, id
 
 func TestUsersSessionFailureRollsBackMetadata(t *testing.T) {
 	f := newUserFixture(t)
-	broken := access.NewUserService(f.db, failingUserSessions{f.sessions}, f.clock, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)
+	broken := access.NewUserService(f.db, failingUserSessions{f.sessions}, access.NewPolicy(f.db), f.clock, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)
 	session := createSession(t, f.db, f.sessions, testkit.UserView)
 	for _, input := range []access.UpdateUserInput{{Active: flag(false)}, {IsPlatformAdmin: flag(true)}} {
-		_, err := broken.Update(t.Context(), testkit.UserView, input)
+		_, err := broken.Update(t.Context(), adminPrincipal, testkit.UserView, input)
 		requireCode(t, err, "INTERNAL_ERROR")
 		var active, admin bool
 		if err := f.db.QueryRow(`SELECT active, is_platform_admin FROM users WHERE id=$1`, testkit.UserView).Scan(&active, &admin); err != nil || !active || admin {
@@ -317,7 +322,7 @@ func TestUsersSessionFailureRollsBackMetadata(t *testing.T) {
 			t.Fatal("session mutation survived rollback", err)
 		}
 	}
-	requireCode(t, broken.ResetPassword(t.Context(), testkit.UserView, userPassword), "INTERNAL_ERROR")
+	requireCode(t, broken.ResetPassword(t.Context(), adminPrincipal, testkit.UserView, userPassword), "INTERNAL_ERROR")
 	var hash string
 	if err := f.db.QueryRow(`SELECT password_hash FROM users WHERE id=$1`, testkit.UserView).Scan(&hash); err != nil || hash != "$argon2id$test" {
 		t.Fatal("password reset survived rollback", err)
@@ -331,14 +336,14 @@ func TestUsersFailuresPreserveCause(t *testing.T) {
 	f := newUserFixture(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, _, err := f.users.List(ctx, 50, 0)
+	_, _, err := f.users.List(ctx, adminPrincipal, 50, 0)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatal("cancellation cause was lost", err)
 	}
 	if err := f.db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = f.users.List(t.Context(), 50, 0)
+	_, _, err = f.users.List(t.Context(), adminPrincipal, 50, 0)
 	requireCode(t, err, "INTERNAL_ERROR")
 	if strings.Contains(err.Error(), "database is closed") {
 		t.Fatal("storage failure leaked details")

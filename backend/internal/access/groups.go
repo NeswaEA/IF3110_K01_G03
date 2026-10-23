@@ -22,11 +22,12 @@ type Group struct {
 type GroupService struct {
 	db       *sql.DB
 	sessions contracts.SessionInvalidator
+	policy   contracts.AccessChecker
 	clock    contracts.Clock
 }
 
-func NewGroupService(db *sql.DB, sessions contracts.SessionInvalidator, clock contracts.Clock) *GroupService {
-	return &GroupService{db: db, sessions: sessions, clock: clock}
+func NewGroupService(db *sql.DB, sessions contracts.SessionInvalidator, policy contracts.AccessChecker, clock contracts.Clock) *GroupService {
+	return &GroupService{db: db, sessions: sessions, policy: policy, clock: clock}
 }
 
 const groupColumns = "id, name, created_at, updated_at"
@@ -38,7 +39,10 @@ func scanGroup(row interface{ Scan(...any) error }) (Group, error) {
 	return group, err
 }
 
-func (s *GroupService) List(ctx context.Context, limit, offset int) ([]Group, bool, error) {
+func (s *GroupService) List(ctx context.Context, actor contracts.Principal, limit, offset int) ([]Group, bool, error) {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return nil, false, err
+	}
 	if err := validatePage(limit, offset); err != nil {
 		return nil, false, err
 	}
@@ -65,7 +69,10 @@ func (s *GroupService) List(ctx context.Context, limit, offset int) ([]Group, bo
 	return groups, more, nil
 }
 
-func (s *GroupService) Create(ctx context.Context, name string) (Group, error) {
+func (s *GroupService) Create(ctx context.Context, actor contracts.Principal, name string) (Group, error) {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return Group{}, err
+	}
 	name, err := normalizeGroupName(name)
 	if err != nil {
 		return Group{}, err
@@ -79,7 +86,10 @@ func (s *GroupService) Create(ctx context.Context, name string) (Group, error) {
 	return group, nil
 }
 
-func (s *GroupService) Update(ctx context.Context, id, name string) (Group, error) {
+func (s *GroupService) Update(ctx context.Context, actor contracts.Principal, id, name string) (Group, error) {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return Group{}, err
+	}
 	if err := validGroupID(id); err != nil {
 		return Group{}, err
 	}
@@ -96,7 +106,10 @@ func (s *GroupService) Update(ctx context.Context, id, name string) (Group, erro
 	return group, nil
 }
 
-func (s *GroupService) Delete(ctx context.Context, id string) error {
+func (s *GroupService) Delete(ctx context.Context, actor contracts.Principal, id string) error {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return err
+	}
 	if err := validGroupID(id); err != nil {
 		return err
 	}
@@ -124,7 +137,10 @@ func (s *GroupService) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *GroupService) Members(ctx context.Context, groupID string, limit, offset int) ([]User, bool, error) {
+func (s *GroupService) Members(ctx context.Context, actor contracts.Principal, groupID string, limit, offset int) ([]User, bool, error) {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return nil, false, err
+	}
 	if err := validGroupID(groupID); err != nil {
 		return nil, false, err
 	}
@@ -159,11 +175,17 @@ func (s *GroupService) Members(ctx context.Context, groupID string, limit, offse
 	return users, more, nil
 }
 
-func (s *GroupService) AddMember(ctx context.Context, groupID, userID string) error {
+func (s *GroupService) AddMember(ctx context.Context, actor contracts.Principal, groupID, userID string) error {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return err
+	}
 	return s.changeMember(ctx, groupID, userID, true)
 }
 
-func (s *GroupService) RemoveMember(ctx context.Context, groupID, userID string) error {
+func (s *GroupService) RemoveMember(ctx context.Context, actor contracts.Principal, groupID, userID string) error {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return err
+	}
 	return s.changeMember(ctx, groupID, userID, false)
 }
 
