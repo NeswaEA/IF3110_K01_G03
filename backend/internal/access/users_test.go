@@ -36,10 +36,52 @@ func newUserFixture(t *testing.T) userFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return userFixture{db: db, clock: clock, sessions: sessions, users: access.NewUserService(db, sessions, clock)}
+	return userFixture{db: db, clock: clock, sessions: sessions,
+		users: access.NewUserService(db, sessions, clock, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)}
 }
 
 func flag(value bool) *bool { return &value }
+
+func TestUsersCreateStopsOnNormalizationError(t *testing.T) {
+	want := &contracts.DomainError{Code: "INVALID_REQUEST", Fields: map[string]string{"username": "Invalid username."}}
+	users := access.NewUserService(nil, nil, nil, func(username string) (string, error) {
+		if username != "invalid username" {
+			t.Fatal("normalizer did not receive the original username")
+		}
+		return "", want
+	}, func(context.Context, string) (string, error) {
+		t.Fatal("password hashing ran after normalization failed")
+		return "", nil
+	})
+	_, err := users.Create(t.Context(), access.CreateUserInput{Username: "invalid username", Password: userPassword})
+	if err != want {
+		t.Fatal("normalization error was changed", err)
+	}
+}
+
+func TestUsersPasswordHashErrorsStopBeforeStorage(t *testing.T) {
+	for _, operation := range []string{"create", "reset"} {
+		t.Run(operation, func(t *testing.T) {
+			ctx := t.Context()
+			want := &contracts.DomainError{Code: "RATE_LIMITED", Message: "Password hashing is busy."}
+			users := access.NewUserService(nil, nil, nil, auth.NormalizeUsername, func(got context.Context, password string) (string, error) {
+				if got != ctx || password != userPassword {
+					t.Fatal("hasher did not receive the request context and original password")
+				}
+				return "", want
+			})
+			var err error
+			if operation == "create" {
+				_, err = users.Create(ctx, access.CreateUserInput{Username: "valid-user", Password: userPassword})
+			} else {
+				err = users.ResetPassword(ctx, testkit.UserView, userPassword)
+			}
+			if err != want {
+				t.Fatal("password hashing error was changed", err)
+			}
+		})
+	}
+}
 
 func TestUsersCreateAndList(t *testing.T) {
 	f := newUserFixture(t)
@@ -261,7 +303,7 @@ func (f failingUserSessions) RequireRotation(ctx context.Context, tx *sql.Tx, id
 
 func TestUsersSessionFailureRollsBackMetadata(t *testing.T) {
 	f := newUserFixture(t)
-	broken := access.NewUserService(f.db, failingUserSessions{f.sessions}, f.clock)
+	broken := access.NewUserService(f.db, failingUserSessions{f.sessions}, f.clock, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)
 	session := createSession(t, f.db, f.sessions, testkit.UserView)
 	for _, input := range []access.UpdateUserInput{{Active: flag(false)}, {IsPlatformAdmin: flag(true)}} {
 		_, err := broken.Update(t.Context(), testkit.UserView, input)

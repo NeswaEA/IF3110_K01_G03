@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/auth"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -33,13 +32,24 @@ type UpdateUserInput struct {
 }
 
 type UserService struct {
-	db       *sql.DB
-	sessions contracts.SessionInvalidator
-	clock    contracts.Clock
+	db                *sql.DB
+	sessions          contracts.SessionInvalidator
+	clock             contracts.Clock
+	normalizeUsername func(string) (string, error)
+	hashPassword      func(context.Context, string) (string, error)
 }
 
-func NewUserService(db *sql.DB, sessions contracts.SessionInvalidator, clock contracts.Clock) *UserService {
-	return &UserService{db: db, sessions: sessions, clock: clock}
+func NewUserService(
+	db *sql.DB,
+	sessions contracts.SessionInvalidator,
+	clock contracts.Clock,
+	normalizeUsername func(string) (string, error),
+	hashPassword func(context.Context, string) (string, error),
+) *UserService {
+	return &UserService{
+		db: db, sessions: sessions, clock: clock,
+		normalizeUsername: normalizeUsername, hashPassword: hashPassword,
+	}
 }
 
 const userColumns = "id, username, is_platform_admin, active, created_at, updated_at"
@@ -88,11 +98,11 @@ func (s *UserService) List(ctx context.Context, limit, offset int) ([]User, bool
 }
 
 func (s *UserService) Create(ctx context.Context, input CreateUserInput) (User, error) {
-	username, err := auth.NormalizeUsername(input.Username)
+	username, err := s.normalizeUsername(input.Username)
 	if err != nil {
 		return User{}, err
 	}
-	hash, err := (auth.PasswordHasher{}).Hash(ctx, input.Password)
+	hash, err := s.hashPassword(ctx, input.Password)
 	if err != nil {
 		return User{}, err
 	}
@@ -174,7 +184,7 @@ func (s *UserService) ResetPassword(ctx context.Context, id, password string) er
 	if err := validUserID(id); err != nil {
 		return err
 	}
-	hash, err := (auth.PasswordHasher{}).Hash(ctx, password)
+	hash, err := s.hashPassword(ctx, password)
 	if err != nil {
 		return err
 	}
