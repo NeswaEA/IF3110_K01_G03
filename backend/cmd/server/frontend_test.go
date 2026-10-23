@@ -19,6 +19,7 @@ func testWeb(t *testing.T) string {
 	}
 	manifest := `{` +
 		`"src/pages/layout.ts": {"file": "assets/layout.js", "name": "layout", "isEntry": true},` +
+		`"src/pages/login.ts": {"file": "assets/login.js", "name": "login", "isEntry": true},` +
 		`"src/pages/connections.ts": {"file": "assets/connections.js", "name": "connections", "isEntry": true},` +
 		`"src/pages/migrations.ts": {"file": "assets/migrations.js", "name": "migrations", "isEntry": true}}`
 	for name, body := range map[string]string{".vite/manifest.json": manifest, "assets/app.js": "console.log('loaded')", ".secret": "private"} {

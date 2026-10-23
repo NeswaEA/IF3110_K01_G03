@@ -163,6 +163,18 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 	if w := request("GET", "/api/v1/databases", "", nil, ""); w.Code != 401 {
 		t.Fatal("unprotected API")
 	}
+	if w := request("GET", "/login?next=%2Fdatabases", "", nil, ""); w.Code != 200 ||
+		!strings.Contains(w.Body.String(), `data-next="/databases"`) || len(w.Result().Cookies()) != 0 ||
+		w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("public login page unavailable or created a session", w.Code)
+	}
+	var anonymousSessions int
+	if err := db.QueryRow("SELECT count(*) FROM sessions").Scan(&anonymousSessions); err != nil || anonymousSessions != 0 {
+		t.Fatal("page load created an anonymous session", err)
+	}
+	if w := request("POST", "/api/v1/auth/login", `{"username":"editor","password":"example password 123"}`, nil, ""); w.Code != 403 {
+		t.Fatal("login accepted a request without CSRF", w.Code)
+	}
 	admin := login("admin")
 	view := login("viewer")
 	edit := login("editor")

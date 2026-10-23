@@ -10,6 +10,7 @@ export default defineConfig({
     rolldownOptions: {
       input: {
         layout: "src/pages/layout.ts",
+        login: "src/pages/login.ts",
         connections: "src/pages/connections.tsx",
         migrations: "src/pages/migrations.tsx",
       },

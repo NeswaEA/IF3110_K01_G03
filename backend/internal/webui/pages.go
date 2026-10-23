@@ -46,6 +46,7 @@ func NewPages(render *Renderer, access contracts.AccessChecker, principal Princi
 }
 
 func RegisterRoutes(mux *http.ServeMux, p *Pages, guard func(http.Handler) http.Handler) {
+	mux.HandleFunc("GET /login", p.loginPage)
 	page := func(h http.HandlerFunc) http.Handler { return guard(h) }
 	mux.Handle("GET /{$}", page(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/databases", http.StatusFound)

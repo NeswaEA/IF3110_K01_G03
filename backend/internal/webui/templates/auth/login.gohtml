@@ -1,0 +1,15 @@
+{{define "content"}}
+<p>Gunakan akun yang dibuat administrator untuk mengakses database.</p>
+<form id="login-form" action="/api/v1/auth/login" method="post" data-next="{{.Data.Next}}" aria-describedby="login-message">
+<fieldset>
+<legend>Akun pengguna</legend>
+<label for="login-username">Username</label>
+<input id="login-username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+<label for="login-password">Password</label>
+<input id="login-password" name="password" type="password" autocomplete="current-password" required>
+<button type="submit" disabled>Masuk</button>
+</fieldset>
+<p id="login-message" role="status" aria-live="polite"></p>
+</form>
+<noscript><p>Aktifkan JavaScript untuk mengirim login dengan aman.</p></noscript>
+{{end}}
