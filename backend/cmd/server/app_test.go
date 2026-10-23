@@ -203,6 +203,10 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		{"POST", "/api/v1/admin/users", `{}`, loginState{admin.cookie, ""}, 403, "CSRF_REJECTED"},
 		{"PATCH", "/api/v1/admin/users/10000000-0000-4000-8000-000000000099", `{"active":false}`, admin, 404, "NOT_FOUND"},
 		{"PUT", "/api/v1/admin/users/10000000-0000-4000-8000-000000000099/password", `{"password":"example password 123"}`, admin, 404, "NOT_FOUND"},
+		{"GET", "/api/v1/admin/groups", "", loginState{}, 401, "UNAUTHENTICATED"},
+		{"GET", "/api/v1/admin/groups", "", view, 403, "FORBIDDEN"},
+		{"GET", "/api/v1/admin/groups", "", admin, 200, `"name":"viewer"`},
+		{"POST", "/api/v1/admin/groups", `{"name":"api-group"}`, admin, 201, `"name":"api-group"`},
 		{"POST", "/api/v1/admin/connections/" + databaseID + "/test", `{}`, admin, 200, `"reachable":true`},
 		{"GET", "/api/v1/missing", "", edit, 404, "NOT_FOUND"},
 		{"GET", base + "/migration-runs", "", edit, 200, `"data":[]`},
@@ -221,6 +225,31 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		w := request(tc.method, tc.path, tc.body, tc.who.cookie, tc.who.csrf)
 		if w.Code != tc.status || !strings.Contains(w.Body.String(), tc.contains) {
 			t.Fatalf("%s %s: expected %d %s, got %d %s", tc.method, tc.path, tc.status, tc.contains, w.Code, w.Body.String())
+		}
+	}
+	var groupID, memberID string
+	if err := db.QueryRow(`SELECT id FROM groups WHERE name='api-group'`).Scan(&groupID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT id FROM users WHERE username='api-user'`).Scan(&memberID); err != nil {
+		t.Fatal(err)
+	}
+	groupPath := "/api/v1/admin/groups/" + groupID
+	for _, tc := range []struct {
+		method, path, body string
+		status             int
+		contains           string
+	}{
+		{"PATCH", groupPath, `{"name":"renamed group"}`, 200, `"name":"renamed group"`},
+		{"GET", groupPath + "/members", "", 200, `"data":[]`},
+		{"PUT", groupPath + "/members/" + memberID, `{}`, 204, ""},
+		{"GET", groupPath + "/members", "", 200, `"username":"api-user"`},
+		{"DELETE", groupPath + "/members/" + memberID, "", 204, ""},
+		{"DELETE", groupPath, "", 204, ""},
+	} {
+		w := request(tc.method, tc.path, tc.body, admin.cookie, admin.csrf)
+		if w.Code != tc.status || !strings.Contains(w.Body.String(), tc.contains) {
+			t.Fatalf("%s %s: expected %d, got %d %s", tc.method, tc.path, tc.status, w.Code, w.Body.String())
 		}
 	}
 	if w := request("GET", "/databases/"+databaseID+"?table=items", "", nil, ""); w.Header().Get("Location") != "/login?next=%2Fdatabases%2F"+databaseID+"%3Ftable%3Ditems" {

@@ -40,6 +40,7 @@ func newUserHTTPFixture(t *testing.T) userHTTPFixture {
 	}
 	protected := http.NewServeMux()
 	access.RegisterUserRoutes(protected, access.NewUserHandler(f.users, access.NewPolicy(f.db), auth.PrincipalFromContext))
+	access.RegisterGroupRoutes(protected, access.NewGroupHandler(groupService(f), access.NewPolicy(f.db), auth.PrincipalFromContext))
 	mux := http.NewServeMux()
 	authHandler.RegisterRoutes(mux)
 	mux.Handle("/api/", authHandler.RequireSession(authHandler.RequireCSRF(protected)))

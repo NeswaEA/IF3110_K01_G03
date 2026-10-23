@@ -44,10 +44,10 @@ func NewUserService(db *sql.DB, sessions contracts.SessionInvalidator, clock con
 
 const userColumns = "id, username, is_platform_admin, active, created_at, updated_at"
 
-var userIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var accessIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func validUserID(id string) error {
-	if !userIDPattern.MatchString(id) {
+	if !accessIDPattern.MatchString(id) {
 		return invalidUserField("userId", "Gunakan UUID huruf kecil.")
 	}
 	return nil
@@ -61,11 +61,8 @@ func scanUser(row interface{ Scan(...any) error }) (User, error) {
 }
 
 func (s *UserService) List(ctx context.Context, limit, offset int) ([]User, bool, error) {
-	if limit < 1 || limit > 200 {
-		return nil, false, invalidUserField("limit", "Gunakan bilangan bulat 1 sampai 200.")
-	}
-	if offset < 0 || offset > 100000 {
-		return nil, false, invalidUserField("offset", "Gunakan bilangan bulat 0 sampai 100000.")
+	if err := validatePage(limit, offset); err != nil {
+		return nil, false, err
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+userColumns+` FROM users ORDER BY username, id LIMIT $1 OFFSET $2`, limit+1, offset)
 	if err != nil {
