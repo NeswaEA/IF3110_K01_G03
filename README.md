@@ -57,6 +57,10 @@ Buka http://localhost:8080.
 
 `app-up.sh seed` membuat akun `fixture-admin` (admin platform), `editor`, `viewer`, dan `outsider`, beserta group, hak akses, dan empat koneksi demo. Password semua akun demo adalah nilai `FIXTURE_PASSWORD` di `.env` Anda.
 
+`seed` juga membuat database SQLite demo (`demo.sqlite`) dari `tests/fixtures/sqlite/demo.sql`, tetapi hanya bila file itu belum ada. Data dan riwayat migrasi di dalamnya tetap tersimpan saat `seed` dijalankan ulang. Untuk memulai dari awal, hapus volume dengan `sh scripts/dev-up.sh --profile app down -v`.
+
+Menjalankan `seed` ulang mencabut session akun demo, jadi login kembali setelahnya.
+
 Sebelum migrasi dapat dijalankan pada sebuah koneksi, admin harus **menguji koneksi itu terlebih dahulu** di halaman Koneksi. Sampai diuji, halaman migrasi menjawab `TARGET_NOT_READY`.
 
 Di dalam Compose, aplikasi mencapai PostgreSQL target sebagai `target-postgres` port `5432`. Gunakan alamat ini saat mendaftarkan koneksi baru lewat halaman Koneksi.
@@ -148,7 +152,8 @@ Perbarui bagian ini ketika fiturnya selesai.
 - Halaman login dan halaman administrasi user/group/grant belum tersedia di UI.
 - Fitur bonus schema diff belum tersedia (capability `schema_diff` bernilai `false`).
 - CI belum dikonfigurasi; jalankan kedua script test secara lokal.
-- File SQLite demo belum dibuat otomatis oleh script. Koneksi SQLite demo baru dapat dipakai setelah file `demo.sqlite` dibuat di direktori `SQLITE_TARGET_DIR` (skema contoh ada di `tests/fixtures/sqlite/demo.sql`).
+- Koneksi demo "SQLite desired" (`demo_desired.sqlite`, pembanding untuk schema diff) belum memiliki fixture, jadi berstatus tidak dapat dihubungi.
+- Pada mode development di host, `seed fixtures` tidak membuat `demo.sqlite`; buat file itu sendiri di `SQLITE_TARGET_DIR` atau gunakan `scripts/app-up.sh seed`.
 - EXPLAIN hanya mode estimasi; `EXPLAIN ANALYZE` tidak diimplementasikan.
 
 ## Anggota
