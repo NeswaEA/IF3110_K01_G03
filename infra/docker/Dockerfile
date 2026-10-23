@@ -23,7 +23,8 @@ FROM debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
- && useradd --system --uid 10001 app
+ && useradd --system --uid 10001 app \
+ && mkdir -p /data/sqlite && chown app:app /data/sqlite
 WORKDIR /app
 COPY --from=backend /out/server /app/server
 COPY --from=backend /out/migrate /app/migrate
