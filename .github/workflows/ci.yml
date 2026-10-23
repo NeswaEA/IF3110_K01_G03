@@ -1,0 +1,196 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: required
+            name: Backend
+          - suite: sqlite
+            name: Bonus SQLite
+          - suite: atlas
+            name: Bonus Atlas
+    env:
+      CI: "true"
+      CGO_ENABLED: "1"
+      GOTOOLCHAIN: local
+      TEST_METADATA_DATABASE_URL: postgres://metadata_owner:ci_metadata@127.0.0.1:15432/metadata?sslmode=disable
+      TEST_TARGET_DATABASE_URL: postgres://platform_runner:ci_runner@127.0.0.1:15433/demo?sslmode=disable
+    services:
+      metadata:
+        image: postgres:17.11@sha256:c469d92cbb89e123ba7c2c7c1a8815572943584085c37b007bacb43150a8c9e4
+        env:
+          POSTGRES_DB: metadata
+          POSTGRES_USER: metadata_owner
+          POSTGRES_PASSWORD: ci_metadata
+        ports:
+          - 15432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U metadata_owner -d metadata"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      target:
+        image: postgres:17.11@sha256:c469d92cbb89e123ba7c2c7c1a8815572943584085c37b007bacb43150a8c9e4
+        env:
+          POSTGRES_DB: demo
+          POSTGRES_USER: target_admin
+          POSTGRES_PASSWORD: ci_target
+          TARGET_RUNNER_PASSWORD: ci_runner
+        ports:
+          - 15433:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U target_admin -d demo"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Initialize target roles and fixture
+        env:
+          TARGET_CONTAINER: ${{ job.services.target.id }}
+        run: |
+          docker exec -i "$TARGET_CONTAINER" sh -s < infra/postgres/init/01-roles.sh
+          docker exec -i "$TARGET_CONTAINER" psql -U target_admin -d demo -v ON_ERROR_STOP=1 < tests/fixtures/postgres/demo.sql
+      - name: Check formatting, vet, and build commands
+        if: matrix.suite == 'required'
+        working-directory: backend
+        run: |
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+          go vet ./...
+          go build -o "$RUNNER_TEMP/bin/" ./cmd/server ./cmd/migrate ./cmd/seed
+          python3 -m unittest discover -s ../scripts/ci -p 'test_*.py'
+      - name: Check out Atlas Community source
+        if: matrix.suite == 'atlas'
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          repository: ariga/atlas
+          ref: 9a6bc601212130aaaefcbc8dd36c710baf9716ff # v1.3.0
+          path: atlas-source
+          persist-credentials: false
+      - name: Build Atlas Community
+        if: matrix.suite == 'atlas'
+        working-directory: atlas-source/cmd/atlas
+        run: |
+          go build -trimpath -ldflags '-X ariga.io/atlas/cmd/atlas/internal/cmdapi.version=v1.3.0 -X ariga.io/atlas/cmd/atlas/internal/cmdapi.flavor=community' -o "$RUNNER_TEMP/atlas" .
+      - name: Initialize Atlas comparison database
+        if: matrix.suite == 'atlas'
+        env:
+          TARGET_CONTAINER: ${{ job.services.target.id }}
+        run: |
+          docker exec "$TARGET_CONTAINER" psql -U target_admin -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE demo_desired OWNER platform_runner'
+          docker exec -i "$TARGET_CONTAINER" psql -U target_admin -d demo_desired -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA _platform AUTHORIZATION platform_runner;
+          REVOKE ALL ON SCHEMA _platform FROM PUBLIC, platform_editor;
+          GRANT USAGE, CREATE ON SCHEMA public TO platform_editor;
+          ALTER DEFAULT PRIVILEGES FOR ROLE platform_editor IN SCHEMA public GRANT SELECT ON TABLES TO platform_runner;
+          ALTER DEFAULT PRIVILEGES FOR ROLE platform_editor IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO platform_runner;
+          SQL
+          docker exec -i "$TARGET_CONTAINER" psql -U target_admin -d demo_desired -v ON_ERROR_STOP=1 < tests/fixtures/postgres/demo.sql
+      - name: Run backend tests
+        id: tests
+        working-directory: backend
+        env:
+          SUITE: ${{ matrix.suite }}
+          ATLAS_BIN: ${{ runner.temp }}/atlas
+        shell: bash
+        run: |
+          case "$SUITE" in
+            required)
+              go test -json -race -count=1 -timeout=180s ./... | tee "$RUNNER_TEMP/go-tests.jsonl"
+              ;;
+            sqlite)
+              go test -json -race -count=1 -timeout=180s ./internal/database/sqlite ./internal/connections ./internal/migrations ./internal/explain ./cmd/server | tee "$RUNNER_TEMP/go-tests.jsonl"
+              ;;
+            atlas)
+              go test -json -count=1 -timeout=180s -tags atlas -run '^TestAtlasConfigSmoke$' ./internal/connections | tee "$RUNNER_TEMP/go-tests.jsonl"
+              ;;
+            *) exit 1 ;;
+          esac
+      - name: Report tests and reject skipped cases
+        if: always() && steps.tests.outcome != 'skipped'
+        run: python3 scripts/ci/check-go-tests.py "$RUNNER_TEMP/go-tests.jsonl"
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: "24.22.0"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install, typecheck, test, and build
+        working-directory: web
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
+  metadata:
+    name: Metadata migrations
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CI: "true"
+      CGO_ENABLED: "1"
+      GOTOOLCHAIN: local
+      METADATA_DATABASE_URL: postgres://metadata_owner:ci_metadata@127.0.0.1:15432/metadata?sslmode=disable
+      TEST_METADATA_DATABASE_URL: postgres://metadata_owner:ci_metadata@127.0.0.1:15432/metadata?sslmode=disable
+    services:
+      metadata:
+        image: postgres:17.11@sha256:c469d92cbb89e123ba7c2c7c1a8815572943584085c37b007bacb43150a8c9e4
+        env:
+          POSTGRES_DB: metadata
+          POSTGRES_USER: metadata_owner
+          POSTGRES_PASSWORD: ci_metadata
+        ports:
+          - 15432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U metadata_owner -d metadata"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: Migrate empty metadata and rerun
+        working-directory: backend
+        run: |
+          go run ./cmd/migrate up
+          go run ./cmd/migrate up
+      - name: Test migration history and constraints
+        id: tests
+        working-directory: backend
+        shell: bash
+        run: go test -json -race -count=1 -timeout=180s ./internal/platform ./tests/integration | tee "$RUNNER_TEMP/go-tests.jsonl"
+      - name: Report tests and reject skipped cases
+        if: always() && steps.tests.outcome != 'skipped'
+        run: python3 scripts/ci/check-go-tests.py "$RUNNER_TEMP/go-tests.jsonl"
