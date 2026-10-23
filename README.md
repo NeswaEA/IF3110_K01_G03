@@ -99,15 +99,15 @@ sh scripts/test-web.sh       # npm ci, typecheck, test, dan build frontend (Node
 
 Integration test backend memakai PostgreSQL asli dari `scripts/dev-up.sh` dan URL `TEST_*_DATABASE_URL` di `.env` (sudah diisi oleh `init-env.sh`). Tanpa URL tersebut, test integration dilewati dengan pesan. Argumen tambahan diteruskan ke `go test`, misalnya `sh scripts/test-backend.sh -run Fingerprint ./internal/database/`.
 
-## Arsitektur singkat
+## Arsitektur proyek
 
-- **Satu backend, satu origin.** Go menyajikan halaman HTML (`backend/internal/webui`), API JSON di `/api/v1`, dan asset hasil build Vite.
-- **Multipage, bukan SPA.**
+- **Satu backend.** Go menyajikan halaman HTML (`backend/internal/webui`), API JSON di `/api/v1`, dan asset hasil build Vite.
+- **Multipage.**
   - Setiap URL dirender di server dan dapat dibuka langsung atau di-refresh.
   - Perpindahan halaman memakai link biasa.
   - JavaScript hanya dipakai untuk bagian interaktif (form koneksi, editor migrasi, panel EXPLAIN), yang dipasang pada elemen `data-widget`.
   - URL yang tidak dikenal menjawab 404.
-- **Dua jenis database.**
+- **Terdiri dari dua jenis database.**
   - Database *metadata* menyimpan pengguna, session, hak akses, registry, draft, dan riwayat.
   - Database *target* adalah database yang dikelola pengguna.
   - Metadata tidak dapat didaftarkan sebagai target.
@@ -135,31 +135,10 @@ tests/fixtures/                       payload API, fixture PostgreSQL dan SQLite
 scripts/                              setup, menjalankan aplikasi, dan test
 ```
 
-## Troubleshooting
-
-| Gejala | Penyebab dan solusi |
-|---|---|
-| Test atau aplikasi gagal dengan `password authentication failed` | Volume database dibuat dengan password lama; PostgreSQL hanya membaca password saat volume pertama kali dibuat. Samakan `.env` dengan password lama, atau reset dengan `sh scripts/dev-up.sh down -v` (menghapus data) lalu `sh scripts/dev-up.sh` |
-| Perintah Docker di Git Bash gagal dengan path seperti `C:/Program Files/Git/app/...` | Git Bash mengubah path Linux menjadi path Windows. Gunakan script di `scripts/` atau awali perintah dengan `MSYS_NO_PATHCONV=1` |
-| Port 8080, 15432, atau 15433 sudah dipakai | Hentikan proses atau container lain yang memakai port tersebut |
-| Halaman migrasi menampilkan `TARGET_NOT_READY` | Koneksi belum diuji. Admin menekan Uji pada halaman Koneksi |
-| Server berhenti dengan `frontend build manifest is unavailable` | Frontend belum di-build. Jalankan `npm run build` (atau `npm run dev`) di `web/`, atau gunakan `scripts/app-up.sh` |
-
-## Batasan saat ini
-
-Perbarui bagian ini ketika fiturnya selesai.
-
-- Halaman login dan halaman administrasi user/group/grant belum tersedia di UI.
-- Fitur bonus schema diff belum tersedia (capability `schema_diff` bernilai `false`).
-- CI belum dikonfigurasi; jalankan kedua script test secara lokal.
-- Koneksi demo "SQLite desired" (`demo_desired.sqlite`, pembanding untuk schema diff) belum memiliki fixture, jadi berstatus tidak dapat dihubungi.
-- Pada mode development di host, `seed fixtures` tidak membuat `demo.sqlite`; buat file itu sendiri di `SQLITE_TARGET_DIR` atau gunakan `scripts/app-up.sh seed`.
-- EXPLAIN hanya mode estimasi; `EXPLAIN ANALYZE` tidak diimplementasikan.
-
 ## Anggota
 
-| Anggota | Tanggung jawab utama |
-|---|---|
-| Neswa | Autentikasi, session, kebijakan akses, administrasi user/group/grant, renderer halaman |
-| Samson | Registry koneksi, adapter PostgreSQL/SQLite, viewer, EXPLAIN, layout dan build frontend, Docker/script |
-| Argha | Draft dan eksekusi migrasi, riwayat dan rekonsiliasi, editor SQL, schema diff |
+| NIM | Anggota | Tanggung jawab utama |
+|---|---|---|
+| 13524001 | Samuelson Dharmawan Tanuraharja | Registry koneksi, adapter PostgreSQL/SQLite, viewer, EXPLAIN, layout dan build frontend, Docker/script |
+| 13524100 | Arghawisesa Dwinanda Arham | Draft dan eksekusi migrasi, riwayat dan rekonsiliasi, editor SQL, schema diff |
+| 13524136 | Neswa Eka Anggara | Autentikasi, session, kebijakan akses, administrasi user/group/grant, renderer halaman |
