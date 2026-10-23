@@ -26,6 +26,9 @@ func RegisterGroupRoutes(mux *http.ServeMux, h *GroupHandler) {
 	mux.HandleFunc("GET /api/v1/admin/groups/{groupId}/members", h.members)
 	mux.HandleFunc("PUT /api/v1/admin/groups/{groupId}/members/{userId}", h.addMember)
 	mux.HandleFunc("DELETE /api/v1/admin/groups/{groupId}/members/{userId}", h.removeMember)
+	mux.HandleFunc("GET /api/v1/admin/groups/{groupId}/grants", h.grants)
+	mux.HandleFunc("PUT /api/v1/admin/groups/{groupId}/grants/{databaseId}", h.setGrant)
+	mux.HandleFunc("DELETE /api/v1/admin/groups/{groupId}/grants/{databaseId}", h.removeGrant)
 }
 
 func (h *GroupHandler) list(w http.ResponseWriter, r *http.Request) {

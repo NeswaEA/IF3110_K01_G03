@@ -108,24 +108,9 @@ func (s *GroupService) Delete(ctx context.Context, id string) error {
 	if err := lockGroup(ctx, tx, id); err != nil {
 		return err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT user_id FROM group_memberships WHERE group_id=$1 ORDER BY user_id`, id)
+	users, err := groupMemberIDs(ctx, tx, id)
 	if err != nil {
-		return failure(err)
-	}
-	defer rows.Close()
-	users := []string{}
-	for rows.Next() {
-		var userID string
-		if err := rows.Scan(&userID); err != nil {
-			return failure(err)
-		}
-		users = append(users, userID)
-	}
-	if err := rows.Err(); err != nil {
-		return failure(err)
-	}
-	if err := rows.Close(); err != nil {
-		return failure(err)
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM groups WHERE id=$1`, id); err != nil {
 		return failure(err)
@@ -235,6 +220,29 @@ func lockGroup(ctx context.Context, tx *sql.Tx, id string) error {
 	// Membership mutations share this lock so deletion cannot miss a concurrent new member.
 	var found string
 	return groupError(tx.QueryRowContext(ctx, `SELECT id FROM groups WHERE id=$1 FOR UPDATE`, id).Scan(&found))
+}
+
+func groupMemberIDs(ctx context.Context, tx *sql.Tx, id string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT user_id FROM group_memberships WHERE group_id=$1 ORDER BY user_id`, id)
+	if err != nil {
+		return nil, failure(err)
+	}
+	defer rows.Close()
+	users := []string{}
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return nil, failure(err)
+		}
+		users = append(users, userID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, failure(err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, failure(err)
+	}
+	return users, nil
 }
 
 func normalizeGroupName(name string) (string, error) {

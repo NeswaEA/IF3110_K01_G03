@@ -244,6 +244,12 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		{"GET", groupPath + "/members", "", 200, `"data":[]`},
 		{"PUT", groupPath + "/members/" + memberID, `{}`, 204, ""},
 		{"GET", groupPath + "/members", "", 200, `"username":"api-user"`},
+		{"GET", groupPath + "/grants", "", 200, `"data":[]`},
+		{"PUT", groupPath + "/grants/" + databaseID, `{"level":"view"}`, 200, `"level":"view"`},
+		{"GET", groupPath + "/grants", "", 200, `"database_id":"` + databaseID + `"`},
+		{"PUT", groupPath + "/grants/" + databaseID, `{"level":"edit"}`, 200, `"level":"edit"`},
+		{"DELETE", groupPath + "/grants/" + databaseID, "", 204, ""},
+		{"GET", groupPath + "/grants", "", 200, `"data":[]`},
 		{"DELETE", groupPath + "/members/" + memberID, "", 204, ""},
 		{"DELETE", groupPath, "", 204, ""},
 	} {
