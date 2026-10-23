@@ -39,11 +39,12 @@ type Pages struct {
 	databases DatabaseSource
 	schemas   SchemaSource
 	users     UserSource
+	groups    GroupSource
 }
 
 func NewPages(render *Renderer, access contracts.AccessChecker, principal PrincipalFunc, login http.HandlerFunc,
-	databases DatabaseSource, schemas SchemaSource, users UserSource) *Pages {
-	return &Pages{render: render, access: access, principal: principal, login: login, databases: databases, schemas: schemas, users: users}
+	databases DatabaseSource, schemas SchemaSource, users UserSource, groups GroupSource) *Pages {
+	return &Pages{render: render, access: access, principal: principal, login: login, databases: databases, schemas: schemas, users: users, groups: groups}
 }
 
 func RegisterRoutes(mux *http.ServeMux, p *Pages, guard func(http.Handler) http.Handler) {
@@ -58,6 +59,7 @@ func RegisterRoutes(mux *http.ServeMux, p *Pages, guard func(http.Handler) http.
 	mux.Handle("GET /admin/connections", page(p.connectionsPage))
 	mux.Handle("GET /admin", page(p.adminPage))
 	mux.Handle("GET /admin/users", page(p.usersPage))
+	mux.Handle("GET /admin/groups", page(p.groupsPage))
 }
 
 var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

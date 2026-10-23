@@ -61,7 +61,7 @@ func userPage(t *testing.T, source *userSource, principal *contracts.Principal, 
 		})
 	}
 	mux := http.NewServeMux()
-	webui.RegisterRoutes(mux, webui.NewPages(renderer, fakeAccess{policyErr}, fromContext, auth.RedirectToLogin, nil, nil, source), guard)
+	webui.RegisterRoutes(mux, webui.NewPages(renderer, fakeAccess{policyErr}, fromContext, auth.RedirectToLogin, nil, nil, source, nil), guard)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 	return w

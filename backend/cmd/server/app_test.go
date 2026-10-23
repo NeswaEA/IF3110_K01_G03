@@ -228,6 +228,12 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		{"GET", "/admin/users?user=10000000-0000-4000-8000-000000000001", "", admin, 200, `data-operation="update"`},
 		{"GET", "/admin/users?offset=bad", "", admin, 400, "Permintaan tidak valid"},
 		{"GET", "/admin/users?user=10000000-0000-4000-8000-000000000099", "", admin, 404, "Halaman tidak ditemukan"},
+		{"GET", "/admin/groups", "", loginState{}, 302, ""},
+		{"GET", "/admin/groups", "", view, 403, "Akses ditolak"},
+		{"GET", "/admin/groups", "", admin, 200, `<th scope="row">api-group</th>`},
+		{"GET", "/admin/groups?group=20000000-0000-4000-8000-000000000002", "", admin, 200, `data-operation="delete"`},
+		{"GET", "/admin/groups?offset=bad", "", admin, 400, "Permintaan tidak valid"},
+		{"GET", "/admin/groups?group=20000000-0000-4000-8000-000000000099", "", admin, 404, "Halaman tidak ditemukan"},
 		{"GET", "/unknown", "", loginState{}, 404, "Halaman tidak ditemukan"},
 		{"GET", "/assets/missing.js", "", view, 404, "Halaman tidak ditemukan"},
 	} {

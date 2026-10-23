@@ -1,5 +1,5 @@
 import "../app/layout.css";
-import "../features/access/users.css";
+import "../features/access/admin.css";
 import { bindUsers } from "../features/access/users";
 
 const root = document.querySelector<HTMLElement>(".users-admin");

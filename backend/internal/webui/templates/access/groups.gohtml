@@ -1,0 +1,68 @@
+{{define "content"}}
+<div class="groups-admin access-admin" data-return-to="{{.Data.ReturnTo}}">
+<nav class="admin-tabs" aria-label="Administrasi"><a href="/admin/users">Pengguna</a><a href="/admin/groups" aria-current="page">Grup</a></nav>
+<div class="admin-toolbar">
+<p>Grup menghubungkan pengguna dengan hak akses database. Hak admin platform dikelola pada halaman pengguna.</p>
+<a href="#create-group">Tambah grup</a>
+</div>
+{{if .Data.Notice}}<p role="status">{{.Data.Notice}}</p>{{end}}
+{{if .Data.Rows}}
+<div class="scroll-x" role="region" aria-label="Daftar grup" tabindex="0">
+<table>
+<caption>Grup pada halaman ini</caption>
+<thead><tr><th scope="col">Nama grup</th><th scope="col">Dibuat</th><th scope="col">Diperbarui</th><th scope="col">Pengaturan</th></tr></thead>
+<tbody>
+{{range .Data.Rows}}
+<tr><th scope="row">{{.Name}}</th><td>{{.Created}}</td><td>{{.Updated}}</td><td><a href="{{.URL}}">Kelola <span class="resource-name">{{.Name}}</span></a></td></tr>
+{{end}}
+</tbody>
+</table>
+</div>
+<p>Menampilkan grup {{.Data.First}} sampai {{.Data.Last}}.</p>
+{{else}}
+<p>Tidak ada grup pada halaman ini. Buka halaman pertama atau tambahkan grup baru.</p>
+{{end}}
+<nav class="pager" aria-label="Halaman grup">
+{{if .Data.Prev}}<a href="/admin/groups">Halaman pertama</a><a href="{{.Data.Prev}}">Sebelumnya</a>{{end}}
+{{if .Data.Next}}<a href="{{.Data.Next}}">Berikutnya</a>{{end}}
+</nav>
+{{if .Data.Selected}}
+<section id="group-settings" aria-labelledby="group-heading" tabindex="-1">
+<h2 id="group-heading">Pengaturan {{.Data.Selected.Name}}</h2>
+<form id="update-group-form" action="/api/v1/admin/groups/{{.Data.Selected.ID}}" method="post" data-operation="update" data-group-id="{{.Data.Selected.ID}}" aria-describedby="update-group-message">
+<fieldset>
+<legend>Ubah nama grup</legend>
+<label for="update-group-name">Nama grup</label>
+<input id="update-group-name" name="name" type="text" value="{{.Data.Selected.Name}}" autocomplete="off" aria-describedby="update-group-help" required>
+<p id="update-group-help">Gunakan 1 sampai 100 karakter. Nama membedakan huruf besar dan kecil. Mengubah nama tidak mengubah anggota atau hak akses.</p>
+<button type="submit" disabled>Simpan nama grup</button>
+</fieldset>
+<p id="update-group-message" role="status" aria-live="polite"></p>
+</form>
+<form id="delete-group-form" action="/api/v1/admin/groups/{{.Data.Selected.ID}}" method="post" data-operation="delete" data-group-id="{{.Data.Selected.ID}}" aria-describedby="delete-group-message">
+<fieldset>
+<legend>Hapus grup</legend>
+<p id="delete-group-warning">Penghapusan tidak dapat dibatalkan. Keanggotaan dan hak akses dari grup ini dihapus, serta seluruh sesi anggotanya dicabut. Jika Anda anggota grup ini, Anda harus login kembali.</p>
+<label class="admin-check"><input name="confirm" type="checkbox" aria-describedby="delete-group-warning" required> Saya ingin menghapus grup ini.</label>
+<button type="submit" disabled>Hapus grup</button>
+</fieldset>
+<p id="delete-group-message" role="status" aria-live="polite"></p>
+</form>
+</section>
+{{end}}
+<section id="create-group" aria-labelledby="create-group-heading" tabindex="-1">
+<h2 id="create-group-heading">Tambah grup</h2>
+<form id="create-group-form" action="/api/v1/admin/groups" method="post" data-operation="create" aria-describedby="create-group-message">
+<fieldset>
+<legend>Grup baru</legend>
+<label for="new-group-name">Nama grup</label>
+<input id="new-group-name" name="name" type="text" autocomplete="off" aria-describedby="new-group-help" required>
+<p id="new-group-help">Gunakan nama unik dengan 1 sampai 100 karakter. Huruf besar dan kecil dibedakan. Spasi di awal dan akhir dihapus.</p>
+<button type="submit" disabled>Buat grup</button>
+</fieldset>
+<p id="create-group-message" role="status" aria-live="polite"></p>
+</form>
+</section>
+<noscript><p>Daftar dan navigasi grup dapat dibaca tanpa JavaScript. Aktifkan JavaScript untuk membuat, mengubah, dan menghapus grup.</p></noscript>
+</div>
+{{end}}

@@ -1,6 +1,7 @@
 {{define "content"}}
-<div class="users-admin" data-return-to="{{.Data.ReturnTo}}">
-<div class="users-toolbar">
+<div class="users-admin access-admin" data-return-to="{{.Data.ReturnTo}}">
+<nav class="admin-tabs" aria-label="Administrasi"><a href="/admin/users" aria-current="page">Pengguna</a><a href="/admin/groups">Grup</a></nav>
+<div class="admin-toolbar">
 <p>Kelola akun dan hak admin platform. Akses database diberikan melalui grup.</p>
 <a href="#create-user">Tambah pengguna</a>
 </div>
@@ -12,7 +13,7 @@
 <thead><tr><th scope="col">Username</th><th scope="col">Akun</th><th scope="col">Peran platform</th><th scope="col">Dibuat</th><th scope="col">Diperbarui</th><th scope="col">Pengaturan</th></tr></thead>
 <tbody>
 {{range .Data.Rows}}
-<tr><th scope="row">{{.Username}}</th><td>{{if .Active}}Aktif{{else}}Nonaktif{{end}}</td><td>{{if .IsPlatformAdmin}}Admin platform{{else}}Pengguna{{end}}</td><td>{{.Created}}</td><td>{{.Updated}}</td><td><a href="{{.URL}}">Kelola <span class="user-name">{{.Username}}</span></a></td></tr>
+<tr><th scope="row">{{.Username}}</th><td>{{if .Active}}Aktif{{else}}Nonaktif{{end}}</td><td>{{if .IsPlatformAdmin}}Admin platform{{else}}Pengguna{{end}}</td><td>{{.Created}}</td><td>{{.Updated}}</td><td><a href="{{.URL}}">Kelola <span class="resource-name">{{.Username}}</span></a></td></tr>
 {{end}}
 </tbody>
 </table>
@@ -32,8 +33,8 @@
 <form id="update-user-form" action="/api/v1/admin/users/{{.Data.Selected.ID}}" method="post" data-operation="update" data-user-id="{{.Data.Selected.ID}}" aria-describedby="update-user-message">
 <fieldset>
 <legend>Status dan peran</legend>
-<label class="user-check"><input name="active" type="checkbox"{{if .Data.Selected.Active}} checked{{end}}> Akun aktif</label>
-<label class="user-check"><input name="is_platform_admin" type="checkbox"{{if .Data.Selected.IsPlatformAdmin}} checked{{end}}> Admin platform</label>
+<label class="admin-check"><input name="active" type="checkbox"{{if .Data.Selected.Active}} checked{{end}}> Akun aktif</label>
+<label class="admin-check"><input name="is_platform_admin" type="checkbox"{{if .Data.Selected.IsPlatformAdmin}} checked{{end}}> Admin platform</label>
 <button type="submit" disabled>Simpan perubahan</button>
 </fieldset>
 <p id="update-user-message" role="status" aria-live="polite"></p>
@@ -62,7 +63,7 @@
 <label for="new-user-password">Password awal</label>
 <input id="new-user-password" name="password" type="password" autocomplete="new-password" aria-describedby="new-password-help" required>
 <p id="new-password-help">Gunakan 12 sampai 128 karakter.</p>
-<label class="user-check"><input name="is_platform_admin" type="checkbox"> Admin platform</label>
+<label class="admin-check"><input name="is_platform_admin" type="checkbox"> Admin platform</label>
 <button type="submit" disabled>Buat pengguna</button>
 </fieldset>
 <p id="create-user-message" role="status" aria-live="polite"></p>

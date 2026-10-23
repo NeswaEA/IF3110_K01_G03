@@ -12,6 +12,7 @@ export default defineConfig({
         layout: "src/pages/layout.ts",
         login: "src/pages/login.ts",
         users: "src/pages/users.ts",
+        groups: "src/pages/groups.ts",
         connections: "src/pages/connections.tsx",
         migrations: "src/pages/migrations.tsx",
       },

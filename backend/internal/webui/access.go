@@ -14,7 +14,7 @@ type UserSource interface {
 	List(context.Context, contracts.Principal, int, int) ([]access.User, bool, error)
 }
 
-const userPageSize = 50
+const adminPageSize = 50
 
 type userRow struct {
 	access.User
@@ -58,7 +58,7 @@ func (p *Pages) usersPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	principal, _ := p.principal(r.Context())
-	users, more, err := p.users.List(r.Context(), principal, userPageSize, offset)
+	users, more, err := p.users.List(r.Context(), principal, adminPageSize, offset)
 	if err != nil {
 		p.fail(w, r, user, err)
 		return
@@ -80,10 +80,10 @@ func (p *Pages) usersPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if offset > 0 {
-		view.Prev = usersURL(max(0, offset-userPageSize), "")
+		view.Prev = usersURL(max(0, offset-adminPageSize), "")
 	}
-	if more && offset+userPageSize <= 100000 {
-		view.Next = usersURL(offset+userPageSize, "")
+	if more && offset+adminPageSize <= 100000 {
+		view.Next = usersURL(offset+adminPageSize, "")
 	}
 	view.Notice = map[string]string{
 		"created":  "Pengguna baru berhasil dibuat.",

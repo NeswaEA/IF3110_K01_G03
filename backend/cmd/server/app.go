@@ -106,8 +106,9 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	explainService := explain.NewService(registry, registry, map[database.Driver]explain.Planner{database.Postgres: postgres.Planner{}, database.SQLite: sqlite.Planner{}}, runtime.QueryTimeout)
 	protected := http.NewServeMux()
 	userService := access.NewUserService(db, sessions, policy, platform.SystemClock{}, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)
+	groupService := access.NewGroupService(db, sessions, policy, platform.SystemClock{})
 	access.RegisterUserRoutes(protected, access.NewUserHandler(userService, auth.PrincipalFromContext))
-	access.RegisterGroupRoutes(protected, access.NewGroupHandler(access.NewGroupService(db, sessions, policy, platform.SystemClock{}), auth.PrincipalFromContext))
+	access.RegisterGroupRoutes(protected, access.NewGroupHandler(groupService, auth.PrincipalFromContext))
 	connections.RegisterRoutes(protected, connections.NewHandler(connectionService, policy, auth.PrincipalFromContext))
 	viewer.RegisterRoutes(protected, viewer.NewHandler(viewService, policy, auth.PrincipalFromContext))
 	explain.RegisterRoutes(protected, explain.NewHandler(explainService, policy, auth.PrincipalFromContext))
@@ -121,7 +122,7 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	secured := authHandler.RequireSession(authHandler.RequireCSRF(protected))
 	mux.Handle("/api/", secured)
 	mux.Handle("/api", secured)
-	webui.RegisterRoutes(mux, webui.NewPages(renderer, policy, auth.PrincipalFromContext, auth.RedirectToLogin, connectionService, viewService, userService), authHandler.RequirePage)
+	webui.RegisterRoutes(mux, webui.NewPages(renderer, policy, auth.PrincipalFromContext, auth.RedirectToLogin, connectionService, viewService, userService, groupService), authHandler.RequirePage)
 	mux.Handle("/", frontend)
 	return mux, cleanup, nil
 }
