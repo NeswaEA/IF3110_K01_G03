@@ -231,8 +231,8 @@ func TestUserHTTPValidation(t *testing.T) {
 		{"PUT", usersPath + "/not-a-uuid/password", `{"password":"` + userPassword + `"}`, 400, "INVALID_REQUEST"},
 		{"PUT", usersPath + "/" + missingUser + "/password", `{"password":"` + userPassword + `"}`, 404, "NOT_FOUND"},
 		{"PUT", usersPath + "/" + testkit.UserEdit + "/password", `{"password":"short"}`, 400, "INVALID_REQUEST"},
-		{"PATCH", usersPath + "/" + testkit.UserAdmin, `{"active":false}`, 400, "INVALID_REQUEST"},
-		{"PATCH", usersPath + "/" + testkit.UserAdmin, `{"is_platform_admin":false}`, 400, "INVALID_REQUEST"},
+		{"PATCH", usersPath + "/" + testkit.UserAdmin, `{"active":false}`, 409, "LAST_ADMIN"},
+		{"PATCH", usersPath + "/" + testkit.UserAdmin, `{"is_platform_admin":false}`, 409, "LAST_ADMIN"},
 	} {
 		w := f.request(tc.method, tc.path, tc.body, &f.admin, true)
 		assertUserHTTPError(t, w, tc.status, tc.code)

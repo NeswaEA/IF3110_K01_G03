@@ -237,7 +237,7 @@ func TestUsersNoopAndLastAdmin(t *testing.T) {
 		{Active: flag(false)}, {IsPlatformAdmin: flag(false)}, {Active: flag(false), IsPlatformAdmin: flag(false)},
 	} {
 		_, err := f.users.Update(t.Context(), adminPrincipal, testkit.UserAdmin, input)
-		requireCode(t, err, "INVALID_REQUEST")
+		requireCode(t, err, "LAST_ADMIN")
 	}
 	resolved, err := f.sessions.Resolve(t.Context(), session.Token)
 	if err != nil || resolved.Token != "" || !resolved.Principal.IsPlatformAdmin {
@@ -277,7 +277,7 @@ func TestUsersConcurrentLastAdminChanges(t *testing.T) {
 					succeeded++
 				} else {
 					var domain *contracts.DomainError
-					if !errors.As(err, &domain) || (domain.Code != "INVALID_REQUEST" && domain.Code != "UNAUTHENTICATED" && domain.Code != "FORBIDDEN") {
+					if !errors.As(err, &domain) || (domain.Code != "LAST_ADMIN" && domain.Code != "UNAUTHENTICATED" && domain.Code != "FORBIDDEN") {
 						t.Fatal("unexpected concurrent admin change error", err)
 					}
 				}
