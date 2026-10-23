@@ -158,7 +158,7 @@ func (s *UserService) Update(ctx context.Context, id string, input UpdateUserInp
 			return User{}, failure(err)
 		}
 		if !remaining {
-			return User{}, &contracts.DomainError{Code: "INVALID_REQUEST", Message: "Admin aktif terakhir harus tetap aktif dan memiliki hak admin."}
+			return User{}, &contracts.DomainError{Code: "LAST_ADMIN", Message: "Admin aktif terakhir harus tetap aktif dan memiliki hak admin."}
 		}
 	}
 	updated, err = scanUser(tx.QueryRowContext(ctx, `UPDATE users SET active=$2, is_platform_admin=$3, updated_at=$4

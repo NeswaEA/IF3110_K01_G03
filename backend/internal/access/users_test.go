@@ -235,7 +235,7 @@ func TestUsersNoopAndLastAdmin(t *testing.T) {
 		{Active: flag(false)}, {IsPlatformAdmin: flag(false)}, {Active: flag(false), IsPlatformAdmin: flag(false)},
 	} {
 		_, err := f.users.Update(t.Context(), testkit.UserAdmin, input)
-		requireCode(t, err, "INVALID_REQUEST")
+		requireCode(t, err, "LAST_ADMIN")
 	}
 	resolved, err := f.sessions.Resolve(t.Context(), session.Token)
 	if err != nil || resolved.Token != "" || !resolved.Principal.IsPlatformAdmin {
@@ -274,7 +274,7 @@ func TestUsersConcurrentLastAdminChanges(t *testing.T) {
 				if err == nil {
 					succeeded++
 				} else {
-					requireCode(t, err, "INVALID_REQUEST")
+					requireCode(t, err, "LAST_ADMIN")
 				}
 			}
 			var remaining int
