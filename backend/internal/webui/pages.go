@@ -60,6 +60,7 @@ func RegisterRoutes(mux *http.ServeMux, p *Pages, guard func(http.Handler) http.
 	mux.Handle("GET /admin", page(p.adminPage))
 	mux.Handle("GET /admin/users", page(p.usersPage))
 	mux.Handle("GET /admin/groups", page(p.groupsPage))
+	mux.Handle("GET /admin/groups/{id}/members", page(p.membersPage))
 }
 
 var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

@@ -16,6 +16,28 @@ func groupService(f userFixture) *access.GroupService {
 	return access.NewGroupService(f.db, f.sessions, access.NewPolicy(f.db), f.clock)
 }
 
+func TestGroupGetByID(t *testing.T) {
+	f := newUserFixture(t)
+	svc := groupService(f)
+	group, err := svc.Get(t.Context(), adminPrincipal, viewGroup)
+	if err != nil || group.ID != viewGroup || group.Name != "readers" || group.CreatedAt.IsZero() || group.UpdatedAt.IsZero() {
+		t.Fatal("group lookup returned incorrect data", group, err)
+	}
+	if _, err := svc.Update(t.Context(), adminPrincipal, viewGroup, "renamed readers"); err != nil {
+		t.Fatal(err)
+	}
+	group, err = svc.Get(t.Context(), adminPrincipal, viewGroup)
+	if err != nil || group.ID != viewGroup || group.Name != "renamed readers" {
+		t.Fatal("group lookup depended on list order", group, err)
+	}
+	for _, id := range []string{"", "invalid", "20000000-0000-4000-8000-00000000000A"} {
+		_, err := svc.Get(t.Context(), adminPrincipal, id)
+		requireCode(t, err, "INVALID_REQUEST")
+	}
+	_, err = svc.Get(t.Context(), adminPrincipal, missingUser)
+	requireCode(t, err, "NOT_FOUND")
+}
+
 func TestGroupsCreateUpdateAndList(t *testing.T) {
 	f := newUserFixture(t)
 	svc := groupService(f)

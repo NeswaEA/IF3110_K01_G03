@@ -1,0 +1,74 @@
+{{define "content"}}
+<div class="members-admin access-admin" data-group-id="{{.Data.Group.ID}}" data-return-to="{{.Data.ReturnTo}}">
+<nav class="admin-tabs" aria-label="Administrasi"><a href="/admin/users">Pengguna</a><a href="/admin/groups">Grup</a></nav>
+<div class="admin-toolbar">
+<p>Anggota memperoleh akses database sesuai grant grup. Keanggotaan tidak mengubah hak admin platform.</p>
+<a href="#add-member">Tambah anggota</a>
+</div>
+{{if .Data.Notice}}<p role="status">{{.Data.Notice}}</p>{{end}}
+<section id="members" aria-labelledby="members-heading" tabindex="-1">
+<h2 id="members-heading">Daftar anggota</h2>
+{{if .Data.Rows}}
+<div class="scroll-x" role="region" aria-label="Daftar anggota grup" tabindex="0">
+<table>
+<caption>Anggota pada halaman ini</caption>
+<thead><tr><th scope="col">Username</th><th scope="col">Akun</th><th scope="col">Peran platform</th><th scope="col">Keanggotaan</th></tr></thead>
+<tbody>
+{{range .Data.Rows}}
+<tr><th scope="row">{{.Username}}</th><td>{{if .Active}}Aktif{{else}}Nonaktif{{end}}</td><td>{{if .IsPlatformAdmin}}Admin platform{{else}}Pengguna{{end}}</td><td><a href="{{.URL}}">Keluarkan <span class="resource-name">{{.Username}}</span></a></td></tr>
+{{end}}
+</tbody>
+</table>
+</div>
+<p>Menampilkan anggota {{.Data.Members.First}} sampai {{.Data.Members.Last}}.</p>
+{{else}}
+<p>Tidak ada anggota pada halaman ini. Buka halaman pertama atau tambahkan anggota baru.</p>
+{{end}}
+<nav class="pager" aria-label="Halaman anggota">
+{{if .Data.Members.Prev}}<a href="{{.Data.Members.Start}}">Halaman pertama</a><a href="{{.Data.Members.Prev}}">Sebelumnya</a>{{end}}
+{{if .Data.Members.Next}}<a href="{{.Data.Members.Next}}">Berikutnya</a>{{end}}
+</nav>
+</section>
+{{if .Data.Selected}}
+<section id="remove-member" aria-labelledby="remove-member-heading" tabindex="-1">
+<h2 id="remove-member-heading">Keluarkan {{.Data.Selected.Username}}</h2>
+{{if .Data.Self}}<p>Anda akan mengeluarkan akun sendiri dari grup. Sesi Anda akan berakhir dan Anda harus login kembali.</p>{{end}}
+<form id="remove-member-form" action="/api/v1/admin/groups/{{.Data.Group.ID}}/members/{{.Data.Selected.ID}}" method="post" data-operation="remove" data-user-id="{{.Data.Selected.ID}}" aria-describedby="remove-member-message">
+<fieldset>
+<legend>Hapus keanggotaan</legend>
+<p id="remove-member-warning">Mengeluarkan pengguna mencabut seluruh sesinya. Akses dari grup lain tetap mengikuti grant masing-masing. Akun pengguna tetap tersimpan.</p>
+<label class="admin-check"><input name="confirm" type="checkbox" aria-describedby="remove-member-warning" required> Saya ingin mengeluarkan {{.Data.Selected.Username}} dari grup ini.</label>
+<button type="submit" disabled>Keluarkan anggota</button>
+</fieldset>
+<p id="remove-member-message" role="status" aria-live="polite"></p>
+</form>
+</section>
+{{end}}
+<section id="add-member" aria-labelledby="add-member-heading" tabindex="-1">
+<h2 id="add-member-heading">Tambah anggota</h2>
+{{if .Data.Candidates}}
+<form id="add-member-form" action="/api/v1/admin/groups/{{.Data.Group.ID}}/members" method="post" data-operation="add" aria-describedby="add-member-message">
+<fieldset>
+<legend>Pilih pengguna</legend>
+<label for="member-user">Pengguna</label>
+<select id="member-user" name="user_id" aria-describedby="member-user-help" required>
+<option value="" disabled selected>Pilih pengguna</option>
+{{range .Data.Candidates}}<option value="{{.ID}}">{{.Username}}{{if not .Active}} (nonaktif){{end}}</option>{{end}}
+</select>
+<p id="member-user-help">Gunakan navigasi di bawah untuk memilih pengguna lain. Pengguna yang sudah menjadi anggota dapat dipilih kembali tanpa membuat duplikasi. Akun nonaktif tetap memerlukan pengaktifan sebelum bisa login.</p>
+<button type="submit" disabled>Tambah anggota</button>
+</fieldset>
+<p id="add-member-message" role="status" aria-live="polite"></p>
+</form>
+<p>Menampilkan pilihan pengguna {{.Data.Users.First}} sampai {{.Data.Users.Last}}.</p>
+{{else}}
+<p>Tidak ada pilihan pengguna pada halaman ini. Buka halaman pertama atau buat akun pada halaman pengguna.</p>
+{{end}}
+<nav class="pager" aria-label="Halaman pilihan pengguna">
+{{if .Data.Users.Prev}}<a href="{{.Data.Users.Start}}">Halaman pertama</a><a href="{{.Data.Users.Prev}}">Sebelumnya</a>{{end}}
+{{if .Data.Users.Next}}<a href="{{.Data.Users.Next}}">Berikutnya</a>{{end}}
+</nav>
+</section>
+<noscript><p>Daftar dan navigasi anggota dapat dibaca tanpa JavaScript. Aktifkan JavaScript untuk menambah dan mengeluarkan anggota.</p></noscript>
+</div>
+{{end}}

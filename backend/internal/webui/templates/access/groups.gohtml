@@ -10,10 +10,10 @@
 <div class="scroll-x" role="region" aria-label="Daftar grup" tabindex="0">
 <table>
 <caption>Grup pada halaman ini</caption>
-<thead><tr><th scope="col">Nama grup</th><th scope="col">Dibuat</th><th scope="col">Diperbarui</th><th scope="col">Pengaturan</th></tr></thead>
+<thead><tr><th scope="col">Nama grup</th><th scope="col">Dibuat</th><th scope="col">Diperbarui</th><th scope="col">Pengaturan</th><th scope="col">Keanggotaan</th></tr></thead>
 <tbody>
 {{range .Data.Rows}}
-<tr><th scope="row">{{.Name}}</th><td>{{.Created}}</td><td>{{.Updated}}</td><td><a href="{{.URL}}">Kelola <span class="resource-name">{{.Name}}</span></a></td></tr>
+<tr><th scope="row">{{.Name}}</th><td>{{.Created}}</td><td>{{.Updated}}</td><td><a href="{{.URL}}">Kelola <span class="resource-name">{{.Name}}</span></a></td><td><a href="/admin/groups/{{.ID}}/members" aria-label="Anggota grup {{.Name}}">Anggota</a></td></tr>
 {{end}}
 </tbody>
 </table>

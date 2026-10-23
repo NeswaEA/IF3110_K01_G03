@@ -12,6 +12,8 @@ import (
 
 type GroupSource interface {
 	List(context.Context, contracts.Principal, int, int) ([]access.Group, bool, error)
+	Get(context.Context, contracts.Principal, string) (access.Group, error)
+	Members(context.Context, contracts.Principal, string, int, int) ([]access.User, bool, error)
 }
 
 type groupRow struct {

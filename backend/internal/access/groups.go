@@ -69,6 +69,17 @@ func (s *GroupService) List(ctx context.Context, actor contracts.Principal, limi
 	return groups, more, nil
 }
 
+func (s *GroupService) Get(ctx context.Context, actor contracts.Principal, id string) (Group, error) {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return Group{}, err
+	}
+	if err := validGroupID(id); err != nil {
+		return Group{}, err
+	}
+	group, err := scanGroup(s.db.QueryRowContext(ctx, `SELECT `+groupColumns+` FROM groups WHERE id=$1`, id))
+	return group, groupError(err)
+}
+
 func (s *GroupService) Create(ctx context.Context, actor contracts.Principal, name string) (Group, error) {
 	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
 		return Group{}, err

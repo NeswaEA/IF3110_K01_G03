@@ -32,6 +32,10 @@ func TestAdministrationServicesRequireCurrentAdmin(t *testing.T) {
 			_, _, err := groups.List(ctx, p, 50, 0)
 			return err
 		},
+		"groups.get": func(ctx context.Context, p contracts.Principal) error {
+			_, err := groups.Get(ctx, p, viewGroup)
+			return err
+		},
 		"groups.create": func(ctx context.Context, p contracts.Principal) error {
 			_, err := groups.Create(ctx, p, "blocked group")
 			return err
