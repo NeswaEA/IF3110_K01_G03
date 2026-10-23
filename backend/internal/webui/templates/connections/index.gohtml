@@ -1,3 +1,19 @@
 {{define "content"}}
-<section data-widget="connections" aria-live="polite"></section>
+<section data-widget="connections" aria-live="polite">
+{{if .Data.Rows}}
+<div class="scroll-x">
+<table>
+<thead><tr><th scope="col">Nama</th><th scope="col">Driver</th><th scope="col">Target</th><th scope="col">Status</th></tr></thead>
+<tbody>
+{{range .Data.Rows}}<tr><td>{{.Name}}</td><td>{{.Driver}}</td><td>{{.Target}}</td><td>{{.Status}}</td></tr>
+{{end}}
+</tbody>
+</table>
+</div>
+{{if .Data.HasMore}}<p>Hanya {{len .Data.Rows}} koneksi pertama yang ditampilkan.</p>{{end}}
+{{else}}
+<p>Belum ada koneksi terdaftar.</p>
+{{end}}
+<noscript><p>Formulir tambah, ubah, uji, dan nonaktifkan koneksi memerlukan JavaScript.</p></noscript>
+</section>
 {{end}}

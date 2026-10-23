@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
 )
 
@@ -528,4 +530,53 @@ func (s *Service) Deactivate(ctx context.Context, id string) error {
 	}
 	s.reg.Invalidate(id)
 	return nil
+}
+
+// Visible returns the active targets userID can view or edit, by name then id.
+// The API list and the database pages share it so both show the same set.
+func (s *Service) Visible(ctx context.Context, access contracts.AccessChecker, userID string) ([]Database, error) {
+	rows, err := s.store.ListActive(ctx, s.meta)
+	if err != nil {
+		return nil, err
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].Name != rows[j].Name {
+			return rows[i].Name < rows[j].Name
+		}
+		return rows[i].ID < rows[j].ID
+	})
+	// shortcut: one access lookup per active target, fine for a handful of registrations; move the filter into SQL if it grows
+	visible := []Database{}
+	for _, row := range rows {
+		level, err := access.Effective(ctx, userID, row.ID)
+		if err != nil {
+			return nil, err
+		}
+		if level == contracts.AccessView || level == contracts.AccessEdit {
+			visible = append(visible, s.public(row, level))
+		}
+	}
+	return visible, nil
+}
+
+// Database returns one active target with userID's effective access; an
+// inactive or unknown id is database.ErrNotFound. The caller checks view access first.
+func (s *Service) Database(ctx context.Context, access contracts.AccessChecker, userID, id string) (Database, error) {
+	row, err := s.store.Get(ctx, s.meta, id)
+	if err == nil && !row.Active {
+		err = database.ErrNotFound
+	}
+	if err != nil {
+		return Database{}, err
+	}
+	level, err := access.Effective(ctx, userID, id)
+	if err != nil {
+		return Database{}, err
+	}
+	return s.public(row, level), nil
+}
+
+func (s *Service) public(row Row, level contracts.AccessLevel) Database {
+	return Database{ID: row.ID, Name: row.Name, Driver: row.Driver, Revision: row.Revision,
+		EffectiveAccess: level, Capabilities: s.Capabilities(row.Driver, row.MigrationReady)}
 }

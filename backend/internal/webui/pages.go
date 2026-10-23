@@ -6,12 +6,28 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/connections"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/viewer"
 )
 
 // PrincipalFunc reads the principal the page guard put on the request context
 // (auth.PrincipalFromContext when wired).
 type PrincipalFunc func(context.Context) (contracts.Principal, bool)
+
+// DatabaseSource is the connections service as the pages read it.
+type DatabaseSource interface {
+	Visible(ctx context.Context, access contracts.AccessChecker, userID string) ([]connections.Database, error)
+	Database(ctx context.Context, access contracts.AccessChecker, userID, id string) (connections.Database, error)
+	List(ctx context.Context, limit, offset int) ([]connections.AdminConnection, bool, error)
+}
+
+// SchemaSource is the viewer service as the pages read it.
+type SchemaSource interface {
+	Schema(ctx context.Context, databaseID string) (database.SchemaSnapshot, error)
+	Data(ctx context.Context, databaseID, schema, table string, limit, offset int) (database.TableData, viewer.Page, error)
+}
 
 // Pages serves the HTML pages. The guard (auth RequirePage when wired) runs
 // before every signed-in page; each handler still checks the same policy as the API.
@@ -20,10 +36,13 @@ type Pages struct {
 	access    contracts.AccessChecker
 	principal PrincipalFunc
 	login     http.HandlerFunc
+	databases DatabaseSource
+	schemas   SchemaSource
 }
 
-func NewPages(render *Renderer, access contracts.AccessChecker, principal PrincipalFunc, login http.HandlerFunc) *Pages {
-	return &Pages{render: render, access: access, principal: principal, login: login}
+func NewPages(render *Renderer, access contracts.AccessChecker, principal PrincipalFunc, login http.HandlerFunc,
+	databases DatabaseSource, schemas SchemaSource) *Pages {
+	return &Pages{render: render, access: access, principal: principal, login: login, databases: databases, schemas: schemas}
 }
 
 func RegisterRoutes(mux *http.ServeMux, p *Pages, guard func(http.Handler) http.Handler) {
@@ -31,10 +50,10 @@ func RegisterRoutes(mux *http.ServeMux, p *Pages, guard func(http.Handler) http.
 	mux.Handle("GET /{$}", page(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/databases", http.StatusFound)
 	}))
-	mux.Handle("GET /databases", page(p.databases))
-	mux.Handle("GET /databases/{id}", page(p.database))
+	mux.Handle("GET /databases", page(p.databaseList))
+	mux.Handle("GET /databases/{id}", page(p.databaseDetail))
 	mux.Handle("GET /databases/{id}/migrations", page(p.migrations))
-	mux.Handle("GET /admin/connections", page(p.connections))
+	mux.Handle("GET /admin/connections", page(p.connectionsPage))
 }
 
 var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -81,24 +100,6 @@ func (p *Pages) fail(w http.ResponseWriter, r *http.Request, user *PageUser, err
 	}
 }
 
-func (p *Pages) databases(w http.ResponseWriter, r *http.Request) {
-	user, ok := p.authorize(w, r, "", "")
-	if !ok {
-		return
-	}
-	p.render.Render(w, http.StatusOK, "viewer/databases", Page{Title: "Database", User: user, Active: "databases", Entry: "databases"})
-}
-
-func (p *Pages) database(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	user, ok := p.authorize(w, r, contracts.ViewDatabase, id)
-	if !ok {
-		return
-	}
-	p.render.Render(w, http.StatusOK, "viewer/database", Page{Title: "Database", User: user, Active: "databases", Entry: "database",
-		Data: struct{ ID string }{id}})
-}
-
 // migrations needs only view access: history is readable by viewers, and the
 // widget enables editing from the database's effective access.
 func (p *Pages) migrations(w http.ResponseWriter, r *http.Request) {
@@ -109,12 +110,4 @@ func (p *Pages) migrations(w http.ResponseWriter, r *http.Request) {
 	}
 	p.render.Render(w, http.StatusOK, "migrations/index", Page{Title: "Migrasi", User: user, Active: "databases", Entry: "migrations",
 		Data: struct{ ID string }{id}})
-}
-
-func (p *Pages) connections(w http.ResponseWriter, r *http.Request) {
-	user, ok := p.authorize(w, r, contracts.ManagePlatform, "")
-	if !ok {
-		return
-	}
-	p.render.Render(w, http.StatusOK, "connections/index", Page{Title: "Koneksi database", User: user, Active: "connections", Entry: "connections"})
 }

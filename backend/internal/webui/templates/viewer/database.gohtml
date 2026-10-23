@@ -1,3 +1,92 @@
 {{define "content"}}
-<section data-widget="database-viewer" data-database-id="{{.Data.ID}}" aria-live="polite"></section>
+{{with .Data}}
+<p>Engine {{.DB.Driver}}, akses {{.DB.Access}}{{with .Fingerprint}}; fingerprint <code>{{.}}</code>{{end}}</p>
+<p><a href="/databases/{{.DB.ID}}/migrations">Migrasi dan riwayat</a></p>
+{{if .SchemaProblem}}
+<div role="alert"><strong>Schema tidak dapat dibaca</strong><p>{{.SchemaProblem}}</p></div>
+{{else}}
+<div class="viewer">
+<nav aria-label="Schema" class="schema-tree">
+{{if .Schemas}}
+<ul>
+{{range .Schemas}}
+<li>{{.Name}}
+{{if .Tables}}
+<ul>
+{{range .Tables}}<li><a href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{.Name}}</a></li>
+{{end}}
+</ul>
+{{else}}
+<p>Tidak ada tabel.</p>
+{{end}}
+</li>
+{{end}}
+</ul>
+{{else}}
+<p>Tidak ada schema pengguna.</p>
+{{end}}
+</nav>
+<section class="table-detail" aria-label="Detail tabel">
+{{with .Selected}}
+<h2>{{.Schema}}.{{.Table.Name}}</h2>
+<h3>Kolom</h3>
+<div class="scroll-x">
+<table>
+<thead><tr><th scope="col">#</th><th scope="col">Nama</th><th scope="col">Tipe</th><th scope="col">Nullable</th><th scope="col">Default</th></tr></thead>
+<tbody>
+{{range .Table.Columns}}<tr><td>{{.Ordinal}}</td><td>{{.Name}}</td><td>{{.DataType}}</td><td>{{if .Nullable}}ya{{else}}tidak{{end}}</td><td>{{with .Default}}<code>{{.}}</code>{{else}}tidak ada{{end}}</td></tr>
+{{end}}
+</tbody>
+</table>
+</div>
+<h3>Constraint</h3>
+{{if .Table.Constraints}}
+<ul>
+{{range .Table.Constraints}}<li>{{.Kind}} {{with .Name}}{{.}}{{else}}(tanpa nama){{end}}: <code>{{.Definition}}</code></li>
+{{end}}
+</ul>
+{{else}}
+<p>Tidak ada constraint.</p>
+{{end}}
+<h3>Indeks</h3>
+{{if .Table.Indexes}}
+<ul>
+{{range .Table.Indexes}}<li>{{.Name}} ({{if .Columns}}{{range $i, $c := .Columns}}{{if $i}}, {{end}}{{$c}}{{end}}{{else}}ekspresi{{end}}){{if .Primary}}, primary{{else if .Unique}}, unique{{end}}: <code>{{.Definition}}</code></li>
+{{end}}
+</ul>
+{{else}}
+<p>Tidak ada indeks.</p>
+{{end}}
+<h3>Data</h3>
+{{if .DataProblem}}
+<div role="alert"><strong>Data tidak dapat dibaca</strong><p>{{.DataProblem}}</p></div>
+{{else}}{{with .Data}}
+{{if not .OrderStable}}<p>Tabel ini tidak memiliki primary key, sehingga urutan baris antarhalaman tidak dijamin.</p>{{end}}
+{{if .Rows}}
+<div class="scroll-x">
+<table>
+<thead><tr>{{range .Columns}}<th scope="col">{{.Name}} <small>({{.DataType}})</small></th>{{end}}</tr></thead>
+<tbody>
+{{range .Rows}}<tr>{{range .}}<td>{{if .Null}}<em>NULL</em>{{else if .Binary}}<span title="Data biner (base64)">{{.Text}}</span>{{else}}{{.Text}}{{end}}</td>{{end}}</tr>
+{{end}}
+</tbody>
+</table>
+</div>
+<nav aria-label="Halaman data" class="pager">
+{{with .Prev}}<a href="{{.}}" rel="prev">Sebelumnya</a>{{end}}
+<span>Baris {{.First}}-{{.Last}}</span>
+{{with .Next}}<a href="{{.}}" rel="next">Berikutnya</a>{{end}}
+</nav>
+{{else}}
+<p>Tabel tidak memiliki baris pada halaman ini.</p>
+{{with .Prev}}<p><a href="{{.}}" rel="prev">Sebelumnya</a></p>{{end}}
+{{end}}
+{{end}}{{end}}
+{{else}}
+<p>Pilih tabel untuk melihat struktur dan datanya.</p>
+{{end}}
+</section>
+</div>
+{{end}}
+{{end}}
 {{end}}

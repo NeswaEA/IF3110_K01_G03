@@ -10,8 +10,6 @@ export default defineConfig({
     rolldownOptions: {
       input: {
         layout: "src/pages/layout.ts",
-        databases: "src/pages/databases.tsx",
-        database: "src/pages/database.tsx",
         connections: "src/pages/connections.tsx",
         migrations: "src/pages/migrations.tsx",
       },

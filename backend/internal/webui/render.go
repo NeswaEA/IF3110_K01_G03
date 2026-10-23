@@ -85,11 +85,12 @@ func (r *Renderer) Render(w http.ResponseWriter, status int, name string, page P
 }
 
 var statusPages = map[int][2]string{
-	http.StatusForbidden: {"Akses ditolak", "Anda tidak memiliki akses ke halaman ini."},
-	http.StatusNotFound:  {"Halaman tidak ditemukan", "Halaman yang Anda minta tidak ada atau tidak dapat Anda akses."},
+	http.StatusBadRequest: {"Permintaan tidak valid", "Alamat halaman berisi parameter yang tidak valid."},
+	http.StatusForbidden:  {"Akses ditolak", "Anda tidak memiliki akses ke halaman ini."},
+	http.StatusNotFound:   {"Halaman tidak ditemukan", "Halaman yang Anda minta tidak ada atau tidak dapat Anda akses."},
 }
 
-// Status renders the shared 403/404/500 page.
+// Status renders the shared 400/403/404/500 page.
 func (r *Renderer) Status(w http.ResponseWriter, status int, user *PageUser) {
 	text, ok := statusPages[status]
 	if !ok {

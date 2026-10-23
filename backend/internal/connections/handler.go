@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
-	"sort"
 	"strconv"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
@@ -211,28 +210,10 @@ func (h *Handler) databases(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, err)
 		return
 	}
-	rows, err := h.svc.store.ListActive(r.Context(), h.svc.meta)
+	visible, err := h.svc.Visible(r.Context(), h.access, p.UserID)
 	if err != nil {
 		_ = platform.WriteError(w, r, err)
 		return
-	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		if rows[i].Name != rows[j].Name {
-			return rows[i].Name < rows[j].Name
-		}
-		return rows[i].ID < rows[j].ID
-	})
-	// shortcut: one access lookup per active target, fine for a handful of registrations; move the filter into SQL if it grows
-	visible := []Database{}
-	for _, row := range rows {
-		level, err := h.access.Effective(r.Context(), p.UserID, row.ID)
-		if err != nil {
-			_ = platform.WriteError(w, r, err)
-			return
-		}
-		if level == contracts.AccessView || level == contracts.AccessEdit {
-			visible = append(visible, h.publicDatabase(row, level))
-		}
 	}
 	page := platform.Page{Limit: limit, Offset: offset, HasMore: len(visible) > offset+limit}
 	visible = visible[min(offset, len(visible)):min(offset+limit, len(visible))]
@@ -245,25 +226,12 @@ func (h *Handler) database(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	row, err := h.svc.store.Get(r.Context(), h.svc.meta, id)
-	if err == nil && !row.Active {
-		err = database.ErrNotFound
-	}
+	db, err := h.svc.Database(r.Context(), h.access, p.UserID, id)
 	if err != nil {
 		_ = platform.WriteError(w, r, domainError(err, msgDatabaseNotFound))
 		return
 	}
-	level, err := h.access.Effective(r.Context(), p.UserID, id)
-	if err != nil {
-		_ = platform.WriteError(w, r, err)
-		return
-	}
-	_ = platform.WriteJSON(w, r, http.StatusOK, h.publicDatabase(row, level), nil)
-}
-
-func (h *Handler) publicDatabase(row Row, level contracts.AccessLevel) Database {
-	return Database{ID: row.ID, Name: row.Name, Driver: row.Driver, Revision: row.Revision,
-		EffectiveAccess: level, Capabilities: h.svc.Capabilities(row.Driver, row.MigrationReady)}
+	_ = platform.WriteJSON(w, r, http.StatusOK, db, nil)
 }
 
 // Pagination bounds shared by every list endpoint.

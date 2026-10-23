@@ -1,3 +1,11 @@
 {{define "content"}}
-<section data-widget="database-list" aria-live="polite"></section>
+{{if .Data}}
+<ul class="database-list">
+{{range .Data}}
+<li><a href="/databases/{{.ID}}">{{.Name}}</a> ({{.Driver}}, akses {{.Access}})</li>
+{{end}}
+</ul>
+{{else}}
+<p>Belum ada database yang dapat Anda akses.</p>
+{{end}}
 {{end}}
