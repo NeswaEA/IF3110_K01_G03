@@ -105,6 +105,7 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	viewService := viewer.NewService(registry, inspector, map[database.Driver]viewer.TableReader{database.Postgres: postgres.Reader{}, database.SQLite: sqlite.Reader{}}, runtime.QueryTimeout)
 	explainService := explain.NewService(registry, registry, map[database.Driver]explain.Planner{database.Postgres: postgres.Planner{}, database.SQLite: sqlite.Planner{}}, runtime.QueryTimeout)
 	protected := http.NewServeMux()
+	access.RegisterUserRoutes(protected, access.NewUserHandler(access.NewUserService(db, sessions, platform.SystemClock{}), policy, auth.PrincipalFromContext))
 	connections.RegisterRoutes(protected, connections.NewHandler(connectionService, policy, auth.PrincipalFromContext))
 	viewer.RegisterRoutes(protected, viewer.NewHandler(viewService, policy, auth.PrincipalFromContext))
 	explain.RegisterRoutes(protected, explain.NewHandler(explainService, policy, auth.PrincipalFromContext))
