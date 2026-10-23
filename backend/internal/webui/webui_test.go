@@ -170,7 +170,7 @@ func (h harness) get(path string) (int, string) {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { guarded++; next.ServeHTTP(w, r) })
 	}
 	mux := http.NewServeMux()
-	webui.RegisterRoutes(mux, webui.NewPages(renderer, fakeAccess{h.access}, principal, login, h.src, h.src), guard)
+	webui.RegisterRoutes(mux, webui.NewPages(renderer, fakeAccess{h.access}, principal, login, h.src, h.src, nil), guard)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 	if guarded != 1 {

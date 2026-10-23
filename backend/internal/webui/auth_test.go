@@ -24,7 +24,7 @@ func TestLoginPage(t *testing.T) {
 			next.ServeHTTP(w, r)
 		})
 	}
-	webui.RegisterRoutes(mux, webui.NewPages(renderer, nil, nil, nil, nil, nil), guard)
+	webui.RegisterRoutes(mux, webui.NewPages(renderer, nil, nil, nil, nil, nil, nil), guard)
 	for _, tc := range []struct{ next, want string }{
 		{"", "/databases"},
 		{"/databases/abc?schema=main&table=items", "/databases/abc?schema=main&table=items"},

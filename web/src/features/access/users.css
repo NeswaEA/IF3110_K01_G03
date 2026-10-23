@@ -1,0 +1,24 @@
+.users-admin { max-inline-size: 75rem; color: #222; background: #fff; }
+main :is(h1, h2), .site-user { overflow-wrap: anywhere; }
+.site-user { min-inline-size: 0; }
+.users-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; align-items: center; justify-content: space-between; }
+.users-admin a { color: #0645ad; }
+.users-admin a, .site-header a { display: inline-flex; align-items: center; min-block-size: 2.75rem; }
+.users-admin table { inline-size: 100%; border-collapse: collapse; }
+.users-admin caption { text-align: start; font-weight: bold; padding-block: 0.5rem; }
+.users-admin th, .users-admin td { padding: 0.5rem; text-align: start; vertical-align: top; border-block-end: 1px solid #777; }
+.users-admin td a { gap: 0.25rem; }
+.users-admin th[scope="row"], .user-name { overflow-wrap: anywhere; max-inline-size: 16rem; }
+.users-admin .pager { flex-wrap: wrap; }
+.users-admin section { margin-block-start: 2rem; scroll-margin-block-start: 1rem; }
+.users-admin form { max-inline-size: 28rem; margin-block: 1rem; }
+.users-admin fieldset { display: grid; gap: 0.75rem; min-inline-size: 0; border: 1px solid #666; padding: 1rem; }
+.users-admin legend { font-weight: bold; padding-inline: 0.25rem; }
+.users-admin p { overflow-wrap: anywhere; }
+.users-admin fieldset p { margin: 0; }
+.users-admin input:not([type="checkbox"]) { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; min-block-size: 2.75rem; font: inherit; border: 1px solid #666; padding: 0.5rem; color: #222; background: #fff; }
+.users-admin .user-check { display: flex; gap: 0.5rem; align-items: center; min-block-size: 2.75rem; }
+.users-admin button, .site-header button { min-block-size: 2.75rem; font: inherit; }
+.users-admin button { border: 1px solid #0645ad; background: #0645ad; color: #fff; padding: 0.5rem 0.75rem; cursor: pointer; }
+.users-admin button:disabled { border-color: #666; background: #e6e6e6; color: #555; cursor: wait; }
+.users-admin :is(a, button, input, .scroll-x):focus-visible { outline: 3px solid #0645ad; outline-offset: 3px; }

@@ -1,0 +1,73 @@
+{{define "content"}}
+<div class="users-admin" data-return-to="{{.Data.ReturnTo}}">
+<div class="users-toolbar">
+<p>Kelola akun dan hak admin platform. Akses database diberikan melalui grup.</p>
+<a href="#create-user">Tambah pengguna</a>
+</div>
+{{if .Data.Notice}}<p role="status">{{.Data.Notice}}</p>{{end}}
+{{if .Data.Rows}}
+<div class="scroll-x" role="region" aria-label="Daftar pengguna" tabindex="0">
+<table>
+<caption>Pengguna pada halaman ini</caption>
+<thead><tr><th scope="col">Username</th><th scope="col">Akun</th><th scope="col">Peran platform</th><th scope="col">Dibuat</th><th scope="col">Diperbarui</th><th scope="col">Pengaturan</th></tr></thead>
+<tbody>
+{{range .Data.Rows}}
+<tr><th scope="row">{{.Username}}</th><td>{{if .Active}}Aktif{{else}}Nonaktif{{end}}</td><td>{{if .IsPlatformAdmin}}Admin platform{{else}}Pengguna{{end}}</td><td>{{.Created}}</td><td>{{.Updated}}</td><td><a href="{{.URL}}">Kelola <span class="user-name">{{.Username}}</span></a></td></tr>
+{{end}}
+</tbody>
+</table>
+</div>
+<p>Menampilkan pengguna {{.Data.First}} sampai {{.Data.Last}}.</p>
+{{else}}
+<p>Tidak ada pengguna pada halaman ini. Buka halaman pertama atau tambahkan akun baru.</p>
+{{end}}
+<nav class="pager" aria-label="Halaman pengguna">
+{{if .Data.Prev}}<a href="/admin/users">Halaman pertama</a><a href="{{.Data.Prev}}">Sebelumnya</a>{{end}}
+{{if .Data.Next}}<a href="{{.Data.Next}}">Berikutnya</a>{{end}}
+</nav>
+{{if .Data.Selected}}
+<section id="user-settings" aria-labelledby="user-heading" tabindex="-1">
+<h2 id="user-heading">Pengaturan {{.Data.Selected.Username}}</h2>
+{{if .Data.Self}}<p>Anda sedang mengatur akun sendiri. Penonaktifan, pencabutan hak admin, atau penggantian password akan mengakhiri sesi Anda.</p>{{end}}
+<form id="update-user-form" action="/api/v1/admin/users/{{.Data.Selected.ID}}" method="post" data-operation="update" data-user-id="{{.Data.Selected.ID}}" aria-describedby="update-user-message">
+<fieldset>
+<legend>Status dan peran</legend>
+<label class="user-check"><input name="active" type="checkbox"{{if .Data.Selected.Active}} checked{{end}}> Akun aktif</label>
+<label class="user-check"><input name="is_platform_admin" type="checkbox"{{if .Data.Selected.IsPlatformAdmin}} checked{{end}}> Admin platform</label>
+<button type="submit" disabled>Simpan perubahan</button>
+</fieldset>
+<p id="update-user-message" role="status" aria-live="polite"></p>
+</form>
+<form id="reset-password-form" action="/api/v1/admin/users/{{.Data.Selected.ID}}/password" method="post" data-operation="password" data-user-id="{{.Data.Selected.ID}}" aria-describedby="reset-password-message">
+<fieldset>
+<legend>Ganti password</legend>
+<p>Seluruh sesi akun ini akan dicabut setelah password diganti.</p>
+<label for="reset-user-password">Password baru</label>
+<input id="reset-user-password" name="password" type="password" autocomplete="new-password" aria-describedby="reset-password-help" required>
+<p id="reset-password-help">Gunakan 12 sampai 128 karakter.</p>
+<button type="submit" disabled>Ganti password</button>
+</fieldset>
+<p id="reset-password-message" role="status" aria-live="polite"></p>
+</form>
+</section>
+{{end}}
+<section id="create-user" aria-labelledby="create-user-heading" tabindex="-1">
+<h2 id="create-user-heading">Tambah pengguna</h2>
+<form id="create-user-form" action="/api/v1/admin/users" method="post" data-operation="create" aria-describedby="create-user-message">
+<fieldset>
+<legend>Akun baru</legend>
+<label for="new-user-username">Username</label>
+<input id="new-user-username" name="username" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="username-help" required>
+<p id="username-help">Gunakan 3 sampai 64 karakter a-z, angka, titik, garis bawah, atau tanda minus. Username disimpan dalam huruf kecil.</p>
+<label for="new-user-password">Password awal</label>
+<input id="new-user-password" name="password" type="password" autocomplete="new-password" aria-describedby="new-password-help" required>
+<p id="new-password-help">Gunakan 12 sampai 128 karakter.</p>
+<label class="user-check"><input name="is_platform_admin" type="checkbox"> Admin platform</label>
+<button type="submit" disabled>Buat pengguna</button>
+</fieldset>
+<p id="create-user-message" role="status" aria-live="polite"></p>
+</form>
+</section>
+<noscript><p>Daftar dan navigasi pengguna dapat dibaca tanpa JavaScript. Aktifkan JavaScript untuk membuat akun, mengubah status, dan mengganti password.</p></noscript>
+</div>
+{{end}}
