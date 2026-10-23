@@ -453,6 +453,45 @@ func TestSQLiteForeignKeysOnEveryConnection(t *testing.T) {
 	}
 }
 
+// A writer holding the SQLite file makes reads fail within the busy timeout instead of hanging.
+func TestSQLiteBusyWriterDoesNotHang(t *testing.T) {
+	e := newEnv(t, nil)
+	sqliteFixture(t, e.dir, "demo.sqlite")
+	c, _ := e.svc.Register(ctx, RegisterInput{Name: "s", Driver: database.SQLite, Config: sqliteJSON("demo.sqlite")})
+	h, release, err := e.reg.Acquire(ctx, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	other, err := sql.Open("sqlite3", "file:"+filepath.ToSlash(filepath.Join(e.dir, "demo.sqlite"))+"?mode=rw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	writer, err := other.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+	if _, err := writer.ExecContext(ctx, `BEGIN EXCLUSIVE`); err != nil {
+		t.Fatal(err)
+	}
+	defer writer.ExecContext(ctx, `ROLLBACK`)
+
+	start := time.Now()
+	var n int
+	err = h.DB.QueryRowContext(ctx, `SELECT count(*) FROM items`).Scan(&n)
+	if err == nil {
+		t.Fatal("read succeeded while another connection held an exclusive lock")
+	}
+	if got := database.ClassifyTargetError(ctx, err); !errors.Is(got, database.ErrTargetUnavailable) && !errors.Is(got, database.ErrTargetTimeout) {
+		t.Fatalf("busy error classified as %v", got)
+	}
+	if elapsed := time.Since(start); elapsed > 7*time.Second {
+		t.Fatalf("busy read took %s", elapsed)
+	}
+}
+
 // PostgreSQL target tests (TEST_TARGET_DATABASE_URL).
 
 // A config update gives new leases a new pool; the old pool closes after its last lease.

@@ -334,8 +334,15 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"version":1`) {
 		t.Fatal("failed run advanced head", w.Code, w.Body.String())
 	}
+	var runsBefore, runsAfter int
+	if err := db.QueryRow(`SELECT count(*) FROM migration_runs WHERE database_id=$1`, databaseID).Scan(&runsBefore); err != nil || runsBefore < 2 {
+		t.Fatal("runs before disable", runsBefore, err)
+	}
 	if w := request("DELETE", "/api/v1/admin/connections/"+databaseID, "", admin.cookie, admin.csrf); w.Code != 204 {
 		t.Fatal("disable failed", w.Code)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM migration_runs WHERE database_id=$1`, databaseID).Scan(&runsAfter); err != nil || runsAfter != runsBefore {
+		t.Fatal("disable lost migration history", runsBefore, runsAfter, err)
 	}
 	for _, who := range []loginState{view, edit} {
 		if w := request("GET", "/api/v1/auth/me", "", who.cookie, ""); w.Code != 401 {

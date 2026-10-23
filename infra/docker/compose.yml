@@ -17,7 +17,8 @@ services:
     volumes:
       - metadata-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U metadata_owner -d metadata"]
+      # TCP, not the socket: the init-time server only listens on the socket and restarts afterwards
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U metadata_owner -d metadata"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -37,7 +38,7 @@ services:
       - ../postgres/init/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
       - ../../tests/fixtures/postgres/demo.sql:/docker-entrypoint-initdb.d/10-demo.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U target_admin -d demo"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U target_admin -d demo"]
       interval: 5s
       timeout: 3s
       retries: 10
