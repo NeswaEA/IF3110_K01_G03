@@ -1,9 +1,7 @@
 # Run from the repository root:
 #   scripts/init-env.sh     # or copy .env.example to .env and fill the secrets
 #   docker compose --env-file .env -f infra/docker/compose.yml up -d metadata-postgres target-postgres
-# The app container (profile "app") needs the metadata schema first:
-#   docker compose --env-file .env -f infra/docker/compose.yml --profile app run --rm --entrypoint /app/migrate backend up
-#   docker compose --env-file .env -f infra/docker/compose.yml --profile app up -d --build backend
+# The app container (profile "app") is built, migrated and started by scripts/app-up.sh.
 # Metadata and target databases are separate servers with separate credentials.
 name: if3110
 
