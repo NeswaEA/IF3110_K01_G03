@@ -79,7 +79,7 @@ func (h *HTTPHandler) RequirePage(next http.Handler) http.Handler {
 // RedirectToLogin sends the browser to the login page with the current local
 // path as the return target.
 func RedirectToLogin(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
+	http.Redirect(w, r, "/login?next="+url.QueryEscape(SafeNext(r.URL.RequestURI())), http.StatusFound)
 }
 
 func (h *HTTPHandler) withSession(w http.ResponseWriter, r *http.Request) (*http.Request, error) {
