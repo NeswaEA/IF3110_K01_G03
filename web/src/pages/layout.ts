@@ -1,3 +1,4 @@
+import "../app/layout.css";
 import { bindLogout } from "../app/logout";
 
 const logout = document.querySelector<HTMLButtonElement>('[data-action="logout"]');

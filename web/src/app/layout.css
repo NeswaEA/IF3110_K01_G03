@@ -1,0 +1,12 @@
+/* Shared page layout. Wide tables scroll inside their box so narrow screens keep the page usable. */
+.skip-link { position: absolute; left: -9999px; }
+.skip-link:focus { left: 0.5rem; top: 0.5rem; }
+.site-header { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; }
+.site-header nav { display: flex; flex-wrap: wrap; gap: 1rem; }
+.site-header a[aria-current="page"] { font-weight: bold; }
+.scroll-x { overflow-x: auto; max-width: 100%; }
+.viewer { display: flex; flex-wrap: wrap; gap: 1rem; }
+.schema-tree { min-width: 12rem; }
+.schema-tree a[aria-current="page"] { font-weight: bold; }
+.table-detail { flex: 1 1 20rem; min-width: 0; }
+.pager { display: flex; gap: 1rem; align-items: center; }
