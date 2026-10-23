@@ -20,6 +20,7 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/migrations"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/viewer"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/webui"
 )
 
 type runtimeConfig struct {
@@ -75,7 +76,15 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	if err != nil {
 		return nil, nil, err
 	}
-	frontend, closeFrontend, err := newFrontend(runtime.WebDir)
+	assets, err := webui.LoadAssets(runtime.WebDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	renderer, err := webui.NewRenderer(assets)
+	if err != nil {
+		return nil, nil, err
+	}
+	frontend, closeFrontend, err := newFrontend(runtime.WebDir, http.HandlerFunc(renderer.NotFound))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -109,6 +118,7 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	secured := authHandler.RequireSession(authHandler.RequireCSRF(protected))
 	mux.Handle("/api/", secured)
 	mux.Handle("/api", secured)
+	webui.RegisterRoutes(mux, webui.NewPages(renderer, policy, auth.PrincipalFromContext, auth.RedirectToLogin), authHandler.RequirePage)
 	mux.Handle("/", frontend)
 	return mux, cleanup, nil
 }

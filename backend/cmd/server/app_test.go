@@ -187,12 +187,23 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		{"POST", "/api/v1/admin/connections/" + databaseID + "/test", `{}`, admin, 200, `"reachable":true`},
 		{"GET", "/api/v1/missing", "", edit, 404, "NOT_FOUND"},
 		{"GET", base + "/migration-runs", "", edit, 200, `"data":[]`},
-		{"GET", "/databases/example", "", loginState{}, 200, "application"},
+		{"GET", "/databases", "", loginState{}, 302, ""},
+		{"GET", "/", "", view, 302, ""},
+		{"GET", "/databases", "", view, 200, `data-widget="database-list"`},
+		{"GET", "/databases/" + databaseID, "", view, 200, `data-database-id="` + databaseID + `"`},
+		{"GET", "/databases/" + databaseID, "", admin, 404, "Halaman tidak ditemukan"},
+		{"GET", "/admin/connections", "", view, 403, "Akses ditolak"},
+		{"GET", "/admin/connections", "", admin, 200, `data-widget="connections"`},
+		{"GET", "/unknown", "", loginState{}, 404, "Halaman tidak ditemukan"},
+		{"GET", "/assets/missing.js", "", view, 404, "Halaman tidak ditemukan"},
 	} {
 		w := request(tc.method, tc.path, tc.body, tc.who.cookie, tc.who.csrf)
 		if w.Code != tc.status || !strings.Contains(w.Body.String(), tc.contains) {
 			t.Fatalf("%s %s: expected %d %s, got %d %s", tc.method, tc.path, tc.status, tc.contains, w.Code, w.Body.String())
 		}
+	}
+	if w := request("GET", "/databases/"+databaseID+"?table=items", "", nil, ""); w.Header().Get("Location") != "/login?next=%2Fdatabases%2F"+databaseID+"%3Ftable%3Ditems" {
+		t.Fatal("anonymous page was not sent to login", w.Header().Get("Location"))
 	}
 	w := request("GET", "/api/v1/databases", "", edit.cookie, "")
 	if !strings.Contains(w.Body.String(), `"transactional_migrations":true`) || !strings.Contains(w.Body.String(), `"schema_diff":false`) {

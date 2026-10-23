@@ -1,0 +1,31 @@
+{{define "layout"}}<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · IF3110 Database Access</title>
+{{with .User}}{{assetTags "layout"}}{{end}}
+{{assetTags .Entry}}
+</head>
+<body>
+<a class="skip-link" href="#main">Lewati ke konten utama</a>
+{{with .User}}
+<header class="site-header">
+<nav aria-label="Navigasi utama">
+<a href="/databases"{{if eq $.Active "databases"}} aria-current="page"{{end}}>Database</a>
+{{if .IsPlatformAdmin}}
+<a href="/admin"{{if eq $.Active "admin"}} aria-current="page"{{end}}>Administrasi</a>
+<a href="/admin/connections"{{if eq $.Active "connections"}} aria-current="page"{{end}}>Koneksi</a>
+{{end}}
+</nav>
+<span class="site-user">Masuk sebagai <strong>{{.Username}}</strong></span>
+<button type="button" data-action="logout">Keluar</button>
+</header>
+{{end}}
+<main id="main">
+<h1>{{.Title}}</h1>
+{{template "content" .}}
+</main>
+</body>
+</html>
+{{end}}

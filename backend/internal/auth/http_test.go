@@ -44,6 +44,12 @@ func newAuthHTTPFixture(t *testing.T) authHTTPFixture {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))))
+	mux.Handle("GET /page", h.RequirePage(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if p, ok := auth.PrincipalFromContext(r.Context()); !ok || p.UserID != sessionUser {
+			t.Error("page guard did not provide the authenticated principal")
+		}
+		_, _ = w.Write([]byte("page"))
+	})))
 	return authHTTPFixture{sessionFixture: f, handler: platform.RequestID(mux)}
 }
 
@@ -169,6 +175,24 @@ func TestAuthHTTPLifecycle(t *testing.T) {
 		t.Fatal("logout did not clear the cookie")
 	}
 	assertHTTPError(t, f.request("GET", "/api/v1/auth/me", cookie, "", "", ""), 401, "UNAUTHENTICATED")
+}
+
+func TestAuthHTTPPageGuard(t *testing.T) {
+	f := newAuthHTTPFixture(t)
+	prelogin, _ := f.csrf(t, nil)
+	for _, anonymous := range []*http.Cookie{nil, prelogin, {Name: "session", Value: "unknown"}} {
+		w := f.request("GET", "/page?tab=data&x=1", anonymous, "", "", "")
+		if w.Code != http.StatusFound || w.Header().Get("Location") != "/login?next=%2Fpage%3Ftab%3Ddata%26x%3D1" {
+			t.Fatalf("anonymous page request returned %d %q", w.Code, w.Header().Get("Location"))
+		}
+		if w.Header().Get("Cache-Control") != "no-store" {
+			t.Fatal("guarded page is cacheable")
+		}
+	}
+	cookie, _ := f.login(t)
+	if w := f.request("GET", "/page", cookie, "", "", ""); w.Code != http.StatusOK || w.Body.String() != "page" {
+		t.Fatalf("signed-in page request returned %d", w.Code)
+	}
 }
 
 func TestAuthHTTPCSRFRejections(t *testing.T) {

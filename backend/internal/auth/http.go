@@ -50,18 +50,49 @@ func PrincipalFromContext(ctx context.Context) (contracts.Principal, bool) {
 
 func (h *HTTPHandler) RequireSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-store")
-		session, err := h.resolve(r)
-		if err == nil && session.Principal.UserID == "" {
-			err = unauthenticated()
-		}
+		r, err := h.withSession(w, r)
 		if err != nil {
 			_ = platform.WriteError(w, r, err)
 			return
 		}
-		h.setCookie(w, session)
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionContextKey{}, session)))
+		next.ServeHTTP(w, r)
 	})
+}
+
+// RequirePage guards HTML pages: a visitor without a signed-in session is sent
+// to the login page instead of receiving the JSON 401 used by the API.
+func (h *HTTPHandler) RequirePage(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r, err := h.withSession(w, r)
+		if isUnauthenticated(err) {
+			RedirectToLogin(w, r)
+			return
+		}
+		if err != nil {
+			http.Error(w, "Terjadi kesalahan internal.", http.StatusInternalServerError)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RedirectToLogin sends the browser to the login page with the current local
+// path as the return target.
+func RedirectToLogin(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
+}
+
+func (h *HTTPHandler) withSession(w http.ResponseWriter, r *http.Request) (*http.Request, error) {
+	w.Header().Set("Cache-Control", "no-store")
+	session, err := h.resolve(r)
+	if err == nil && session.Principal.UserID == "" {
+		err = unauthenticated()
+	}
+	if err != nil {
+		return r, err
+	}
+	h.setCookie(w, session)
+	return r.WithContext(context.WithValue(r.Context(), sessionContextKey{}, session)), nil
 }
 
 func (h *HTTPHandler) RequireCSRF(next http.Handler) http.Handler {
