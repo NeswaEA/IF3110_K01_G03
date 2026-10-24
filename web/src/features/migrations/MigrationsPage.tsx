@@ -1,42 +1,60 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiRequestError, isAbortError, request } from "../../api/client";
-import type { DatabaseSummary, MigrationDraft, MigrationHead, MigrationRun } from "../../api/types";
-import { useApi } from "../../api/useApi";
+import type { ApiResponse, DatabaseSummary, MigrationDraft, MigrationHead, MigrationRun } from "../../api/types";
+import { useApi, type Query } from "../../api/useApi";
 import { EmptyState, ErrorState, Loading } from "../../components/StatusViews";
 import { ExplainPanel } from "../explain/ExplainPanel";
 import { SQLEditor } from "./SQLEditor";
 import "./migrations.css";
 
-// TODO(non-SPA): UInya masih pake shell SPA son (perlu nyesuaiin page shell son sama serving neswa).
 const pending = (run: MigrationRun) => run.status === "running" || run.status === "outcome_unknown";
 const statusLabel = { running: "Berjalan", succeeded: "Berhasil", failed: "Gagal", outcome_unknown: "Hasil belum pasti" } as const;
 const date = (value: string | null) => value ? new Date(value).toLocaleString("id-ID") : "belum tersedia";
 
-export function MigrationsPage({ databaseId }: { databaseId: string }) {
-  return <DatabaseMigrations key={databaseId} id={databaseId} />;
+export type MigrationInitialState = {
+  database: DatabaseSummary;
+  drafts: ApiResponse<MigrationDraft[]> | null;
+  history: ApiResponse<MigrationRun[]>;
+  head: MigrationHead | null;
+  head_error: string;
+  draft: MigrationDraft | null;
+  run: MigrationRun | null;
+  draft_offset: number;
+  history_offset: number;
+};
+
+function loaded<T>(response: ApiResponse<T> | null | undefined): Query<T> | undefined {
+  return response ? { status: "success", response } : undefined;
 }
 
-function DatabaseMigrations({ id }: { id: string }) {
-  const [summary] = useApi<DatabaseSummary>(`/databases/${encodeURIComponent(id)}`);
+export function MigrationsPage({ databaseId, initial }: { databaseId: string; initial?: MigrationInitialState }) {
+  return <DatabaseMigrations key={databaseId} id={databaseId} initial={initial?.database.id === databaseId ? initial : undefined} />;
+}
+
+function DatabaseMigrations({ id, initial }: { id: string; initial?: MigrationInitialState }) {
+  const [summary] = useApi<DatabaseSummary>(`/databases/${encodeURIComponent(id)}`, loaded(initial && { data: initial.database }));
   if (summary.status === "loading") return <Loading />;
   if (summary.status === "error") return <ErrorState error={summary.error} />;
-  return <Workbench db={summary.response.data} />;
+  return <Workbench db={summary.response.data} initial={initial} />;
 }
 
-function Workbench({ db }: { db: DatabaseSummary }) {
+function Workbench({ db, initial }: { db: DatabaseSummary; initial?: MigrationInitialState }) {
   const base = `/databases/${encodeURIComponent(db.id)}`;
   const canEdit = db.effective_access === "edit";
-  const [draftOffset, setDraftOffset] = useState(0);
-  const [historyOffset, setHistoryOffset] = useState(0);
-  const [drafts, reloadDrafts] = useApi<MigrationDraft[]>(canEdit ? `${base}/migration-drafts?limit=50&offset=${draftOffset}` : null);
-  const [history, reloadHistory] = useApi<MigrationRun[]>(`${base}/migration-runs?limit=50&offset=${historyOffset}`);
-  const [head, reloadHead] = useApi<MigrationHead>(`${base}/migration-head`);
-  const [draft, setDraft] = useState<MigrationDraft | null>(null);
-  const [title, setTitle] = useState("");
-  const [sql, setSQL] = useState("");
-  const [explainSQL, setExplainSQL] = useState("");
-  const [version, setVersion] = useState(0);
-  const [run, setRun] = useState<MigrationRun | null>(null);
+  const [draftOffset, setDraftOffset] = useState(initial?.draft_offset ?? 0);
+  const [historyOffset, setHistoryOffset] = useState(initial?.history_offset ?? 0);
+  const [drafts, reloadDrafts] = useApi<MigrationDraft[]>(canEdit ? `${base}/migration-drafts?limit=50&offset=${draftOffset}` : null, loaded(initial?.drafts));
+  const [history, reloadHistory] = useApi<MigrationRun[]>(`${base}/migration-runs?limit=50&offset=${historyOffset}`, loaded(initial?.history));
+  const initialHead: Query<MigrationHead> | undefined = initial?.head ? loaded({ data: initial.head }) : initial?.head_error ? {
+    status: "error", error: new ApiRequestError({ code: "TARGET_UNAVAILABLE", message: initial.head_error, fields: {}, request_id: "" }, 502),
+  } : undefined;
+  const [head, reloadHead] = useApi<MigrationHead>(`${base}/migration-head`, initialHead);
+  const [draft, setDraft] = useState<MigrationDraft | null>(initial?.draft ?? null);
+  const [title, setTitle] = useState(initial?.draft?.title ?? "");
+  const [sql, setSQL] = useState(initial?.draft?.sql ?? "");
+  const [explainSQL, setExplainSQL] = useState(initial?.draft?.sql ?? "");
+  const [version, setVersion] = useState(initial?.draft?.expected_version ?? initial?.head?.version ?? 0);
+  const [run, setRun] = useState<MigrationRun | null>(initial?.run ?? null);
   const [failure, setFailure] = useState<unknown>(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -136,6 +154,7 @@ function Workbench({ db }: { db: DatabaseSummary }) {
   return (
     <section className="migrations">
       <h2>Migrasi: {db.name}</h2>
+      <p>{db.driver} · akses {canEdit ? "lihat dan edit" : "lihat"}</p>
       <a href={`/databases/${db.id}`}>Lihat schema dan data</a>
       {head.status === "success" && <p>Versi committed: {head.response.data.version}</p>}
       {head.status === "error" && <ErrorState error={head.error} />}

@@ -1,20 +1,23 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { EditorView } from "@codemirror/view";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { onUnauthorized, setCsrfToken } from "../../api/client";
+import type { ApiResponse, DatabaseSummary, MigrationRun } from "../../api/types";
 import { handlers } from "../../mocks/handlers";
 import { createMigrationHandlers } from "../../mocks/migrations";
-import { MigrationsPage } from "./MigrationsPage";
+import { MigrationsPage, type MigrationInitialState } from "./MigrationsPage";
 import draftFixture from "../../../../tests/fixtures/api/migrations_draft.json";
 import success from "../../../../tests/fixtures/api/migrations_run_succeeded.json";
 import unknown from "../../../../tests/fixtures/api/migrations_run_unknown.json";
 import conflict from "../../../../tests/fixtures/api/migrations_error_conflict.json";
 import databases from "../../../../tests/fixtures/api/databases_list.json";
 
-const db = databases.data[0];
+const db = databases.data[0] as DatabaseSummary;
+const succeededRun = success.data as MigrationRun;
 const base = `http://localhost/api/v1/databases/${db.id}`;
 const server = setupServer(...handlers);
 
@@ -32,6 +35,14 @@ function open() {
   return render(<MigrationsPage databaseId={db.id} />);
 }
 
+function initialState(overrides: Partial<MigrationInitialState> = {}): MigrationInitialState {
+  return {
+    database: db, drafts: { data: [draftFixture.data] }, history: { data: [succeededRun] },
+    head: { version: 1, last_run_id: success.data.id }, head_error: "",
+    draft: draftFixture.data, run: succeededRun, draft_offset: 0, history_offset: 0, ...overrides,
+  };
+}
+
 async function editSQL(value: string, selection?: { anchor: number; head: number }) {
   const textbox = await screen.findByRole("textbox", { name: "SQL migrasi" });
   const editor = EditorView.findFromDOM(textbox)!;
@@ -47,6 +58,49 @@ async function savedDraft() {
 }
 
 describe("migration editor", () => {
+  it("opens the server-selected draft and run without fetching the initial data again", async () => {
+    let reads = 0;
+    server.use(http.get("*", () => { reads++; return HttpResponse.error(); }));
+    render(<StrictMode><MigrationsPage databaseId={db.id} initial={initialState()} /></StrictMode>);
+    expect(screen.getByRole("textbox", { name: "Judul" })).toHaveValue(draftFixture.data.title);
+    expect(EditorView.findFromDOM(screen.getByRole("textbox", { name: "SQL migrasi" }))!.state.doc.toString()).toBe(draftFixture.data.sql);
+    expect(screen.getByRole("region", { name: "Detail eksekusi" })).toHaveTextContent("Status: Berhasil");
+    await act(async () => {});
+    expect(reads).toBe(0);
+  });
+
+  it("keeps the server history and selected SQL when the target head is unavailable", () => {
+    render(<MigrationsPage databaseId={db.id} initial={initialState({ head: null, head_error: "Riwayat tersimpan tetap tersedia." })} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Riwayat tersimpan tetap tersedia.");
+    expect(screen.getByRole("region", { name: "Detail eksekusi" })).toHaveTextContent("Status: Berhasil");
+    expect(screen.getByRole("textbox", { name: "Judul" })).toHaveValue(draftFixture.data.title);
+  });
+
+  it("continues pagination from the server-provided offset", async () => {
+    let offset = "";
+    server.use(http.get(`${base}/migration-runs`, ({ request }) => {
+      offset = new URL(request.url).searchParams.get("offset") ?? "";
+      return HttpResponse.json({ data: [], page: { limit: 50, offset: 100, has_more: false } });
+    }));
+    const history: ApiResponse<MigrationRun[]> = { data: [succeededRun], page: { limit: 50, offset: 50, has_more: true } };
+    render(<MigrationsPage databaseId={db.id} initial={initialState({ history, history_offset: 50 })} />);
+    await userEvent.click(screen.getByRole("button", { name: "Riwayat berikutnya" }));
+    expect(await screen.findByText("Belum ada eksekusi migrasi.")).toBeInTheDocument();
+    expect(offset).toBe("100");
+  });
+
+  it("shows server-provided history to viewers without reading drafts", async () => {
+    let reads = 0;
+    server.use(http.get("*", () => { reads++; return HttpResponse.error(); }));
+    const initial = initialState({ database: { ...db, effective_access: "view" }, drafts: null, draft: null });
+    render(<MigrationsPage databaseId={db.id} initial={initial} />);
+    expect(screen.getByText("Akses lihat hanya dapat membaca riwayat migrasi.")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "SQL migrasi" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Detail eksekusi" })).toHaveTextContent("Status: Berhasil");
+    await act(async () => {});
+    expect(reads).toBe(0);
+  });
+
   it("saves the current editor text and executes once on a double click", async () => {
     let saved: Record<string, unknown> | undefined;
     let calls = 0;

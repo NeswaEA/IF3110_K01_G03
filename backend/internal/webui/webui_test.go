@@ -158,6 +158,10 @@ type harness struct {
 }
 
 func (h harness) get(path string) (int, string) {
+	return h.getMigrations(path, newMigrationSource(h.t))
+}
+
+func (h harness) getMigrations(path string, source webui.MigrationSource) (int, string) {
 	h.t.Helper()
 	assets, err := webui.LoadAssets(writeManifest(h.t, manifest))
 	if err != nil {
@@ -179,7 +183,7 @@ func (h harness) get(path string) (int, string) {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { guarded++; next.ServeHTTP(w, r) })
 	}
 	mux := http.NewServeMux()
-	webui.RegisterRoutes(mux, webui.NewPages(renderer, fakeAccess{h.access}, principal, login, h.src, h.src, nil, nil), guard)
+	webui.RegisterRoutes(mux, webui.NewPages(renderer, fakeAccess{h.access}, principal, login, h.src, h.src, nil, nil).WithMigrations(source), guard)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 	if guarded != 1 {

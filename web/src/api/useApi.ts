@@ -11,13 +11,17 @@ export type Query<T> =
  * GETs path and re-fetches when path changes or reload() is called. A response
  * for an outdated path is dropped (the request is aborted).
  */
-export function useApi<T>(path: string | null): [Query<T>, () => void] {
-  const [state, setState] = useState<Query<T>>({ status: "loading" });
+export function useApi<T>(path: string | null, initial?: Query<T>): [Query<T>, () => void] {
+  const [state, setState] = useState<Query<T>>(initial ?? { status: "loading" });
   const [tick, setTick] = useState(0);
   const current = useRef<AbortController | null>(null);
+  const initialPath = useRef(path);
+  const seeded = useRef(initial !== undefined);
 
   useEffect(() => {
     if (path === null) return;
+    if (seeded.current && path === initialPath.current && tick === 0) return;
+    seeded.current = false;
     const ctl = new AbortController();
     current.current = ctl;
     setState({ status: "loading" });

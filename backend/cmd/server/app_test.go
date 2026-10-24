@@ -327,6 +327,24 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		t.Fatal("execute", w.Code, w.Body.String())
 	}
 	firstRun := run.Data.ID
+	pagePath := "/databases/" + databaseID + "/migrations"
+	for _, tc := range []struct {
+		who      loginState
+		query    string
+		status   int
+		contains string
+	}{
+		{edit, "?draft=" + draft.Data.ID + "&run=" + firstRun, 200, "CREATE TABLE migrated"},
+		{view, "?run=" + firstRun, 200, "Status: Berhasil"},
+		{view, "?draft=" + draft.Data.ID, 403, "Akses ditolak"},
+		{edit, "?run=90000000-0000-4000-8000-000000000099", 404, "Halaman tidak ditemukan"},
+		{edit, "?history_offset=-1", 400, "Permintaan tidak valid"},
+	} {
+		w := request("GET", pagePath+tc.query, "", tc.who.cookie, "")
+		if w.Code != tc.status || !strings.Contains(w.Body.String(), tc.contains) {
+			t.Fatal("server-rendered migration page", w.Code, w.Body.String())
+		}
+	}
 	if w := request("POST", base+"/migration-runs/"+firstRun+"/reconcile", `{}`, view.cookie, view.csrf); w.Code != 403 {
 		t.Fatal("view reconciled run", w.Code)
 	}

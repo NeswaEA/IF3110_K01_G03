@@ -33,14 +33,15 @@ type SchemaSource interface {
 // Pages serves the HTML pages. The guard (auth RequirePage when wired) runs
 // before every signed-in page; each handler still checks the same policy as the API.
 type Pages struct {
-	render    *Renderer
-	access    contracts.AccessChecker
-	principal PrincipalFunc
-	login     http.HandlerFunc
-	databases DatabaseSource
-	schemas   SchemaSource
-	users     UserSource
-	groups    GroupSource
+	render          *Renderer
+	access          contracts.AccessChecker
+	principal       PrincipalFunc
+	login           http.HandlerFunc
+	databases       DatabaseSource
+	schemas         SchemaSource
+	users           UserSource
+	groups          GroupSource
+	migrationSource MigrationSource
 }
 
 func NewPages(render *Renderer, access contracts.AccessChecker, principal PrincipalFunc, login http.HandlerFunc,
@@ -107,16 +108,4 @@ func (p *Pages) fail(w http.ResponseWriter, r *http.Request, user *PageUser, err
 	default:
 		p.render.Status(w, http.StatusInternalServerError, user)
 	}
-}
-
-// migrations needs only view access: history is readable by viewers, and the
-// widget enables editing from the database's effective access.
-func (p *Pages) migrations(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	user, ok := p.authorize(w, r, contracts.ViewDatabase, id)
-	if !ok {
-		return
-	}
-	p.render.Render(w, http.StatusOK, "migrations/index", Page{Title: "Migrasi", User: user, Active: "databases", Entry: "migrations",
-		Data: struct{ ID string }{id}})
 }

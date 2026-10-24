@@ -1,3 +1,60 @@
 {{define "content"}}
-<section data-widget="migrations" data-database-id="{{.Data.ID}}" aria-live="polite"></section>
+<section data-widget="migrations" data-database-id="{{.Data.ID}}" data-initial="{{.Data.Initial}}" aria-live="polite">
+<div class="migrations">
+<h2>Migrasi: {{.Data.Database.Name}}</h2>
+<p>{{.Data.Database.Driver}} · akses {{.Data.Database.Access}}</p>
+<a href="/databases/{{.Data.ID}}">Lihat schema dan data</a>
+{{with .Data.Head}}<p>Versi committed: {{.Version}}</p>{{end}}
+{{with .Data.HeadProblem}}<p role="alert">{{.}}</p>{{end}}
+{{if .Data.CanEdit}}
+<section aria-label="Daftar draft">
+<h2>Draft SQL</h2>
+<a href="{{.Data.NewDraftURL}}">Draft baru</a>
+{{if .Data.Drafts}}
+<ul>{{range .Data.Drafts}}<li><a href="{{.URL}}">{{.Title}}{{if .AppliedAt}} (diterapkan){{end}}</a></li>{{end}}</ul>
+{{else}}<p>Belum ada draft.</p>{{end}}
+<nav aria-label="Halaman draft" class="migration-actions">
+{{with .Data.DraftPrev}}<a href="{{.}}">Draft sebelumnya</a>{{end}}
+{{with .Data.DraftNext}}<a href="{{.}}">Draft berikutnya</a>{{end}}
+</nav>
+</section>
+<section id="migration-draft" aria-label="Draft terpilih">
+{{with .Data.Draft}}
+<h2>Draft revision {{.Revision}}</h2>
+<p>Judul: {{.Title}}</p>
+<p>Versi yang diharapkan: {{.ExpectedVersion}}</p>
+<pre>{{.SQL}}</pre>
+{{if .AppliedAt}}<p>Draft sudah diterapkan. Buat draft baru untuk perubahan berikutnya.</p>{{end}}
+{{else}}<h2>Draft baru</h2>{{end}}
+<noscript><p>Aktifkan JavaScript untuk menulis, menyimpan, menjalankan migrasi, atau meminta EXPLAIN.</p></noscript>
+</section>
+{{else}}<p>Akses lihat hanya dapat membaca riwayat migrasi.</p>{{end}}
+{{if not .Data.Database.Capabilities.TransactionalMigrations}}<p>Eksekusi belum tersedia. Admin perlu menguji koneksi dan menyiapkan ledger.</p>{{end}}
+<h2>Riwayat migrasi</h2>
+{{if .Data.Runs}}
+<div class="migration-table"><table>
+<thead><tr><th>Status</th><th>Versi percobaan</th><th>Versi committed</th><th>Pelaksana</th><th>Mulai</th><th>Detail</th></tr></thead>
+<tbody>{{range .Data.Runs}}<tr>
+<td>{{.Status}}</td><td>{{.CandidateVersion}}</td><td>{{with .Version}}{{.}}{{else}}belum committed{{end}}</td><td>{{.Actor.Username}}</td><td>{{.Started}}</td>
+<td><a href="{{.URL}}">Lihat SQL dan status</a></td>
+</tr>{{end}}</tbody>
+</table></div>
+{{else}}<p>Belum ada eksekusi migrasi.</p>{{end}}
+<nav aria-label="Halaman riwayat" class="migration-actions">
+{{with .Data.RunPrev}}<a href="{{.}}">Riwayat sebelumnya</a>{{end}}
+{{with .Data.RunNext}}<a href="{{.}}">Riwayat berikutnya</a>{{end}}
+</nav>
+{{with .Data.Run}}
+<section id="migration-run" aria-label="Detail eksekusi">
+<h2>Detail eksekusi</h2>
+<p>Status: {{.Status}}</p>
+<p>Versi percobaan: {{.CandidateVersion}}; versi committed: {{with .Version}}{{.}}{{else}}belum committed{{end}}</p>
+<p>Pelaksana: {{.Actor.Username}}; mulai: {{.Started}}; selesai: {{.Finished}}</p>
+{{with .Error}}<p role="alert">{{.Code}}: {{.Message}}</p>{{end}}
+<pre>{{.SQL}}</pre>
+{{if or (eq .MigrationRun.Status "running") (eq .MigrationRun.Status "outcome_unknown")}}<p>Hasil belum definitif. SQL tidak dijalankan ulang saat memeriksa status.</p>{{end}}
+</section>
+{{end}}
+</div>
+</section>
 {{end}}
