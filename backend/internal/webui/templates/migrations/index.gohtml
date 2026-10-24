@@ -4,6 +4,7 @@
 <h2>Migrasi: {{.Data.Database.Name}}</h2>
 <p>{{.Data.Database.Driver}} · akses {{.Data.Database.Access}}</p>
 <a href="/databases/{{.Data.ID}}">Lihat schema dan data</a>
+{{if and .Data.CanEdit .Data.Database.Capabilities.SchemaDiff}}<a href="/databases/{{.Data.ID}}/schema-diff">Bandingkan schema</a>{{end}}
 {{with .Data.Head}}<p>Versi committed: {{.Version}}</p>{{end}}
 {{with .Data.HeadProblem}}<p role="alert">{{.}}</p>{{end}}
 {{if .Data.CanEdit}}

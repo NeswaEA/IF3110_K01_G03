@@ -1,0 +1,12 @@
+{
+  "data": {
+    "driver": "postgres",
+    "expected_version": 0,
+    "source_fingerprint": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "desired_fingerprint": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "changes": [],
+    "candidate_sql": "",
+    "warnings": [],
+    "executable": true
+  }
+}

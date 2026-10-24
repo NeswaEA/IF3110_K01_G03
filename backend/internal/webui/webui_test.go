@@ -24,7 +24,8 @@ const manifest = `{
   "_shared.js": {"file": "assets/shared-1.js", "css": ["assets/shared-1.css"]},
   "src/pages/layout.ts": {"file": "assets/layout-1.js", "name": "layout", "isEntry": true, "imports": ["_shared.js"]},
   "src/pages/connections.ts": {"file": "assets/connections-1.js", "name": "connections", "isEntry": true, "imports": ["_shared.js"], "css": ["assets/connections-1.css"]},
-  "src/pages/migrations.ts": {"file": "assets/migrations-1.js", "name": "migrations", "isEntry": true}
+  "src/pages/migrations.ts": {"file": "assets/migrations-1.js", "name": "migrations", "isEntry": true},
+  "src/pages/schemadiff.tsx": {"file": "assets/schemadiff-1.js", "name": "schemadiff", "isEntry": true}
 }`
 
 func writeManifest(t *testing.T, body string) string {

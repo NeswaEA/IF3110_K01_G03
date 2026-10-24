@@ -1,0 +1,12 @@
+{
+  "data": {
+    "driver": "sqlite",
+    "expected_version": 0,
+    "source_fingerprint": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "desired_fingerprint": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "changes": [{ "kind": "alter_column", "object": "main.items.price", "destructive": true }],
+    "candidate_sql": "",
+    "warnings": ["Perubahan tipe kolom main.items.price memerlukan migrasi manual tanpa rebuild otomatis."],
+    "executable": false
+  }
+}

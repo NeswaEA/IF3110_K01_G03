@@ -67,6 +67,17 @@ Untuk mengatur akses database, buka Administrasi → Grup → Hak akses pada gru
 
 Sebelum migrasi dapat dijalankan pada sebuah koneksi, admin harus **menguji koneksi itu terlebih dahulu** di halaman Koneksi. Sampai diuji, halaman migrasi menjawab `TARGET_NOT_READY`.
 
+### Perbandingan schema
+
+Pengguna dengan akses edit dapat membuka **Bandingkan schema** dari halaman database atau migrasi, atau langsung ke `/databases/{id}/schema-diff`. Halaman dirender Go dan dapat dibuka lewat URL/refresh biasa; JavaScript menangani interaksi di halaman tersebut tanpa router klien.
+
+1. Admin menguji koneksi source terlebih dahulu. Pembanding cukup memiliki akses view dan tidak memerlukan ledger.
+2. Pilih database pembanding sejenis dan schema, lalu tekan **Bandingkan schema**.
+3. Tinjau daftar perubahan, penanda destruktif, dan warning. Kandidat yang executable dapat diedit dengan editor SQL yang sama seperti migrasi manual.
+4. Isi judul dan tekan **Simpan sebagai draft**. Aplikasi membuka draft terpilih di halaman migrasi; pengguna menjalankannya sendiri lewat runner yang sama.
+
+Schema identik atau perubahan unsupported tidak menawarkan penyimpanan kandidat kosong/parsial. Mengubah pilihan menonaktifkan penyimpanan hasil lama; generate ulang meminta konfirmasi bila SQL telah diedit. Error, konflik, atau sesi kedaluwarsa mempertahankan input. Login ulang dapat dilakukan di tab baru, lalu pengguna mengirim kembali secara manual.
+
 ### API schema diff
 
 `POST /api/v1/databases/{id}/schema-diff` memerlukan session, CSRF, izin edit pada source, dan view pada pembanding. Source harus sudah diuji admin; pembanding tidak memerlukan ledger. Engine kedua database harus sama. Gunakan schema `public` untuk demo PostgreSQL atau `main` untuk SQLite.
@@ -86,7 +97,7 @@ const result = await fetch('/api/v1/databases/30000000-0000-4000-8000-0000000000
 console.log(result);
 ```
 
-Respons berisi `changes`, `warnings`, `candidate_sql`, `executable`, `expected_version`, serta fingerprint source/pembanding. Diff tidak menjalankan kandidat atau membuat draft. Kandidat non-executable selalu kosong; SQL yang akan dijalankan tetap perlu ditinjau dan disimpan sebagai draft. Halaman review diff belum tersedia pada tahap API ini.
+Respons berisi `changes`, `warnings`, `candidate_sql`, `executable`, `expected_version`, serta fingerprint source/pembanding. Diff tidak menjalankan kandidat atau membuat draft. Kandidat non-executable selalu kosong; SQL yang akan dijalankan tetap perlu ditinjau dan disimpan sebagai draft. Draft dari halaman diff menyimpan SQL hasil edit, `expected_version`, dan `source_fingerprint` dari hasil perbandingan, sehingga runner dapat menolak target yang berubah setelahnya.
 
 `DIFF_TIMEOUT` membatasi perbandingan (default `30s`). Capability `schema_diff` aktif untuk SQLite; PostgreSQL memerlukan probe Atlas Community v1.3.0 yang berhasil saat startup. `ATLAS_BIN` kosong memakai `atlas` dari PATH; image aplikasi sudah menyertakan binary tersebut. Atlas yang hilang menonaktifkan capability PostgreSQL dan menghasilkan `DIFF_UNAVAILABLE` bila endpoint dipanggil, sementara migrasi manual tetap tersedia. Rincian ada di [petunjuk Atlas](infra/atlas/README.md).
 
@@ -129,10 +140,10 @@ Integration test backend memakai PostgreSQL asli dari `scripts/dev-up.sh` dan UR
 GitHub Actions menjalankan pemeriksaan pada setiap push, pull request, dan pemicu manual:
 
 - **Backend:** format Go, vet, build ketiga command, dan seluruh test dengan race detector.
-- **Frontend:** `npm ci`, typecheck, test, build, serta uji loader fixture SQLite dengan Node.js 24.22.0.
+- **Frontend:** `npm ci`, typecheck, test, build, serta uji loader fixture SQLite dengan Node.js 24.22.0. Test halaman diff mencakup edit kandidat, perubahan pilihan, klik ganda, hasil kosong/unsupported, dan pemeliharaan input saat gagal atau sesi berakhir.
 - **Metadata migrations:** CLI migrasi dijalankan dua kali pada PostgreSQL kosong, lalu test replay, checksum, rollback, concurrency, dan constraint.
 - **Bonus SQLite:** adapter, registry, runner, EXPLAIN, dan integrasi server pada job tersendiri. Beberapa test juga memeriksa PostgreSQL agar perilaku kedua engine tetap konsisten.
-- **Bonus Atlas:** membangun Community v1.3.0 dari commit rilis, menyiapkan database pembanding, lalu menguji config, generator, runner, dan endpoint PostgreSQL dengan session/CSRF nyata. Halaman diff dan E2E browser diuji pada tahap integrasi UI berikutnya.
+- **Bonus Atlas:** membangun Community v1.3.0 dari commit rilis, menyiapkan database pembanding, lalu menguji config, generator, runner, dan endpoint PostgreSQL dengan session/CSRF nyata. E2E browser lengkap masih mengikuti tahap integrasi berikutnya.
 
 Backend CI juga memeriksa bootstrap PostgreSQL desired dan pengulangan seed yang mempertahankan data/ledger. Uji loader SQLite dapat dijalankan dengan `node --test scripts/seed-sqlite.test.mjs` pada Node.js 24.22.0. `scripts/test-postgres-fixture.sh <container>` hanya untuk container test baru tanpa `demo_desired`, dengan folder fixture PostgreSQL terpasang pada `/fixtures`.
 

@@ -2,6 +2,7 @@
 {{with .Data}}
 <p>Engine {{.DB.Driver}}, akses {{.DB.Access}}{{with .Fingerprint}}; fingerprint <code>{{.}}</code>{{end}}</p>
 <p><a href="/databases/{{.DB.ID}}/migrations">Migrasi dan riwayat</a></p>
+{{if and (eq .DB.EffectiveAccess "edit") .DB.Capabilities.SchemaDiff}}<p><a href="/databases/{{.DB.ID}}/schema-diff">Bandingkan schema</a></p>{{end}}
 {{if .SchemaProblem}}
 <div role="alert"><strong>Schema tidak dapat dibaca</strong><p>{{.SchemaProblem}}</p></div>
 {{else}}

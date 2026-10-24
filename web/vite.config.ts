@@ -17,6 +17,7 @@ export default defineConfig({
         grants: "src/pages/grants.ts",
         connections: "src/pages/connections.tsx",
         migrations: "src/pages/migrations.tsx",
+        schemadiff: "src/pages/schemadiff.tsx",
       },
     },
   },

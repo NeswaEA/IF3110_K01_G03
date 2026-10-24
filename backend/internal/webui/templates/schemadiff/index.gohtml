@@ -1,0 +1,25 @@
+{{define "content"}}
+<section data-widget="schema-diff" data-initial="{{.Data.Initial}}">
+<div class="schema-diff">
+<h2>Perbandingan schema: {{.Data.Database.Name}}</h2>
+<p>Source {{.Data.Database.Driver}}. Bandingkan dengan schema yang diinginkan, tinjau kandidat SQL, lalu simpan sebagai draft.</p>
+<nav class="migration-actions"><a href="/databases/{{.Data.Database.ID}}">Lihat schema dan data</a><a href="/databases/{{.Data.Database.ID}}/migrations">Migrasi dan riwayat</a></nav>
+{{with .Data.Problem}}<p role="alert">{{.}}</p>{{end}}
+{{if not .Data.Comparisons}}<p>Belum ada database pembanding sejenis yang dapat Anda lihat.</p>{{end}}
+{{if and (not .Data.Problem) (not .Data.Schemas)}}<p>Tidak ada schema pengguna yang dapat dibandingkan.</p>{{end}}
+<form method="get" action="/databases/{{.Data.Database.ID}}/schema-diff">
+<label for="diff-desired">Database pembanding</label>
+<select id="diff-desired" name="desired_database_id">
+{{range .Data.Comparisons}}<option value="{{.ID}}"{{if eq .ID $.Data.DesiredDatabaseID}} selected{{end}}>{{.Name}} ({{.Driver}})</option>{{end}}
+</select>
+<label for="diff-schema">Schema</label>
+<select id="diff-schema" name="schema">
+{{range .Data.Schemas}}<option value="{{.}}"{{if eq . $.Data.Schema}} selected{{end}}>{{.}}</option>{{end}}
+</select>
+<button type="button" disabled>Bandingkan schema</button>
+</form>
+<p>Perbandingan tidak mengubah target atau membuat draft secara otomatis.</p>
+<noscript><p>Aktifkan JavaScript untuk membuat perbandingan, mengedit kandidat SQL, dan menyimpannya sebagai draft.</p></noscript>
+</div>
+</section>
+{{end}}

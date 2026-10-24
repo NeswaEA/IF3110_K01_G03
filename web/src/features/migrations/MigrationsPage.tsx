@@ -156,6 +156,7 @@ function Workbench({ db, initial }: { db: DatabaseSummary; initial?: MigrationIn
       <h2>Migrasi: {db.name}</h2>
       <p>{db.driver} · akses {canEdit ? "lihat dan edit" : "lihat"}</p>
       <a href={`/databases/${db.id}`}>Lihat schema dan data</a>
+      {canEdit && db.capabilities.schema_diff && <p><a href={`/databases/${db.id}/schema-diff`}>Bandingkan schema</a></p>}
       {head.status === "success" && <p>Versi committed: {head.response.data.version}</p>}
       {head.status === "error" && <ErrorState error={head.error} />}
       {notice && <p role="status">{notice}</p>}

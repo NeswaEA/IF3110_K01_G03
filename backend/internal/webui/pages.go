@@ -58,6 +58,7 @@ func RegisterRoutes(mux *http.ServeMux, p *Pages, guard func(http.Handler) http.
 	mux.Handle("GET /databases", page(p.databaseList))
 	mux.Handle("GET /databases/{id}", page(p.databaseDetail))
 	mux.Handle("GET /databases/{id}/migrations", page(p.migrations))
+	mux.Handle("GET /databases/{id}/schema-diff", page(p.schemaDiff))
 	mux.Handle("GET /admin/connections", page(p.connectionsPage))
 	mux.Handle("GET /admin", page(p.adminPage))
 	mux.Handle("GET /admin/users", page(p.usersPage))

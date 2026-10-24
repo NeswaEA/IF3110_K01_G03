@@ -1,0 +1,12 @@
+{
+  "data": {
+    "driver": "postgres",
+    "expected_version": 0,
+    "source_fingerprint": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "desired_fingerprint": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "changes": [{ "kind": "add_column", "object": "public.items.status", "destructive": false }],
+    "candidate_sql": "ALTER TABLE public.items ADD COLUMN status text;\n",
+    "warnings": [],
+    "executable": true
+  }
+}

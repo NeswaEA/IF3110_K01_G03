@@ -26,7 +26,8 @@ func testWeb(t *testing.T) string {
 		`"src/pages/members.ts": {"file": "assets/members.js", "name": "members", "isEntry": true},` +
 		`"src/pages/grants.ts": {"file": "assets/grants.js", "name": "grants", "isEntry": true},` +
 		`"src/pages/connections.ts": {"file": "assets/connections.js", "name": "connections", "isEntry": true},` +
-		`"src/pages/migrations.ts": {"file": "assets/migrations.js", "name": "migrations", "isEntry": true}}`
+		`"src/pages/migrations.ts": {"file": "assets/migrations.js", "name": "migrations", "isEntry": true},` +
+		`"src/pages/schemadiff.tsx": {"file": "assets/schemadiff.js", "name": "schemadiff", "isEntry": true}}`
 	for name, body := range map[string]string{".vite/manifest.json": manifest, "assets/app.js": "console.log('loaded')", ".secret": "private"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0600); err != nil {
 			t.Fatal(err)
