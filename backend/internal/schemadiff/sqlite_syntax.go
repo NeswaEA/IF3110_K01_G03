@@ -14,6 +14,10 @@ type sqliteToken struct {
 }
 
 func sqliteTokens(sql string) ([]sqliteToken, bool) {
+	return sqliteTokensWithComments(sql, false)
+}
+
+func sqliteTokensWithComments(sql string, allowComments bool) ([]sqliteToken, bool) {
 	if !utf8.ValidString(sql) || strings.ContainsRune(sql, 0) {
 		return nil, false
 	}
@@ -23,8 +27,27 @@ func sqliteTokens(sql string) ([]sqliteToken, bool) {
 			i++
 			continue
 		}
-		if strings.HasPrefix(sql[i:], "--") || strings.HasPrefix(sql[i:], "/*") {
-			return nil, false
+		if strings.HasPrefix(sql[i:], "--") {
+			if !allowComments {
+				return nil, false
+			}
+			end := strings.IndexByte(sql[i:], '\n')
+			if end < 0 {
+				break
+			}
+			i += end + 1
+			continue
+		}
+		if strings.HasPrefix(sql[i:], "/*") {
+			if !allowComments {
+				return nil, false
+			}
+			end := strings.Index(sql[i+2:], "*/")
+			if end < 0 {
+				return nil, false
+			}
+			i += end + 4
+			continue
 		}
 		start, quote := i, sql[i]
 		if quote == '\'' || quote == '"' || quote == '`' || quote == '[' {

@@ -17,6 +17,7 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/connections"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/migrations"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/schemadiff"
 	metadata "github.com/NeswaEA/IF3110_K01_G03/backend/migrations"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -75,11 +76,27 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		t.Fatal(err)
 	}
 	const databaseID = "30000000-0000-4000-8000-000000000001"
+	const desiredID = "30000000-0000-4000-8000-000000000003"
 	encrypted, err := cipher.Seal([]byte(`{"file":"demo.sqlite"}`), []byte(databaseID))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`INSERT INTO database_connections(id,name,driver,config_encrypted) VALUES($1,'demo','sqlite',$2)`, databaseID, encrypted); err != nil {
+		t.Fatal(err)
+	}
+	desired, err := sql.Open("sqlite3", filepath.Join(dir, "desired.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer desired.Close()
+	if _, err := desired.Exec(`CREATE TABLE items(id INTEGER PRIMARY KEY,name TEXT,status TEXT NOT NULL DEFAULT 'active')`); err != nil {
+		t.Fatal(err)
+	}
+	encrypted, err = cipher.Seal([]byte(`{"file":"desired.sqlite"}`), []byte(desiredID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO database_connections(id,name,driver,config_encrypted) VALUES($1,'desired','sqlite',$2)`, desiredID, encrypted); err != nil {
 		t.Fatal(err)
 	}
 	hash, err := (auth.PasswordHasher{}).Hash(t.Context(), "example password 123")
@@ -106,10 +123,13 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 			if _, err := db.Exec(`INSERT INTO group_database_access(group_id,database_id,level) VALUES($1,$2,$3)`, group, databaseID, level); err != nil {
 				t.Fatal(err)
 			}
+			if _, err := db.Exec(`INSERT INTO group_database_access(group_id,database_id,level) VALUES($1,$2,'view')`, group, desiredID); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	cfg := platform.Config{AppEnv: "test", AppOrigin: "http://localhost:8080", MetadataDatabaseURL: dsn, SessionIdleTimeout: 30 * time.Minute, SessionAbsoluteTimeout: 8 * time.Hour, SessionRotationInterval: 15 * time.Minute, SessionGracePeriod: 30 * time.Second}
-	h, close, err := newApp(t.Context(), db, cfg, runtimeConfig{EncryptionKey: key, SQLiteDir: dir, WebDir: testWeb(t), ConnectTimeout: time.Second, QueryTimeout: time.Second})
+	h, close, err := newApp(t.Context(), db, cfg, runtimeConfig{EncryptionKey: key, SQLiteDir: dir, WebDir: testWeb(t), AtlasBin: filepath.Join(dir, "absent-atlas"), ConnectTimeout: time.Second, QueryTimeout: time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,6 +199,19 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 	view := login("viewer")
 	edit := login("editor")
 	base := "/api/v1/databases/" + databaseID
+	diffBody := `{"desired_database_id":"` + desiredID + `","schema":"main"}`
+	for _, tc := range []struct {
+		who    loginState
+		status int
+		code   string
+	}{
+		{loginState{}, 401, "UNAUTHENTICATED"}, {loginState{edit.cookie, ""}, 403, "CSRF_REJECTED"}, {view, 403, "FORBIDDEN"}, {admin, 404, "NOT_FOUND"}, {edit, 503, "TARGET_NOT_READY"},
+	} {
+		w := request("POST", base+"/schema-diff", diffBody, tc.who.cookie, tc.who.csrf)
+		if w.Code != tc.status || !strings.Contains(w.Body.String(), tc.code) {
+			t.Fatal("schema diff middleware/readiness", w.Code, w.Body.String())
+		}
+	}
 	for _, tc := range []struct {
 		method, path, body string
 		who                loginState
@@ -289,8 +322,26 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		t.Fatal("anonymous page was not sent to login", w.Header().Get("Location"))
 	}
 	w := request("GET", "/api/v1/databases", "", edit.cookie, "")
-	if !strings.Contains(w.Body.String(), `"transactional_migrations":true`) || !strings.Contains(w.Body.String(), `"schema_diff":false`) {
+	if !strings.Contains(w.Body.String(), `"transactional_migrations":true`) || !strings.Contains(w.Body.String(), `"schema_diff":true`) {
 		t.Fatal("unavailable capabilities advertised")
+	}
+	w = request("POST", base+"/schema-diff", diffBody, edit.cookie, edit.csrf)
+	var diff struct {
+		Data schemadiff.DiffResult `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &diff); err != nil || w.Code != 200 || !diff.Data.Executable || diff.Data.CandidateSQL == "" || diff.Data.ExpectedVersion != 0 {
+		t.Fatal("schema diff", w.Code, w.Body.String(), err)
+	}
+	var unexpected int
+	if err := target.QueryRow(`SELECT count(*) FROM pragma_table_info('items') WHERE name='status'`).Scan(&unexpected); err != nil || unexpected != 0 {
+		t.Fatal("schema diff applied candidate", err)
+	}
+	if err := db.QueryRow(`SELECT (SELECT count(*) FROM migration_runs)+(SELECT count(*) FROM migration_drafts)`).Scan(&unexpected); err != nil || unexpected != 0 {
+		t.Fatal("schema diff created run or draft", err)
+	}
+	w = request("POST", base+"/schema-diff", `{"desired_database_id":"90000000-0000-4000-8000-000000000099","schema":"main"}`, edit.cookie, edit.csrf)
+	if w.Code != 404 {
+		t.Fatal("unauthorized desired database", w.Code, w.Body.String())
 	}
 	draftBody := `{"title":"HTTP migration","sql":"CREATE TABLE migrated(id INTEGER PRIMARY KEY); INSERT INTO migrated VALUES(1);","expected_version":0}`
 	for _, denied := range []struct {

@@ -1,6 +1,7 @@
 package schemadiff
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
@@ -55,5 +56,16 @@ func TestSQLiteNativeRejectsInvalidReferencesAndInjectedDefinitions(t *testing.T
 		if sql, err := sqliteCreateTable(child, map[string]database.Table{"parent": parent, "child": child}); err == nil {
 			t.Fatal("unsafe declaration rendered", sql)
 		}
+	}
+}
+
+func TestSQLiteCatalogCommentsDoNotChangeTableFeatures(t *testing.T) {
+	plain := `CREATE TABLE items(id INTEGER, label TEXT DEFAULT '-- GENERATED AS /* literal */')`
+	commented := "CREATE TABLE /* VIRTUAL GENERATED */ items(id INTEGER, -- AS (id+1)\n label TEXT DEFAULT '-- GENERATED AS /* literal */') -- STRICT"
+	if sqliteSpecialTable(commented) || !reflect.DeepEqual(sqliteSignature(plain), sqliteSignature(commented)) {
+		t.Fatal("catalog comments were treated as table features")
+	}
+	if !sqliteSpecialTable("CREATE TABLE items(id INTEGER, /* comment */ label INTEGER AS(id+1))") {
+		t.Fatal("comment hid generated column")
 	}
 }

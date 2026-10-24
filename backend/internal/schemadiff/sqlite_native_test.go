@@ -3,6 +3,8 @@ package schemadiff
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -221,5 +223,39 @@ func TestSQLiteNativeDetectsStaleSnapshotsAndReleasesLeases(t *testing.T) {
 	_, err = g.Generate(ctx, Comparison{Source: snap, Desired: snap, Schema: "main"})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
+	}
+}
+
+func TestSQLiteNativeDemoFixtures(t *testing.T) {
+	dir := filepath.Join("..", "..", "..", "tests", "fixtures", "sqlite")
+	base, err := os.ReadFile(filepath.Join(dir, "demo.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	changes, err := os.ReadFile(filepath.Join(dir, "desired.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, source, desired := nativeDiff(t, string(base), string(base)+"\n"+string(changes))
+	if !result.Executable || result.CandidateSQL == "" {
+		t.Fatal("demo diff unavailable", result)
+	}
+	if err := applyNative(t, source, result.CandidateSQL); err != nil {
+		t.Fatal(err)
+	}
+	actual, err := (sqliteadapter.Inspector{}).Inspect(t.Context(), source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := (sqliteadapter.Inspector{}).Inspect(t.Context(), desired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actual.Fingerprint != want.Fingerprint {
+		t.Fatal("demo candidate did not reach desired")
+	}
+	var count int
+	if err := source.DB.QueryRow(`SELECT count(*) FROM items`).Scan(&count); err != nil || count != 3 {
+		t.Fatal("demo candidate lost data", err)
 	}
 }

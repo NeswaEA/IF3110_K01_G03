@@ -19,6 +19,7 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/explain"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/migrations"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/schemadiff"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/viewer"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/webui"
 )
@@ -30,10 +31,12 @@ type runtimeConfig struct {
 	ConnectTimeout   time.Duration
 	QueryTimeout     time.Duration
 	MigrationTimeout time.Duration
+	DiffTimeout      time.Duration
+	AtlasBin         string
 }
 
 func loadRuntimeConfig() (runtimeConfig, error) {
-	cfg := runtimeConfig{EncryptionKey: os.Getenv("CONNECTION_ENCRYPTION_KEY"), SQLiteDir: os.Getenv("SQLITE_TARGET_DIR"), WebDir: os.Getenv("WEB_DIST_DIR"), ConnectTimeout: 5 * time.Second, QueryTimeout: 10 * time.Second, MigrationTimeout: 30 * time.Second}
+	cfg := runtimeConfig{EncryptionKey: os.Getenv("CONNECTION_ENCRYPTION_KEY"), SQLiteDir: os.Getenv("SQLITE_TARGET_DIR"), WebDir: os.Getenv("WEB_DIST_DIR"), AtlasBin: os.Getenv("ATLAS_BIN"), ConnectTimeout: 5 * time.Second, QueryTimeout: 10 * time.Second, MigrationTimeout: 30 * time.Second, DiffTimeout: 30 * time.Second}
 	if !filepath.IsAbs(cfg.SQLiteDir) {
 		return runtimeConfig{}, errors.New("SQLITE_TARGET_DIR must be an absolute directory")
 	}
@@ -47,7 +50,7 @@ func loadRuntimeConfig() (runtimeConfig, error) {
 	for _, setting := range []struct {
 		name  string
 		value *time.Duration
-	}{{"TARGET_CONNECT_TIMEOUT", &cfg.ConnectTimeout}, {"TARGET_QUERY_TIMEOUT", &cfg.QueryTimeout}, {"MIGRATION_TIMEOUT", &cfg.MigrationTimeout}} {
+	}{{"TARGET_CONNECT_TIMEOUT", &cfg.ConnectTimeout}, {"TARGET_QUERY_TIMEOUT", &cfg.QueryTimeout}, {"MIGRATION_TIMEOUT", &cfg.MigrationTimeout}, {"DIFF_TIMEOUT", &cfg.DiffTimeout}} {
 		if raw := os.Getenv(setting.name); raw != "" {
 			value, err := time.ParseDuration(raw)
 			if err != nil || value <= 0 {
@@ -92,9 +95,10 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	cleanup := func() { registry.Close(); closeFrontend() }
 	policy := access.NewPolicy(db)
 	lifecycle := access.NewDatabaseAccessLifecycle(sessions)
+	generators, diffFeatures := diffGenerators(ctx, registry, runtime)
 	connectionService := connections.NewService(db, cipher, registry, migrations.LedgerInitializer{}, lifecycle, migrations.NewStore(db), connections.ServiceOptions{
 		Policy: connections.Policy{AllowInsecureSSL: cfg.AppEnv != "production"}, SQLiteDir: runtime.SQLiteDir, MetadataIdentity: identity, QueryTimeout: runtime.QueryTimeout,
-		Features: connections.Features{Runner: map[database.Driver]bool{database.Postgres: true, database.SQLite: true}, Explain: map[database.Driver]bool{database.Postgres: true, database.SQLite: true}},
+		Features: connections.Features{Runner: map[database.Driver]bool{database.Postgres: true, database.SQLite: true}, Diff: diffFeatures, Explain: map[database.Driver]bool{database.Postgres: true, database.SQLite: true}},
 	})
 	inspector := database.DispatchInspector{ByDriver: map[database.Driver]database.Inspector{database.Postgres: postgres.Inspector{}, database.SQLite: sqlite.Inspector{}}}
 	migrationService := migrations.NewService(db, registry, inspector, policy, platform.SystemClock{}, migrations.Options{Timeout: runtime.MigrationTimeout})
@@ -102,6 +106,10 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 		cleanup()
 		return nil, nil, err
 	}
+	diffService := schemadiff.NewService(registry, inspector, policy, func(ctx context.Context, p contracts.Principal, id string) (int64, error) {
+		head, err := migrationService.Head(ctx, p, id)
+		return head.Version, err
+	}, schemadiff.Options{Timeout: runtime.DiffTimeout, Generators: generators})
 	viewService := viewer.NewService(registry, inspector, map[database.Driver]viewer.TableReader{database.Postgres: postgres.Reader{}, database.SQLite: sqlite.Reader{}}, runtime.QueryTimeout)
 	explainService := explain.NewService(registry, registry, map[database.Driver]explain.Planner{database.Postgres: postgres.Planner{}, database.SQLite: sqlite.Planner{}}, runtime.QueryTimeout)
 	protected := http.NewServeMux()
@@ -113,6 +121,7 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	viewer.RegisterRoutes(protected, viewer.NewHandler(viewService, policy, auth.PrincipalFromContext))
 	explain.RegisterRoutes(protected, explain.NewHandler(explainService, policy, auth.PrincipalFromContext))
 	migrations.RegisterRoutes(protected, migrations.NewHandler(migrationService, auth.PrincipalFromContext))
+	schemadiff.RegisterRoutes(protected, schemadiff.NewHandler(diffService, auth.PrincipalFromContext))
 	protected.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, &contracts.DomainError{Code: "NOT_FOUND", Message: "Endpoint tidak ditemukan."})
 	})

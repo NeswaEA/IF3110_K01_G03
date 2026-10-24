@@ -225,9 +225,25 @@ func TestAtlasPostgresCandidateIntegration(t *testing.T) {
 				t.Fatal("generated DDL failed through runner", run.Status, err)
 			}
 			after, err := (postgres.Inspector{}).Inspect(t.Context(), source)
-			if err != nil || after.Fingerprint != beforeDesired.Fingerprint {
+			if err != nil || atlasSchemaFingerprint(t, after, schema) != atlasSchemaFingerprint(t, beforeDesired, schema) {
 				t.Fatal("committed candidate did not reach desired schema", err)
 			}
 		})
 	}
+}
+
+func atlasSchemaFingerprint(t *testing.T, snap database.SchemaSnapshot, name string) string {
+	t.Helper()
+	for _, schema := range snap.Schemas {
+		if schema.Name == name {
+			snap.Schemas = []database.Schema{schema}
+			value, err := database.Fingerprint(snap)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return value
+		}
+	}
+	t.Fatal("selected schema missing from snapshot")
+	return ""
 }

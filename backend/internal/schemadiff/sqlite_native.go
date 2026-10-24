@@ -146,7 +146,7 @@ func sqliteUnsupportedObjects(before, after map[string]sqliteObject, changes []D
 }
 
 func sqliteSignature(sql string) []sqliteToken {
-	tokens, ok := sqliteTokens(sql)
+	tokens, ok := sqliteTokensWithComments(sql, true)
 	if !ok {
 		return []sqliteToken{{value: sql, quoted: true}}
 	}
@@ -154,7 +154,7 @@ func sqliteSignature(sql string) []sqliteToken {
 }
 
 func sqliteSpecialTable(sql string) bool {
-	tokens, ok := sqliteTokens(sql)
+	tokens, ok := sqliteTokensWithComments(sql, true)
 	if !ok {
 		return sql != ""
 	}

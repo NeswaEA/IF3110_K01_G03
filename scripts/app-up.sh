@@ -3,7 +3,7 @@
 # Needs .env (scripts/init-env.sh) and the databases (scripts/dev-up.sh).
 # Usage: scripts/app-up.sh        build, migrate, start
 #        scripts/app-up.sh seed   also load the demo users, groups, grants and connections,
-#                                 and create demo.sqlite in the SQLite volume if it is missing
+#                                 and initialize empty demo target databases
 set -eu
 cd "$(dirname "$0")/.."
 [ -f .env ] || { echo "missing .env: run scripts/init-env.sh" >&2; exit 1; }
@@ -22,33 +22,13 @@ if [ "${1:-}" = seed ]; then
     tmp/connections.local.json > tmp/connections.compose.json
   compose run --rm --entrypoint /app/seed -v "$src/tmp:/fixtures:ro" \
     -e FIXTURE_CONNECTIONS_FILE=/fixtures/connections.compose.json backend fixtures
-  # An existing demo.sqlite keeps its data and migration history; delete the volume to start over.
-  # The file is built under a temporary name so a failed load never leaves a half-filled database,
-  # and handed to uid 10001, the user the app container runs as.
+  compose exec -T target-postgres mkdir -p /tmp/if3110-fixtures
+  compose cp tests/fixtures/postgres/. target-postgres:/tmp/if3110-fixtures/
+  compose exec -T target-postgres psql -U target_admin -d postgres -v ON_ERROR_STOP=1 \
+    -v fixture_dir=/tmp/if3110-fixtures < infra/postgres/seed-desired.sql
   MSYS_NO_PATHCONV=1 docker run --rm -v "${COMPOSE_PROJECT_NAME:-if3110}_sqlite-data:/data" \
-    -v "$src/tests/fixtures/sqlite:/fixture:ro" "$node_image" node -e '
-      const fs = require("node:fs");
-      const { DatabaseSync } = require("node:sqlite");
-      const file = "/data/demo.sqlite", tmp = "/data/.demo.sqlite.tmp";
-      if (fs.existsSync(file)) {
-        console.log("demo.sqlite already exists; kept as is");
-      } else {
-        fs.rmSync(tmp, { force: true });
-        try {
-          const db = new DatabaseSync(tmp);
-          db.exec("PRAGMA foreign_keys = ON");
-          db.exec(fs.readFileSync("/fixture/demo.sql", "utf8"));
-          db.close();
-        } catch (err) {
-          fs.rmSync(tmp, { force: true });
-          throw err;
-        }
-        fs.renameSync(tmp, file);
-        console.log("created demo.sqlite from tests/fixtures/sqlite/demo.sql");
-      }
-      fs.chownSync("/data", 10001, 10001);
-      fs.chownSync(file, 10001, 10001);
-    '
+    -v "$src/tests/fixtures/sqlite:/fixture:ro" -v "$src/scripts/seed-sqlite.mjs:/seed-sqlite.mjs:ro" \
+    "$node_image" node /seed-sqlite.mjs
 fi
 compose up -d --wait backend
 echo "app is running at http://localhost:8080"

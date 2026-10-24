@@ -57,13 +57,38 @@ Buka http://localhost:8080.
 
 `app-up.sh seed` membuat akun `fixture-admin` (admin platform), `editor`, `viewer`, dan `outsider`, beserta group, hak akses, dan empat koneksi demo. Password semua akun demo adalah nilai `FIXTURE_PASSWORD` di `.env` Anda.
 
-`seed` juga membuat database SQLite demo (`demo.sqlite`) dari `tests/fixtures/sqlite/demo.sql`, tetapi hanya bila file itu belum ada. Data dan riwayat migrasi di dalamnya tetap tersimpan saat `seed` dijalankan ulang. Untuk memulai dari awal, hapus volume dengan `sh scripts/dev-up.sh --profile app down -v`.
+`seed` mengisi file SQLite `demo.sqlite` serta pembanding `demo_desired.sqlite`, dan membuat/mengisi PostgreSQL `demo_desired`. Target yang sudah memiliki objek, termasuk ledger migrasi, dilewati. File SQLite yang sudah ada tetapi masih kosong dapat diisi dalam satu transaksi. Data dan riwayat migrasi tetap tersimpan saat `seed` dijalankan ulang.
+
+Kedua pembanding memakai schema dasar demo, lalu menambahkan `items.status`, index `items_status_idx`, dan tabel `item_tags`. Fixture dasarnya ada di `tests/fixtures/{postgres,sqlite}/demo.sql`; tambahan pembanding ada di `desired.sql` pada folder yang sama. Database lama yang sudah berisi pekerjaan tidak otomatis diubah agar mengikuti fixture baru.
 
 Menjalankan `seed` ulang mencabut session akun demo, jadi login kembali setelahnya.
 
 Untuk mengatur akses database, buka Administrasi → Grup → Hak akses pada grup yang dipilih. Pilih database dan level `view` atau `edit`; grant yang sudah ada dapat diubah atau dicabut. Penurunan `edit` ke `view` dan pencabutan grant mengakhiri seluruh sesi anggota grup, termasuk admin yang menjadi anggota.
 
 Sebelum migrasi dapat dijalankan pada sebuah koneksi, admin harus **menguji koneksi itu terlebih dahulu** di halaman Koneksi. Sampai diuji, halaman migrasi menjawab `TARGET_NOT_READY`.
+
+### API schema diff
+
+`POST /api/v1/databases/{id}/schema-diff` memerlukan session, CSRF, izin edit pada source, dan view pada pembanding. Source harus sudah diuji admin; pembanding tidak memerlukan ledger. Engine kedua database harus sama. Gunakan schema `public` untuk demo PostgreSQL atau `main` untuk SQLite.
+
+Setelah login sebagai `editor`, contoh berikut dapat dijalankan dari console browser pada aplikasi lokal:
+
+```js
+const { data: { csrf_token } } = await fetch('/api/v1/auth/csrf').then(r => r.json());
+const result = await fetch('/api/v1/databases/30000000-0000-4000-8000-000000000001/schema-diff', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf_token },
+  body: JSON.stringify({
+    desired_database_id: '30000000-0000-4000-8000-000000000003',
+    schema: 'public',
+  }),
+}).then(r => r.json());
+console.log(result);
+```
+
+Respons berisi `changes`, `warnings`, `candidate_sql`, `executable`, `expected_version`, serta fingerprint source/pembanding. Diff tidak menjalankan kandidat atau membuat draft. Kandidat non-executable selalu kosong; SQL yang akan dijalankan tetap perlu ditinjau dan disimpan sebagai draft. Halaman review diff belum tersedia pada tahap API ini.
+
+`DIFF_TIMEOUT` membatasi perbandingan (default `30s`). Capability `schema_diff` aktif untuk SQLite; PostgreSQL memerlukan probe Atlas Community v1.3.0 yang berhasil saat startup. `ATLAS_BIN` kosong memakai `atlas` dari PATH; image aplikasi sudah menyertakan binary tersebut. Atlas yang hilang menonaktifkan capability PostgreSQL dan menghasilkan `DIFF_UNAVAILABLE` bila endpoint dipanggil, sementara migrasi manual tetap tersedia. Rincian ada di [petunjuk Atlas](infra/atlas/README.md).
 
 Di dalam Compose, aplikasi mencapai PostgreSQL target sebagai `target-postgres` port `5432`. Gunakan alamat ini saat mendaftarkan koneksi baru lewat halaman Koneksi.
 
@@ -104,10 +129,12 @@ Integration test backend memakai PostgreSQL asli dari `scripts/dev-up.sh` dan UR
 GitHub Actions menjalankan pemeriksaan pada setiap push, pull request, dan pemicu manual:
 
 - **Backend:** format Go, vet, build ketiga command, dan seluruh test dengan race detector.
-- **Frontend:** `npm ci`, typecheck, test, dan build dengan Node.js 24.22.0.
+- **Frontend:** `npm ci`, typecheck, test, build, serta uji loader fixture SQLite dengan Node.js 24.22.0.
 - **Metadata migrations:** CLI migrasi dijalankan dua kali pada PostgreSQL kosong, lalu test replay, checksum, rollback, concurrency, dan constraint.
 - **Bonus SQLite:** adapter, registry, runner, EXPLAIN, dan integrasi server pada job tersendiri. Beberapa test juga memeriksa PostgreSQL agar perilaku kedua engine tetap konsisten.
-- **Bonus Atlas:** membangun Community v1.3.0 dari commit rilis, menyiapkan database pembanding, lalu menjalankan smoke konfigurasi/diff. Ini belum membuktikan fitur schema diff aplikasi selesai.
+- **Bonus Atlas:** membangun Community v1.3.0 dari commit rilis, menyiapkan database pembanding, lalu menguji config, generator, runner, dan endpoint PostgreSQL dengan session/CSRF nyata. Halaman diff dan E2E browser diuji pada tahap integrasi UI berikutnya.
+
+Backend CI juga memeriksa bootstrap PostgreSQL desired dan pengulangan seed yang mempertahankan data/ledger. Uji loader SQLite dapat dijalankan dengan `node --test scripts/seed-sqlite.test.mjs` pada Node.js 24.22.0. `scripts/test-postgres-fixture.sh <container>` hanya untuk container test baru tanpa `demo_desired`, dengan folder fixture PostgreSQL terpasang pada `/fixtures`.
 
 Setiap job backend memakai PostgreSQL 17.11 metadata dan target yang terpisah, dengan role target `platform_runner` dan `platform_editor`. Kredensial `ci_*` hanya untuk database sementara job; CI tidak membaca `.env` lokal atau membutuhkan secret repository. Hasil Go ditulis ke job summary; test case yang dilewati atau filter yang tidak menjalankan test membuat job gagal. Package tanpa test tetap diperbolehkan. Job bonus berjalan independen, sehingga kegagalan Atlas tidak membatalkan job wajib. Action dikunci dengan commit SHA dan image PostgreSQL dengan digest.
 

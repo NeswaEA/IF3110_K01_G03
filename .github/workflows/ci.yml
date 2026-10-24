@@ -79,6 +79,14 @@ jobs:
           go vet ./...
           go build -o "$RUNNER_TEMP/bin/" ./cmd/server ./cmd/migrate ./cmd/seed
           python3 -m unittest discover -s ../scripts/ci -p 'test_*.py'
+      - name: Verify PostgreSQL demo fixture initialization and preservation
+        if: matrix.suite == 'required'
+        env:
+          TARGET_CONTAINER: ${{ job.services.target.id }}
+        run: |
+          docker exec "$TARGET_CONTAINER" mkdir -p /fixtures
+          docker cp tests/fixtures/postgres/. "$TARGET_CONTAINER:/fixtures/"
+          sh scripts/test-postgres-fixture.sh "$TARGET_CONTAINER"
       - name: Check out Atlas Community source
         if: matrix.suite == 'atlas'
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -107,6 +115,7 @@ jobs:
           ALTER DEFAULT PRIVILEGES FOR ROLE platform_editor IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO platform_runner;
           SQL
           docker exec -i "$TARGET_CONTAINER" psql -U target_admin -d demo_desired -v ON_ERROR_STOP=1 < tests/fixtures/postgres/demo.sql
+          docker exec -i "$TARGET_CONTAINER" psql -U target_admin -d demo_desired -v ON_ERROR_STOP=1 < tests/fixtures/postgres/desired.sql
       - name: Run backend tests
         id: tests
         working-directory: backend
@@ -123,7 +132,7 @@ jobs:
               go test -json -race -count=1 -timeout=180s ./internal/database/sqlite ./internal/connections ./internal/migrations ./internal/explain ./cmd/server | tee "$RUNNER_TEMP/go-tests.jsonl"
               ;;
             atlas)
-              go test -json -p 1 -count=1 -timeout=180s -tags atlas -run '^TestAtlas(PostgresCandidateIntegration|ConfigSmoke)$' ./internal/connections ./internal/schemadiff | tee "$RUNNER_TEMP/go-tests.jsonl"
+              go test -json -p 1 -count=1 -timeout=180s -tags atlas -run '^TestAtlas(PostgresCandidateIntegration|ConfigSmoke)$|^TestPostgresSchemaDiffHTTP$' ./internal/connections ./internal/schemadiff ./cmd/server | tee "$RUNNER_TEMP/go-tests.jsonl"
               ;;
             *) exit 1 ;;
           esac
@@ -151,6 +160,7 @@ jobs:
           npm run lint
           npm test
           npm run build
+          node --test ../scripts/seed-sqlite.test.mjs
 
   metadata:
     name: Metadata migrations

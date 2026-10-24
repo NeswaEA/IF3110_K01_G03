@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func testWeb(t *testing.T) string {
@@ -83,9 +84,19 @@ func TestRuntimeConfig(t *testing.T) {
 	t.Setenv("WEB_DIST_DIR", "")
 	t.Setenv("TARGET_CONNECT_TIMEOUT", "")
 	t.Setenv("TARGET_QUERY_TIMEOUT", "")
+	t.Setenv("DIFF_TIMEOUT", "")
+	t.Setenv("ATLAS_BIN", "/custom/atlas")
 	cfg, err := loadRuntimeConfig()
-	if err != nil || cfg.WebDir != "web/dist" {
+	if err != nil || cfg.WebDir != "web/dist" || cfg.DiffTimeout != 30*time.Second || cfg.AtlasBin != "/custom/atlas" {
 		t.Fatal("invalid defaults")
+	}
+	t.Setenv("DIFF_TIMEOUT", "0s")
+	if _, err := loadRuntimeConfig(); err == nil {
+		t.Fatal("invalid diff timeout accepted")
+	}
+	t.Setenv("DIFF_TIMEOUT", "4s")
+	if cfg, err := loadRuntimeConfig(); err != nil || cfg.DiffTimeout != 4*time.Second {
+		t.Fatal("diff timeout not applied", err)
 	}
 	t.Setenv("TARGET_QUERY_TIMEOUT", "-1s")
 	if _, err := loadRuntimeConfig(); err == nil {
