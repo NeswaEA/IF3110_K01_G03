@@ -336,6 +336,28 @@ func TestDiffPreservesGeneratorDomainErrors(t *testing.T) {
 	}
 }
 
+func TestDiffRechecksPostgresFingerprintsAfterGeneration(t *testing.T) {
+	for _, changedID := range []string{testkit.DBSQLite, testkit.DBSQLiteDesired} {
+		f := fixture()
+		for _, id := range []string{testkit.DBSQLite, testkit.DBSQLiteDesired} {
+			snap := f.inspector.snapshots[id]
+			snap.Driver, snap.Schemas[0].Name = database.Postgres, "public"
+			f.inspector.snapshots[id] = snap
+		}
+		f.provider = databasetest.NewProvider(database.TargetHandle{DatabaseID: testkit.DBSQLite, Driver: database.Postgres, MigrationReady: true}, database.TargetHandle{DatabaseID: testkit.DBSQLiteDesired, Driver: database.Postgres})
+		f.service.provider, f.in.Schema = f.provider, "public"
+		f.service.generators[database.Postgres] = generatorFunc(func(context.Context, Comparison) (Candidate, error) {
+			snap := f.inspector.snapshots[changedID]
+			snap.Schemas[0].Tables[0].Columns[0].DataType = "bigint"
+			f.inspector.snapshots[changedID] = snap
+			return Candidate{SQL: `ALTER TABLE public.items ADD COLUMN status text;`, Executable: true}, nil
+		})
+		_, err := f.service.Diff(t.Context(), principal, testkit.DBSQLite, f.in)
+		assertCode(t, err, "SCHEMA_CONFLICT")
+		assertReleased(t, f, 2)
+	}
+}
+
 func TestDiffFailuresAreSanitizedAndReleaseLeases(t *testing.T) {
 	secret := "postgres://user:private-password@secret-host/db"
 	for _, stage := range []string{"acquire source", "acquire desired", "inspect source", "inspect desired", "head", "generator"} {

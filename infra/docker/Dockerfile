@@ -9,6 +9,13 @@ COPY tests/fixtures/api /repo/tests/fixtures/api
 COPY web/ ./
 RUN npm run build
 
+FROM golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61 AS atlas
+ENV CGO_ENABLED=1 GOTOOLCHAIN=local
+ADD --checksum=sha256:15f14b25db8e32f6fc91343c77a3e624507a1b051f91fecbcfc643cb596c0321 https://codeload.github.com/ariga/atlas/tar.gz/9a6bc601212130aaaefcbc8dd36c710baf9716ff /tmp/atlas.tar.gz
+RUN mkdir /src && tar -xzf /tmp/atlas.tar.gz -C /src --strip-components=1
+WORKDIR /src/cmd/atlas
+RUN go build -trimpath -ldflags '-X ariga.io/atlas/cmd/atlas/internal/cmdapi.version=v1.3.0 -X ariga.io/atlas/cmd/atlas/internal/cmdapi.flavor=community' -o /out/atlas .
+
 FROM golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61 AS backend
 ENV CGO_ENABLED=1 GOTOOLCHAIN=local
 WORKDIR /src/backend
@@ -26,6 +33,9 @@ RUN apt-get update \
  && useradd --system --uid 10001 app \
  && mkdir -p /data/sqlite && chown app:app /data/sqlite
 WORKDIR /app
+ENV ATLAS_BIN=/usr/local/bin/atlas
+COPY --from=atlas /out/atlas /usr/local/bin/atlas
+COPY --from=atlas /src/LICENSE /usr/share/doc/atlas/LICENSE
 COPY --from=backend /out/server /app/server
 COPY --from=backend /out/migrate /app/migrate
 COPY --from=backend /out/seed /app/seed

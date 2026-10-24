@@ -152,6 +152,20 @@ func (s *Service) Diff(ctx context.Context, p contracts.Principal, sourceID stri
 			result.Warnings = append(result.Warnings, "Generator kandidat SQL untuk engine ini belum tersedia.")
 		}
 	}
+	if driver == database.Postgres && s.generators[driver] != nil {
+		for _, target := range []struct {
+			handle      database.TargetHandle
+			fingerprint string
+		}{{source, from.Fingerprint}, {desired, to.Fingerprint}} {
+			snap, err := s.snapshot(ctx, target.handle)
+			if err != nil {
+				return DiffResult{}, err
+			}
+			if snap.Fingerprint != target.fingerprint {
+				return DiffResult{}, problem("SCHEMA_CONFLICT", "Schema berubah selama Atlas membuat kandidat; ulangi perbandingan.")
+			}
+		}
+	}
 	latest, err := s.readVersion(ctx, p, sourceID)
 	if err != nil {
 		return DiffResult{}, err
