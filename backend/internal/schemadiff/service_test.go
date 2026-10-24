@@ -248,8 +248,7 @@ func TestIdenticalAndSelfDiffHaveAnEmptyExecutableResult(t *testing.T) {
 			f.in.DesiredDatabaseID = testkit.DBSQLite
 		}
 		f.service.generators[database.SQLite] = generatorFunc(func(context.Context, Comparison) (Candidate, error) {
-			t.Fatal("empty diff called generator")
-			return Candidate{}, nil
+			return Candidate{Executable: true}, nil
 		})
 		result, err := f.service.Diff(t.Context(), principal, testkit.DBSQLite, f.in)
 		if err != nil || !result.Executable || result.CandidateSQL != "" || len(result.Changes) != 0 || len(result.Warnings) != 0 || result.SourceFingerprint != result.DesiredFingerprint {

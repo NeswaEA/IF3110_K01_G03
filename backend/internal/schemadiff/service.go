@@ -114,7 +114,7 @@ func (s *Service) Diff(ctx context.Context, p contracts.Principal, sourceID stri
 		return DiffResult{}, domain(err)
 	}
 	result := DiffResult{Driver: driver, ExpectedVersion: version, SourceFingerprint: from.Fingerprint, DesiredFingerprint: to.Fingerprint, Changes: changes, Warnings: warnings, Executable: len(changes) == 0}
-	if len(changes) > 0 {
+	if len(changes) > 0 || s.generators[driver] != nil {
 		if generator := s.generators[driver]; generator != nil {
 			candidate, err := generator.Generate(ctx, Comparison{from, to, in.Schema, append([]DiffChange{}, changes...)})
 			if err != nil {
@@ -131,7 +131,14 @@ func (s *Service) Diff(ctx context.Context, p contracts.Principal, sourceID stri
 				}
 				return DiffResult{}, &contracts.DomainError{Code: "DIFF_UNAVAILABLE", Message: "Kandidat SQL belum dapat dibuat.", Cause: err}
 			}
-			if candidate.Executable && (!utf8.ValidString(candidate.SQL) || strings.ContainsRune(candidate.SQL, 0) || len(candidate.SQL) > 256<<10 || strings.TrimSpace(candidate.SQL) == "") {
+			result.Changes = append(result.Changes, candidate.Changes...)
+			sort.Slice(result.Changes, func(i, j int) bool {
+				if result.Changes[i].Object != result.Changes[j].Object {
+					return result.Changes[i].Object < result.Changes[j].Object
+				}
+				return result.Changes[i].Kind < result.Changes[j].Kind
+			})
+			if candidate.Executable && (!utf8.ValidString(candidate.SQL) || strings.ContainsRune(candidate.SQL, 0) || len(candidate.SQL) > 256<<10 || (len(result.Changes) > 0 && strings.TrimSpace(candidate.SQL) == "")) {
 				return DiffResult{}, problem("DIFF_UNAVAILABLE", "Kandidat SQL tidak dapat disimpan sebagai draft.")
 			}
 			result.Executable = candidate.Executable

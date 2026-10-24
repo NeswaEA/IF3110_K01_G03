@@ -65,6 +65,7 @@ type Candidate struct {
 	SQL        string
 	Warnings   []string
 	Executable bool
+	Changes    []DiffChange
 }
 
 type Generator interface {
