@@ -256,7 +256,7 @@ func (s *Service) reconcile(ctx context.Context, databaseID, runID string) (Migr
 	case err != nil:
 		return s.unknown(r), nil
 	case hash != r.SQLHash || version != r.CandidateVersion:
-		_ = s.unknown(r)
+		r = s.unknown(r)
 		d := problem("INTERNAL_ERROR", "Ledger dan metadata migrasi tidak konsisten.")
 		d.RunID = &r.ID
 		return r, d
