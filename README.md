@@ -26,7 +26,7 @@ Setiap migrasi berjalan dalam satu transaksi: seluruhnya di-commit bila berhasil
 | Bagian | Teknologi |
 |---|---|
 | Backend | Go 1.27.2, `net/http` standard library, `html/template` untuk halaman |
-| Frontend | Halaman multipage dirender server; TypeScript, Vite, dan widget React untuk bagian interaktif; CodeMirror untuk editor SQL |
+| Frontend | Halaman multipage dirender server; TypeScript, Vite, dan widget React untuk bagian interaktif; editor SQL textarea dengan seleksi dan indentasi buatan sendiri |
 | Database | PostgreSQL 17.11 (metadata aplikasi dan target), SQLite (target tambahan) |
 | Driver | pgx v5, go-sqlite3 (butuh CGO), pg_query_go untuk mem-parse SQL PostgreSQL |
 | Runtime | Docker Compose; image dibangun untuk Linux amd64 |

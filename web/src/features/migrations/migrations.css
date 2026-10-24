@@ -4,9 +4,8 @@
 .migration-editor { flex: 4 1 32rem; min-width: 0; }
 .migration-editor label { display: block; margin-block: .75rem; }
 .migration-editor input { margin-left: .5rem; max-width: 100%; }
-.migration-sql { border: 1px solid #767676; }
-.migration-sql .cm-editor { min-height: 12rem; max-height: 32rem; }
-.migration-sql .cm-scroller { overflow: auto; }
+.migration-sql { display: block; box-sizing: border-box; width: 100%; min-height: 12rem; max-height: 32rem; padding: .75rem; border: 1px solid #767676; font: inherit; font-family: ui-monospace, monospace; line-height: 1.5; tab-size: 2; resize: vertical; overflow: auto; }
+.migration-sql:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .migration-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-block: 1rem; }
 .migration-table { overflow-x: auto; }
 .migration-table th, .migration-table td { text-align: left; padding: .5rem; }

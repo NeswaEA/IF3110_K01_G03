@@ -187,7 +187,7 @@ function Workbench({ db, initial }: { db: DatabaseSummary; initial?: MigrationIn
             <label>Judul <input value={title} maxLength={200} disabled={blocked} onChange={(e) => setTitle(e.target.value)} /></label>
             <label>Versi yang diharapkan <input type="number" min={0} max={Number.MAX_SAFE_INTEGER - 1} step={1} value={version} disabled={blocked} onChange={(e) => setVersion(Number(e.target.value))} /></label>
             {head.status === "success" && version !== head.response.data.version && <button type="button" disabled={blocked} onClick={() => { if (head.status === "success") setVersion(head.response.data.version); }}>Gunakan versi terkini</button>}
-            <p id="migration-sql-help">SQL dijalankan dalam satu transaksi. Pilih teks untuk EXPLAIN; tanpa seleksi, seluruh isi editor dikirim.</p>
+            <p id="migration-sql-help">SQL dijalankan dalam satu transaksi. Pilih teks untuk EXPLAIN; tanpa seleksi, seluruh isi editor dikirim. Tab menambah dua spasi, Shift+Tab mengurangi indentasi. Tekan Escape lalu Tab atau Shift+Tab untuk berpindah fokus.</p>
             <SQLEditor value={sql} driver={db.driver} readOnly={blocked} onChange={setSQL} onSelection={setExplainSQL} />
             <div className="migration-actions">
               <button type="button" onClick={save} disabled={blocked || !dirty || !title.trim() || !sql.trim() || !Number.isSafeInteger(version) || version < 0}>Simpan draft</button>

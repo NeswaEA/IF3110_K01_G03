@@ -1,7 +1,6 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
-import { EditorView } from "@codemirror/view";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,13 +22,10 @@ const server = setupServer(...handlers);
 
 beforeAll(() => {
   server.listen({ onUnhandledFrame: "error" });
-  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
-  Object.defineProperty(Range.prototype, "getClientRects", { configurable: true, value: () => [] });
-  Object.defineProperty(Range.prototype, "getBoundingClientRect", { configurable: true, value: () => new DOMRect() });
 });
 beforeEach(() => { server.resetHandlers(...createMigrationHandlers(), ...handlers); setCsrfToken("test"); });
 afterEach(() => { vi.restoreAllMocks(); });
-afterAll(() => { server.close(); vi.unstubAllGlobals(); });
+afterAll(() => server.close());
 
 function open() {
   return render(<MigrationsPage databaseId={db.id} />);
@@ -44,10 +40,16 @@ function initialState(overrides: Partial<MigrationInitialState> = {}): Migration
 }
 
 async function editSQL(value: string, selection?: { anchor: number; head: number }) {
-  const textbox = await screen.findByRole("textbox", { name: "SQL migrasi" });
-  const editor = EditorView.findFromDOM(textbox)!;
-  act(() => { editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: value }, selection }); });
-  return editor;
+  const textbox = await screen.findByRole("textbox", { name: "SQL migrasi" }) as HTMLTextAreaElement;
+  fireEvent.change(textbox, { target: { value } });
+  act(() => {
+    textbox.focus();
+    const anchor = selection?.anchor ?? value.length;
+    const head = selection?.head ?? value.length;
+    textbox.setSelectionRange(Math.min(anchor, head), Math.max(anchor, head), anchor > head ? "backward" : "forward");
+    fireEvent.select(textbox);
+  });
+  return textbox;
 }
 
 async function savedDraft() {
@@ -63,7 +65,7 @@ describe("migration editor", () => {
     server.use(http.get("*", () => { reads++; return HttpResponse.error(); }));
     render(<StrictMode><MigrationsPage databaseId={db.id} initial={initialState()} /></StrictMode>);
     expect(screen.getByRole("textbox", { name: "Judul" })).toHaveValue(draftFixture.data.title);
-    expect(EditorView.findFromDOM(screen.getByRole("textbox", { name: "SQL migrasi" }))!.state.doc.toString()).toBe(draftFixture.data.sql);
+    expect(screen.getByRole("textbox", { name: "SQL migrasi" })).toHaveValue(draftFixture.data.sql);
     expect(screen.getByRole("region", { name: "Detail eksekusi" })).toHaveTextContent("Status: Berhasil");
     await act(async () => {});
     expect(reads).toBe(0);
@@ -135,7 +137,7 @@ describe("migration editor", () => {
     await editSQL(current);
     await userEvent.click(screen.getByRole("button", { name: "Simpan draft" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Draft berubah sejak dibaca");
-    expect(EditorView.findFromDOM(screen.getByRole("textbox", { name: "SQL migrasi" }))!.state.doc.toString()).toBe(current);
+    expect(screen.getByRole("textbox", { name: "SQL migrasi" })).toHaveValue(current);
   });
 
   it("passes the exact selection to the existing explain panel", async () => {
@@ -227,7 +229,7 @@ describe("migration editor", () => {
       expect(await screen.findByRole("alert")).toHaveTextContent("Silakan login kembali");
       expect(expired).toHaveBeenCalledTimes(1);
       expect(executions).toBe(1);
-      expect(EditorView.findFromDOM(screen.getByRole("textbox",{name:"SQL migrasi"}))!.state.doc.toString()).toBe("ALTER TABLE items ADD COLUMN local_value TEXT;");
+      expect(screen.getByRole("textbox", { name: "SQL migrasi" })).toHaveValue("ALTER TABLE items ADD COLUMN local_value TEXT;");
     } finally {off();}
   });
 });
