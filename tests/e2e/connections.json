@@ -1,0 +1,46 @@
+[
+  {
+    "id": "30000000-0000-4000-8000-000000000001",
+    "name": "PostgreSQL demo",
+    "driver": "postgres",
+    "config": {
+      "host": "target",
+      "port": 5432,
+      "database": "demo",
+      "username": "platform_runner",
+      "password": "e2e_runner",
+      "sslmode": "disable",
+      "editor_role": "platform_editor"
+    }
+  },
+  {
+    "id": "30000000-0000-4000-8000-000000000002",
+    "name": "SQLite demo",
+    "driver": "sqlite",
+    "config": {
+      "file": "demo.sqlite"
+    }
+  },
+  {
+    "id": "30000000-0000-4000-8000-000000000003",
+    "name": "PostgreSQL desired",
+    "driver": "postgres",
+    "config": {
+      "host": "target",
+      "port": 5432,
+      "database": "demo_desired",
+      "username": "platform_runner",
+      "password": "e2e_runner",
+      "sslmode": "disable",
+      "editor_role": "platform_editor"
+    }
+  },
+  {
+    "id": "30000000-0000-4000-8000-000000000004",
+    "name": "SQLite desired",
+    "driver": "sqlite",
+    "config": {
+      "file": "demo_desired.sqlite"
+    }
+  }
+]

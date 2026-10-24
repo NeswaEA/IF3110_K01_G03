@@ -133,9 +133,16 @@ Server membaca daftar asset hasil build saat start. Restart server setelah build
 ```sh
 sh scripts/test-backend.sh   # gofmt, go vet, dan seluruh test Go (Go 1.27.2 di container)
 sh scripts/test-web.sh       # npm ci, typecheck, test, dan build frontend (Node 24.22.0 di container)
+sh scripts/test-e2e.sh       # Chromium, aplikasi asli, serta database/volume test baru
 ```
 
 Integration test backend memakai PostgreSQL asli dari `scripts/dev-up.sh` dan URL `TEST_*_DATABASE_URL` di `.env` (sudah diisi oleh `init-env.sh`). Tanpa URL tersebut, test integration dilewati dengan pesan. Argumen tambahan diteruskan ke `go test`, misalnya `sh scripts/test-backend.sh -run Fingerprint ./internal/database/`.
+
+Suite browser tidak membaca `.env` lokal dan tidak memerlukan aplikasi development berjalan. Script membangun image aplikasi dan Chromium, membuat project Compose unik tanpa port host, menginisialisasi PostgreSQL/SQLite baru, serta menjalankan satu worker tanpa retry. Browser berbagi network namespace dengan aplikasi dan memakai `localhost` agar API browser seperti UUID tersedia seperti pada development. Koneksi database, auth, CSRF, Atlas PostgreSQL dan generator SQLite semuanya nyata. Network runtime tidak memiliki akses internet; download dependency hanya terjadi saat build.
+
+Setelah selesai atau gagal, script menghapus container/network/volume milik run tersebut. Volume development tetap ada. Report JSON, screenshot, trace kegagalan, dan log server berada di `output/playwright/<run>/`. Hasil ini tidak masuk `.gitignore`: biarkan tidak terpilih saat commit. Source test, konfigurasi, dan lockfile di `tests/e2e/` tetap perlu disertakan. Suite gagal bila ada test gagal, dilewati, atau tidak ada test yang dijalankan.
+
+Untuk memilih skenario, gunakan misalnya `sh scripts/test-e2e.sh --grep 'rolls back'`.
 
 GitHub Actions menjalankan pemeriksaan pada setiap push, pull request, dan pemicu manual:
 
@@ -143,7 +150,8 @@ GitHub Actions menjalankan pemeriksaan pada setiap push, pull request, dan pemic
 - **Frontend:** `npm ci`, typecheck, test, build, serta uji loader fixture SQLite dengan Node.js 24.22.0. Test halaman diff mencakup edit kandidat, perubahan pilihan, klik ganda, hasil kosong/unsupported, dan pemeliharaan input saat gagal atau sesi berakhir.
 - **Metadata migrations:** CLI migrasi dijalankan dua kali pada PostgreSQL kosong, lalu test replay, checksum, rollback, concurrency, dan constraint.
 - **Bonus SQLite:** adapter, registry, runner, EXPLAIN, dan integrasi server pada job tersendiri. Beberapa test juga memeriksa PostgreSQL agar perilaku kedua engine tetap konsisten.
-- **Bonus Atlas:** membangun Community v1.3.0 dari commit rilis, menyiapkan database pembanding, lalu menguji config, generator, runner, dan endpoint PostgreSQL dengan session/CSRF nyata. E2E browser lengkap masih mengikuti tahap integrasi berikutnya.
+- **Bonus Atlas:** membangun Community v1.3.0 dari commit rilis, menyiapkan database pembanding, lalu menguji config, generator, runner, dan endpoint PostgreSQL dengan session/CSRF nyata.
+- **Browser workflows:** Chromium dengan aplikasi dan database asli untuk login, readiness admin, migrasi sukses/rollback, history tanpa JavaScript, View Only, CSRF, konflik, sesi berakhir, seleksi EXPLAIN, diff editable, fingerprint stale, serta reconcile setelah commit nyata.
 
 Backend CI juga memeriksa bootstrap PostgreSQL desired dan pengulangan seed yang mempertahankan data/ledger. Uji loader SQLite dapat dijalankan dengan `node --test scripts/seed-sqlite.test.mjs` pada Node.js 24.22.0. `scripts/test-postgres-fixture.sh <container>` hanya untuk container test baru tanpa `demo_desired`, dengan folder fixture PostgreSQL terpasang pada `/fixtures`.
 

@@ -1,0 +1,81 @@
+services:
+  metadata:
+    image: postgres:17.11@sha256:c469d92cbb89e123ba7c2c7c1a8815572943584085c37b007bacb43150a8c9e4
+    environment:
+      POSTGRES_DB: metadata
+      POSTGRES_USER: metadata_owner
+      POSTGRES_PASSWORD: e2e_metadata
+    volumes:
+      - metadata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U metadata_owner -d metadata"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  target:
+    image: postgres:17.11@sha256:c469d92cbb89e123ba7c2c7c1a8815572943584085c37b007bacb43150a8c9e4
+    environment:
+      POSTGRES_DB: demo
+      POSTGRES_USER: target_admin
+      POSTGRES_PASSWORD: e2e_target
+      TARGET_RUNNER_PASSWORD: e2e_runner
+    volumes:
+      - target:/var/lib/postgresql/data
+      - ../../infra/postgres/init/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+      - ../fixtures/postgres/demo.sql:/docker-entrypoint-initdb.d/10-demo.sql:ro
+      - ../fixtures/postgres:/fixtures:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U target_admin -d demo"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  sqlite:
+    image: node:24.22.0@sha256:14078204b6bb268c107ceff6d3c43f45a888105e5c2b18b14c32b3409d93a1b0
+    command: ["node", "/seed-sqlite.mjs"]
+    volumes:
+      - sqlite:/data
+      - ../fixtures/sqlite:/fixture:ro
+      - ../../scripts/seed-sqlite.mjs:/seed-sqlite.mjs:ro
+  app:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+    environment:
+      APP_ENV: test
+      HTTP_ADDR: ":8080"
+      APP_ORIGIN: http://localhost:8080
+      METADATA_DATABASE_URL: postgres://metadata_owner:e2e_metadata@metadata:5432/metadata?sslmode=disable
+      CONNECTION_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      SQLITE_TARGET_DIR: /data/sqlite
+      WEB_DIST_DIR: /app/web/dist
+      FIXTURE_PASSWORD: e2e fixture password 123
+      FIXTURE_CONNECTIONS_FILE: /fixtures/connections.json
+    volumes:
+      - sqlite:/data/sqlite
+      - ./connections.json:/fixtures/connections.json:ro
+    depends_on:
+      metadata:
+        condition: service_healthy
+      target:
+        condition: service_healthy
+  browser:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile
+    init: true
+    ipc: host
+    network_mode: service:app
+    environment:
+      CI: "true"
+    volumes:
+      - ${E2E_ARTIFACT_DIR:?set E2E_ARTIFACT_DIR}:/artifacts
+      - sqlite:/data/sqlite
+
+volumes:
+  metadata:
+  target:
+  sqlite:
+
+networks:
+  default:
+    internal: true

@@ -162,6 +162,17 @@ jobs:
           npm run build
           node --test ../scripts/seed-sqlite.test.mjs
 
+  browser:
+    name: Browser workflows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Test real application workflows in Chromium
+        run: sh scripts/test-e2e.sh
+
   metadata:
     name: Metadata migrations
     runs-on: ubuntu-24.04

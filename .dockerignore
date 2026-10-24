@@ -8,6 +8,8 @@ tmp/
 web/node_modules/
 web/dist/
 backend/bin/
+tests/e2e/node_modules/
+output/
 **/*.sqlite
 **/*.sqlite-*
 **/*.db
