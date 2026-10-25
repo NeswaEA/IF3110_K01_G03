@@ -27,7 +27,7 @@ test("admin tests both source connections before migrations become ready", async
     const row = page.getByRole("row").filter({ has: page.getByRole("cell", { name: engine.name, exact: true }) });
     await expect(row).toContainText("belum diuji");
     await row.getByRole("button", { name: "Uji koneksi", exact: true }).click();
-    await expect(page.getByRole("status")).toContainText(`${engine.name}: terhubung`);
+    await expect(page.getByRole("status").filter({ hasText: `${engine.name}: terhubung` })).toBeVisible();
     await expect(row).toContainText("siap migrasi");
   }
   const comparisons = await metadata("SELECT migration_ready FROM database_connections WHERE id IN ($1,$2)", engines.map((e) => e.desired));
