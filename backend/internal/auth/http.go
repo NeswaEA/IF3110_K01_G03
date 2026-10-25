@@ -143,6 +143,9 @@ func (h *HTTPHandler) csrf(w http.ResponseWriter, r *http.Request) {
 		tx, err = h.sessions.db.BeginTx(r.Context(), nil)
 		if err == nil {
 			defer tx.Rollback()
+			err = h.sessions.pruneInTx(r.Context(), tx)
+		}
+		if err == nil {
 			session, err = h.sessions.CreateInTx(r.Context(), tx, "")
 			if err == nil {
 				err = tx.Commit()

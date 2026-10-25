@@ -246,6 +246,22 @@ func (s *SessionStore) RequireRotation(ctx context.Context, tx *sql.Tx, userIDs 
 	return nil
 }
 
+// pruneInTx deletes expired sessions (their tokens cascade). It runs where
+// anonymous sessions are created, so unauthenticated traffic cannot grow the table
+// without bound. SKIP LOCKED leaves rows in use to a later call instead of waiting.
+// shortcut: no index on absolute_expires_at, so each call scans sessions; add one if live sessions reach ~100k.
+func (s *SessionStore) pruneInTx(ctx context.Context, tx *sql.Tx) error {
+	if tx == nil {
+		return sessionFailure(errors.New("session pruning requires a transaction"))
+	}
+	_, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE id IN
+		(SELECT id FROM sessions WHERE absolute_expires_at <= $1 ORDER BY id LIMIT 100 FOR UPDATE SKIP LOCKED)`, s.now())
+	if err != nil {
+		return sessionFailure(err)
+	}
+	return nil
+}
+
 func (s *SessionStore) now() time.Time {
 	return s.clock.Now().UTC().Truncate(time.Microsecond)
 }

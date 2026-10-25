@@ -304,6 +304,22 @@ func TestAuthHTTPRotationExpiryAndRevocation(t *testing.T) {
 	assertHTTPError(t, f.request("GET", "/api/v1/auth/me", rotated, "", "", ""), 401, "UNAUTHENTICATED")
 }
 
+func TestAuthHTTPCSRFPrunesExpiredSessions(t *testing.T) {
+	f := newAuthHTTPFixture(t)
+	f.csrf(t, nil)
+	live := f.create(t, sessionUser)
+	f.clock.Advance(10 * time.Minute) // the anonymous session reaches its deadline
+	f.csrf(t, nil)
+	var sessions, tokens, kept int
+	if err := f.db.QueryRow(`SELECT (SELECT count(*) FROM sessions), (SELECT count(*) FROM session_tokens),
+		(SELECT count(*) FROM sessions WHERE id=$1)`, live.ID).Scan(&sessions, &tokens, &kept); err != nil {
+		t.Fatal(err)
+	}
+	if sessions != 2 || tokens != 2 || kept != 1 {
+		t.Fatalf("after prune: %d sessions, %d tokens, live kept=%d", sessions, tokens, kept)
+	}
+}
+
 func TestAuthHTTPConcurrentLoginConsumesPreloginOnce(t *testing.T) {
 	f := newAuthHTTPFixture(t)
 	cookie, csrf := f.csrf(t, nil)
