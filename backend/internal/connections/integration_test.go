@@ -246,6 +246,10 @@ func TestRegisterRejectsMetadataAndDuplicates(t *testing.T) {
 func TestAcquireRejectsMetadataUnderAlias(t *testing.T) {
 	e := newEnv(t, nil)
 	e.svc.opts.MetadataIdentity = "" // stands in for an alias the name check cannot see
+	// the test schema holds only 0002; a migrated metadata database also has these tables
+	if _, err := e.meta.Exec(`CREATE TABLE app_schema_migrations (version int); CREATE TABLE session_tokens (id int)`); err != nil {
+		t.Fatal(err)
+	}
 	mu, _ := url.Parse(os.Getenv("TEST_METADATA_DATABASE_URL"))
 	mport, _ := strconv.Atoi(mu.Port())
 	pw, _ := mu.User.Password()
