@@ -60,6 +60,52 @@ async function savedDraft() {
 }
 
 describe("migration editor", () => {
+  it("keeps unsaved SQL when switching drafts is cancelled and discards only after confirmation", async () => {
+    let reads = 0;
+    server.use(
+      http.get(`${base}/migration-drafts/:draftId`, () => { reads++; return HttpResponse.json(draftFixture); }),
+    );
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<MigrationsPage databaseId={db.id} initial={initialState()} />);
+    const localSQL = "SELECT 'keep unsaved SQL';";
+    await editSQL(localSQL);
+    await userEvent.click(screen.getByRole("button", { name: "Draft baru" }));
+    expect(screen.getByRole("textbox", { name: "SQL migrasi" })).toHaveValue(localSQL);
+    await userEvent.click(screen.getByRole("button", { name: draftFixture.data.title }));
+    expect(reads).toBe(0);
+    expect(screen.getByRole("textbox", { name: "SQL migrasi" })).toHaveValue(localSQL);
+    expect(confirm).toHaveBeenCalledTimes(2);
+    confirm.mockReturnValue(true);
+    await userEvent.click(screen.getByRole("button", { name: draftFixture.data.title }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "SQL migrasi" })).toHaveValue(draftFixture.data.sql));
+    expect(reads).toBe(1);
+    await editSQL(localSQL);
+    await userEvent.click(screen.getByRole("button", { name: "Draft baru" }));
+    expect(screen.getByRole("textbox", { name: "SQL migrasi" })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "Judul" })).toHaveValue("");
+  });
+
+  it("warns before leaving edited input but does not guard an empty or successfully saved draft", async () => {
+    const leaving = () => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    const confirm = vi.spyOn(window, "confirm");
+    open();
+    await screen.findByRole("textbox", { name: "SQL migrasi" });
+    expect(leaving()).toBe(false);
+    await userEvent.type(screen.getByRole("textbox", { name: "Judul" }), "Keep this title");
+    expect(leaving()).toBe(true);
+    await editSQL("SELECT 'keep this SQL';");
+    await userEvent.click(screen.getByRole("button", { name: "Simpan draft" }));
+    await screen.findByText("Draft tersimpan.");
+    expect(leaving()).toBe(false);
+    await userEvent.click(screen.getByRole("button", { name: "Draft baru" }));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(leaving()).toBe(false);
+  });
+
   it("opens the server-selected draft and run without fetching the initial data again", async () => {
     let reads = 0;
     server.use(http.get("*", () => { reads++; return HttpResponse.error(); }));

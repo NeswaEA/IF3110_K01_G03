@@ -43,6 +43,68 @@ test("anonymous pages redirect while APIs, missing pages and missing assets reta
   expect((await page.goto("/assets/not-an-asset.js")).status()).toBe(404);
 });
 
+test("unsaved migration SQL survives cancelled draft switches and document navigation", async ({ page }) => {
+  await ready();
+  await login(page);
+  const engine = engines[0];
+  const saved = await createDraft(page.request, engine, "SELECT 'saved';", uniqueName());
+  const other = await createDraft(page.request, engine, "SELECT 'other';", uniqueName());
+  const url = `${pathFor(engine)}/migrations?draft=${saved.id}`;
+  await page.goto(url);
+  const editor = page.getByRole("textbox", { name: "SQL migrasi" });
+  const local = "SELECT 'local SQL must survive';";
+  await editor.fill(local);
+
+  const cancelSwitch = page.waitForEvent("dialog");
+  const switching = page.getByRole("button", { name: other.title, exact: true }).click();
+  const confirmation = await cancelSwitch;
+  expect(confirmation.type()).toBe("confirm");
+  await confirmation.dismiss();
+  await switching;
+  await expect(editor).toHaveValue(local);
+
+  const cancelNavigation = page.waitForEvent("dialog");
+  const navigating = page.getByRole("link", { name: "Lihat schema dan data", exact: true }).click();
+  const leaving = await cancelNavigation;
+  expect(leaving.type()).toBe("beforeunload");
+  await leaving.dismiss();
+  await navigating;
+  await expect(page).toHaveURL(origin + url);
+  await expect(editor).toHaveValue(local);
+  expect((await getData(page.request, `${pathFor(engine)}/migration-drafts/${saved.id}`)).sql).toBe(saved.sql);
+
+  const acceptSwitch = page.waitForEvent("dialog");
+  const confirmedSwitch = page.getByRole("button", { name: other.title, exact: true }).click();
+  await (await acceptSwitch).accept();
+  await confirmedSwitch;
+  await expect(editor).toHaveValue(other.sql);
+  await page.getByRole("link", { name: "Lihat schema dan data", exact: true }).click();
+  await expect(page).toHaveURL(origin + pathFor(engine));
+});
+
+test("an unsaved diff warns before leaving and a saved candidate navigates without a second prompt", async ({ page }) => {
+  await ready();
+  await login(page);
+  const engine = engines[0];
+  await page.goto(`${pathFor(engine)}/schema-diff`);
+  const compared = page.waitForResponse((r) => r.url().endsWith("/schema-diff") && r.request().method() === "POST");
+  await page.getByRole("button", { name: "Bandingkan schema", exact: true }).click();
+  expect((await (await compared).json()).data.executable).toBe(true);
+  const editor = page.getByRole("textbox", { name: "SQL migrasi" });
+  const local = (await editor.inputValue()) + "\n-- reviewed locally";
+  await editor.fill(local);
+  const cancelNavigation = page.waitForEvent("dialog");
+  const navigating = page.getByRole("link", { name: "Migrasi dan riwayat", exact: true }).click();
+  const leaving = await cancelNavigation;
+  expect(leaving.type()).toBe("beforeunload");
+  await leaving.dismiss();
+  await navigating;
+  await expect(editor).toHaveValue(local);
+  await page.getByRole("button", { name: "Simpan sebagai draft", exact: true }).click();
+  await expect(page).toHaveURL(/\/migrations\?draft=[0-9a-f-]+/);
+  await expect(page.getByRole("textbox", { name: "SQL migrasi" })).toHaveValue(local);
+});
+
 for (const engine of engines) {
   test(`${engine.driver}: latest draft SQL commits DDL and DML once after a double click`, async ({ page }) => {
     await ready();

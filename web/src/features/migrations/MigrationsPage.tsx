@@ -5,6 +5,7 @@ import { useApi, type Query } from "../../api/useApi";
 import { EmptyState, ErrorState, Loading } from "../../components/StatusViews";
 import { ExplainPanel } from "../explain/ExplainPanel";
 import { SQLEditor } from "./SQLEditor";
+import { useUnsavedChanges } from "./useUnsavedChanges";
 import "./migrations.css";
 
 const pending = (run: MigrationRun) => run.status === "running" || run.status === "outcome_unknown";
@@ -63,6 +64,12 @@ function Workbench({ db, initial }: { db: DatabaseSummary; initial?: MigrationIn
   const currentDraft = useRef(draft);
   currentDraft.current = draft;
   const dirty = draft ? title !== draft.title || sql !== draft.sql || version !== draft.expected_version : true;
+  const unsaved = canEdit && !draft?.applied_at && (draft ? dirty : title !== "" || sql !== "");
+  useUnsavedChanges(unsaved);
+
+  function confirmDiscard() {
+    return !unsaved || window.confirm("Perubahan draft belum disimpan. Buang perubahan dan ganti draft?");
+  }
 
   useEffect(() => () => inflight.current?.abort(), []);
   useEffect(() => {
@@ -165,12 +172,13 @@ function Workbench({ db, initial }: { db: DatabaseSummary; initial?: MigrationIn
         <div className="migration-workspace">
           <aside aria-label="Daftar draft">
             <h2>Draft SQL</h2>
-            <button type="button" disabled={busy} onClick={() => showDraft(null)}>Draft baru</button>
+            <button type="button" disabled={busy} onClick={() => { if (confirmDiscard()) showDraft(null); }}>Draft baru</button>
             {drafts.status === "loading" && <Loading label="Memuat draft..." />}
             {drafts.status === "error" && <ErrorState error={drafts.error} />}
             {drafts.status === "success" && (drafts.response.data.length === 0 ? <EmptyState message="Belum ada draft." /> : (
               <ul>{drafts.response.data.map((item) => (
                 <li key={item.id}><button type="button" disabled={busy} aria-pressed={draft?.id === item.id} onClick={() => {
+                  if (!confirmDiscard()) return;
                   void act(async (signal) => {
                     const result = await request<MigrationDraft>(`${base}/migration-drafts/${item.id}`, { signal });
                     if (!signal.aborted) showDraft(result!.data);

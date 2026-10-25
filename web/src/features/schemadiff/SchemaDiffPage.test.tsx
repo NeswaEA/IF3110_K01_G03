@@ -36,6 +36,22 @@ async function generate() {
   return screen.findByRole("region", { name: "Hasil perbandingan" });
 }
 
+it("guards an unsaved candidate and lets a successful save navigate without an unload warning", async () => {
+  const leaving = () => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  const navigate = vi.fn(() => { expect(leaving()).toBe(false); });
+  render(<StrictMode><SchemaDiffPage initial={initial} navigate={navigate} /></StrictMode>);
+  expect(leaving()).toBe(false);
+  await generate();
+  expect(leaving()).toBe(true);
+  await userEvent.click(screen.getByRole("button", { name: "Simpan sebagai draft" }));
+  await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));
+  expect(leaving()).toBe(false);
+});
+
 it("uses server choices without fetching or generating on mount", async () => {
   let calls = 0;
   server.use(http.all("*", () => { calls++; return HttpResponse.error(); }));

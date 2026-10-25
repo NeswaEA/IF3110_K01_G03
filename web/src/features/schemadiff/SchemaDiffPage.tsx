@@ -4,6 +4,7 @@ import type { DatabaseSummary, DiffChangeKind, DiffResult, MigrationDraft } from
 import { loginUrl } from "../../app/mount";
 import { ErrorState } from "../../components/StatusViews";
 import { SQLEditor } from "../migrations/SQLEditor";
+import { useUnsavedChanges } from "../migrations/useUnsavedChanges";
 import "../migrations/migrations.css";
 import "./schemadiff.css";
 
@@ -49,6 +50,7 @@ export function SchemaDiffPage({ initial, navigate = navigateDocument, confirmDi
   const matches = review?.desired === desired && review.schema === schema;
   const locked = busy !== null || saved !== null;
   const dirty = review !== null && sql !== review.result.candidate_sql;
+  const allowNavigation = useUnsavedChanges(!saved && Boolean(review?.result.executable && review.result.candidate_sql.trim()));
 
   useEffect(() => () => inflight.current?.abort(), []);
 
@@ -95,6 +97,7 @@ export function SchemaDiffPage({ initial, navigate = navigateDocument, confirmDi
       });
       if (signal.aborted) return;
       setSaved(response!.data);
+      allowNavigation();
       navigate(`${base}/migrations?draft=${encodeURIComponent(response!.data.id)}#migration-draft`);
     });
   }
