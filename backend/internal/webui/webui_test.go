@@ -263,13 +263,26 @@ func TestDatabaseListIsServerRendered(t *testing.T) {
 		t.Fatal(status)
 	}
 	expect(t, body, []string{
-		`<a href="/databases/` + databaseID + `">PostgreSQL latihan</a> (postgres, akses lihat dan edit)`,
-		"&lt;img src=x onerror=alert(1)&gt;", "(sqlite, akses lihat)",
+		`<a class="database-name" href="/databases/` + databaseID + `">PostgreSQL latihan</a>`,
+		"&lt;img src=x onerror=alert(1)&gt;", `data-engine="sqlite" data-access="view"`,
+		`class="access-tag" data-level="edit">Lihat dan edit`, `class="access-tag" data-level="view">Hanya lihat`,
+		`aria-label="Filter database" hidden`, `data-database-results role="status"`,
+		"Siap dijalankan", "2 database berizin",
 	}, "<img src=x", "<script type=\"module\" src=\"/assets/connections")
+	src.dbs[0].Capabilities.TransactionalMigrations = false
+	if _, body := (harness{t, src, viewerUser, nil}).get("/databases"); !strings.Contains(body, "Perlu uji koneksi") {
+		t.Fatal("unready target was presented as ready")
+	}
 
 	src.dbs = []connections.Database{}
 	if _, body := (harness{t, src, viewerUser, nil}).get("/databases"); !strings.Contains(body, "Belum ada database yang dapat Anda akses.") {
 		t.Fatal("empty list has no empty state")
+	}
+	if _, body := (harness{t, src, viewerUser, nil}).get("/databases"); strings.Contains(body, "Kelola koneksi") || !strings.Contains(body, "Minta administrator") {
+		t.Fatal("empty list did not preserve the user role")
+	}
+	if _, body := (harness{t, src, admin, nil}).get("/databases"); !strings.Contains(body, "Hak admin platform tidak otomatis") || !strings.Contains(body, "Kelola koneksi") {
+		t.Fatal("admin without grants has no next step")
 	}
 	src.listErr = errors.New("metadata down")
 	if status, body := (harness{t, src, viewerUser, nil}).get("/databases"); status != 500 || strings.Contains(body, "metadata down") {

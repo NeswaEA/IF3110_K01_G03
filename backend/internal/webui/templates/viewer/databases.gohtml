@@ -1,11 +1,41 @@
+{{define "page-description"}}<p class="page-description">Pilih target untuk melihat schema, data, dan riwayat migrasi.</p>{{end}}
+{{define "page-meta"}}{{if .Data}}<span class="page-count">{{len .Data}} database berizin</span>{{end}}{{end}}
+
+{{define "sidebar-context"}}
+{{if .Data}}<nav class="sidebar-targets" aria-label="Database Anda"><h2>Database Anda</h2>
+{{range .Data}}<a href="/databases/{{.ID}}"><span>{{.Name}}</span><small>{{template "database-driver" .}}</small></a>{{end}}
+</nav>{{end}}
+{{end}}
+
+{{define "database-driver"}}{{if eq .Driver "postgres"}}PostgreSQL{{else}}SQLite{{end}}{{end}}
+
 {{define "content"}}
+<section class="database-list-page" data-database-list>
 {{if .Data}}
-<ul class="database-list">
-{{range .Data}}
-<li><a href="/databases/{{.ID}}">{{.Name}}</a> ({{.Driver}}, akses {{.Access}})</li>
-{{end}}
-</ul>
+<form class="database-filters" data-database-filters role="search" aria-label="Filter database" hidden>
+<div class="filter-field database-search"><label for="database-query">Cari database</label><input id="database-query" name="q" type="search" placeholder="Cari nama database..." autocomplete="off"></div>
+<div class="filter-field"><label for="database-engine">Engine</label><select id="database-engine" name="engine"><option value="">Semua engine</option><option value="postgres">PostgreSQL</option><option value="sqlite">SQLite</option></select></div>
+<div class="filter-field"><label for="database-access">Hak akses</label><select id="database-access" name="access"><option value="">Semua akses</option><option value="edit">Lihat dan edit</option><option value="view">Hanya lihat</option></select></div>
+</form>
+<div class="database-table-frame" tabindex="0" aria-label="Daftar database yang diizinkan">
+<table class="database-table"><caption class="visually-hidden">Database yang dapat Anda akses</caption>
+<thead><tr><th scope="col">Nama database</th><th scope="col">Engine</th><th scope="col">Hak akses</th><th scope="col">Migrasi</th><th scope="col" class="database-action">Tindakan</th></tr></thead>
+<tbody>{{range .Data}}
+<tr data-database-row data-name="{{.Name}}" data-engine="{{.Driver}}" data-access="{{.EffectiveAccess}}">
+<th scope="row" class="database-identity"><a class="database-name" href="/databases/{{.ID}}">{{.Name}}</a><code class="database-id">{{.ID}}</code></th>
+<td data-label="Engine">{{template "database-driver" .}}</td>
+<td data-label="Hak akses"><span class="access-tag" data-level="{{.EffectiveAccess}}">{{if eq .EffectiveAccess "edit"}}Lihat dan edit{{else}}Hanya lihat{{end}}</span></td>
+<td class="database-readiness" data-label="Migrasi">{{if eq .EffectiveAccess "edit"}}{{if .Capabilities.TransactionalMigrations}}Siap dijalankan{{else}}Perlu uji koneksi{{end}}{{else}}Hanya lihat{{end}}</td>
+<td class="database-action"><a href="/databases/{{.ID}}" aria-label="Buka {{.Name}}">Buka<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></a></td>
+</tr>{{end}}</tbody>
+</table></div>
+<section class="database-filter-empty" data-database-filter-empty hidden><h2>Database tidak ditemukan</h2><p>Ubah kata pencarian atau pilihan filter.</p><button type="button" data-database-reset>Hapus filter</button></section>
+<div class="database-list-footer"><p data-database-results role="status" aria-live="polite">{{len .Data}} dari {{len .Data}} database ditampilkan.</p><p>Hak akses diperiksa kembali saat Anda membuka target.</p></div>
+<section class="database-help" aria-label="Informasi akses"><div><h2>Kenali cakupan akses Anda</h2><p>Hanya lihat memberi akses ke schema, data, dan riwayat. Lihat dan edit juga mengizinkan Anda menyiapkan serta menjalankan migrasi.</p></div><div><h2>Sebelum menjalankan migrasi</h2><p>Admin perlu menguji koneksi untuk menyiapkan target. Keterangan kesiapan migrasi tidak menyatakan bahwa koneksi sedang online.</p></div></section>
 {{else}}
-<p>Belum ada database yang dapat Anda akses.</p>
+<section class="database-empty"><h2>Belum ada target untuk dibuka</h2><p>Belum ada database yang dapat Anda akses.</p>
+{{if .User.IsPlatformAdmin}}<p>Hak admin platform tidak otomatis memberi akses ke target. Kelola koneksi dan berikan akses melalui grup.</p><div class="empty-actions"><a class="button-link" href="/admin/connections">Kelola koneksi</a><a href="/admin/groups">Kelola grup dan akses</a></div>
+{{else}}<p>Minta administrator menambahkan Anda ke grup yang memiliki akses database.</p>{{end}}</section>
 {{end}}
+</section>
 {{end}}
