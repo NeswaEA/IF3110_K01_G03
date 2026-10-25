@@ -7,7 +7,7 @@
 {{with .User}}{{assetTags "layout"}}{{end}}
 {{assetTags .Entry}}
 </head>
-<body{{if .User}} class="app-shell"{{end}}>
+<body{{if .User}} class="app-shell"{{else if eq .Entry "login"}} class="login-page"{{end}}>
 <a class="skip-link" href="#main">Lewati ke konten utama</a>
 {{with .User}}
 <aside class="site-sidebar" aria-label="Ruang kerja">
@@ -27,11 +27,12 @@
 <details class="mobile-navigation"><summary>Menu</summary><nav aria-label="Navigasi mobile">{{template "primary-navigation" $}}</nav></details>
 </header>
 {{end}}
-<main id="main"{{if .User}} class="page-sheet"{{end}}>
-<header class="page-heading"><div><h1>{{.Title}}</h1>{{block "page-description" .}}{{end}}</div>{{block "page-meta" .}}{{end}}</header>
+{{if not .User}}{{block "anonymous-header" .}}{{end}}{{end}}
+<main id="main"{{if .User}} class="page-sheet"{{else if eq .Entry "login"}} class="login-main"{{end}}>
+<header class="page-heading"><div><h1>{{block "page-title" .}}{{.Title}}{{end}}</h1>{{block "page-description" .}}{{end}}</div>{{block "page-meta" .}}{{end}}</header>
 {{template "content" .}}
 </main>
-{{if .User}}</div>{{end}}
+{{if .User}}</div>{{else}}{{block "anonymous-footer" .}}{{end}}{{end}}
 </body>
 </html>
 {{end}}

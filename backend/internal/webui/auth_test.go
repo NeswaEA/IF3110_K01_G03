@@ -42,14 +42,24 @@ func TestLoginPage(t *testing.T) {
 			t.Fatal("login page issued a session cookie")
 		}
 		expect(t, w.Body.String(), []string{
+			`class="login-page"`, `<h1>Masuk ke ruang kerja</h1>`, `class="login-brand"`,
+			`class="login-footer"`, `Belum memiliki akses?`, `id="main" class="login-main"`,
 			`data-next="` + html.EscapeString(tc.want) + `"`,
 			`<label for="login-username">Username</label>`, `autocomplete="current-password"`,
 			`type="submit" disabled`, `/assets/login.js`, `role="status"`,
-		}, `<nav`, `data-action="logout"`, `name="csrf`, `SessionID`, `<script>alert("x")</script>`)
+		}, `<nav`, `data-action="logout"`, `name="csrf`, `SessionID`, `<script>alert("x")</script>`, `class="app-shell"`)
+		if strings.Count(w.Body.String(), "<h1>") != 1 {
+			t.Fatal("login page should have one main heading")
+		}
 	}
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("POST", "/login", strings.NewReader("username=editor&password=secret")))
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatal("login page accepted native form POST")
+	}
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/missing", nil))
+	if w.Code != http.StatusNotFound || strings.Contains(w.Body.String(), "Masuk ke ruang kerja") || strings.Contains(w.Body.String(), "login-brand") {
+		t.Fatal("login page blocks leaked into the error page")
 	}
 }

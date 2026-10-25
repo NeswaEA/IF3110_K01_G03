@@ -8,7 +8,8 @@ import { request, setCsrfToken } from "../../api/client";
 import { bindLogin } from "./login";
 
 const B = "http://localhost/api/v1";
-const loginTemplate = readFileSync("../backend/internal/webui/templates/auth/login.gohtml", "utf8");
+const loginTemplate = readFileSync("../backend/internal/webui/templates/auth/login.gohtml", "utf8")
+  .split('{{define "content"}}')[1].split("{{end}}")[0];
 const server = setupServer();
 let csrfRequests = 0;
 let form: HTMLFormElement;
@@ -19,7 +20,6 @@ beforeEach(() => {
   setCsrfToken(null);
   csrfRequests = 0;
   document.body.innerHTML = loginTemplate
-    .replace('{{define "content"}}', "").replace("{{end}}", "")
     .replace("{{.Data.Next}}", "/databases/db-1?schema=main&amp;table=items");
   form = document.querySelector("form")!;
   navigate = vi.fn();
