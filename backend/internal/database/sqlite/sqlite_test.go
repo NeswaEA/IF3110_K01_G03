@@ -54,9 +54,11 @@ func TestParseChecks(t *testing.T) {
 		b TEXT DEFAULT 'CHECK (x)' CONSTRAINT "b len" CHECK (length(b) < 10 AND b <> ')'),
 		/* CHECK (block comment) */
 		CONSTRAINT pos CHECK ((a + 1) > (0)),
-		check(b IS NOT NULL)
+		check(b IS NOT NULL),
+		c INTEGER CHECK /* note */ -- line
+		  (c > 0)
 	)`)
-	want := []string{"CHECK (a > 0)", "CHECK (length(b) < 10 AND b <> ')')", "CHECK ((a + 1) > (0))", "CHECK (b IS NOT NULL)"}
+	want := []string{"CHECK (a > 0)", "CHECK (length(b) < 10 AND b <> ')')", "CHECK ((a + 1) > (0))", "CHECK (b IS NOT NULL)", "CHECK (c > 0)"}
 	if len(got) != len(want) {
 		t.Fatalf("got %d checks: %+v", len(got), got)
 	}

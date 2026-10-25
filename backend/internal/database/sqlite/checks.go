@@ -53,10 +53,7 @@ func parseChecks(createSQL string) []database.Constraint {
 			}
 			word := s[i:j]
 			if strings.EqualFold(word, "CHECK") {
-				k := j
-				for k < n && unicode.IsSpace(rune(s[k])) {
-					k++
-				}
+				k := skipGap(s, j)
 				if k < n && s[k] == '(' {
 					end := matchParen(s, k)
 					if end < 0 {
@@ -84,6 +81,32 @@ func parseChecks(createSQL string) []database.Constraint {
 		}
 	}
 	return out
+}
+
+// skipGap returns the index of the next token at or after i, past whitespace
+// and comments, which SQLite allows between any two tokens.
+func skipGap(s string, i int) int {
+	for i < len(s) {
+		switch {
+		case unicode.IsSpace(rune(s[i])):
+			i++
+		case strings.HasPrefix(s[i:], "--"):
+			j := strings.IndexByte(s[i:], '\n')
+			if j < 0 {
+				return len(s)
+			}
+			i += j + 1
+		case strings.HasPrefix(s[i:], "/*"):
+			j := strings.Index(s[i+2:], "*/")
+			if j < 0 {
+				return len(s)
+			}
+			i += j + 4
+		default:
+			return i
+		}
+	}
+	return i
 }
 
 func isWordByte(c byte) bool {

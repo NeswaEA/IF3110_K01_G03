@@ -124,6 +124,22 @@ func TestSQLiteNativeQuotesNamesAndPreservesCheckLiterals(t *testing.T) {
 	}
 }
 
+// The engine, not a fingerprint from the same inspector, decides whether the CHECK survived.
+func TestSQLiteNativeKeepsCheckAfterComment(t *testing.T) {
+	result, source, desired := nativeDiff(t, "", `CREATE TABLE checked_value(id INTEGER PRIMARY KEY, amount INTEGER CHECK /* note */ (amount > 0))`)
+	if !result.Executable {
+		t.Fatal(result)
+	}
+	if err := applyNative(t, source, result.CandidateSQL); err != nil {
+		t.Fatal(err, result.CandidateSQL)
+	}
+	for _, target := range []database.TargetHandle{desired, source} {
+		if _, err := target.DB.Exec(`INSERT INTO checked_value VALUES(1, -1)`); err == nil {
+			t.Fatal("CHECK was lost", target.DatabaseID, result.CandidateSQL)
+		}
+	}
+}
+
 func TestSQLiteNativeRejectsUnsupportedChangesWithoutPartialCandidates(t *testing.T) {
 	for _, tc := range []struct{ name, old, next string }{
 		{"drop column", `CREATE TABLE items(id INTEGER,label TEXT)`, `CREATE TABLE items(id INTEGER)`},
