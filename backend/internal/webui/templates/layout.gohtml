@@ -7,25 +7,39 @@
 {{with .User}}{{assetTags "layout"}}{{end}}
 {{assetTags .Entry}}
 </head>
-<body>
+<body{{if .User}} class="app-shell"{{end}}>
 <a class="skip-link" href="#main">Lewati ke konten utama</a>
 {{with .User}}
+<aside class="site-sidebar" aria-label="Ruang kerja">
+<a class="product-name" href="/databases"><strong>IF3110</strong><span>Database Access</span></a>
+<nav class="site-navigation" aria-label="Navigasi utama">{{template "primary-navigation" $}}</nav>
+{{block "sidebar-context" $}}{{end}}
+<div class="sidebar-account"><span class="account-label">Masuk sebagai</span><strong>{{.Username}}</strong><span>{{if .IsPlatformAdmin}}Admin platform{{else}}Pengguna database{{end}}</span></div>
+</aside>
+<div class="app-workspace">
 <header class="site-header">
-<nav aria-label="Navigasi utama">
-<a href="/databases"{{if eq $.Active "databases"}} aria-current="page"{{end}}>Database</a>
-{{if .IsPlatformAdmin}}
-<a href="/admin"{{if eq $.Active "admin"}} aria-current="page"{{end}}>Administrasi</a>
-<a href="/admin/connections"{{if eq $.Active "connections"}} aria-current="page"{{end}}>Koneksi</a>
-{{end}}
-</nav>
-<span class="site-user">Masuk sebagai <strong>{{.Username}}</strong></span>
+<a class="mobile-product-name" href="/databases">IF3110 <span>Database Access</span></a>
+<span class="workspace-caption">{{$.Title}}</span>
+<div class="header-account">
+<span class="site-user"><span class="account-prefix">Masuk sebagai </span><strong title="{{.Username}}">{{.Username}}</strong></span>
 <button type="button" data-action="logout">Keluar</button>
+</div>
+<details class="mobile-navigation"><summary>Menu</summary><nav aria-label="Navigasi mobile">{{template "primary-navigation" $}}</nav></details>
 </header>
 {{end}}
-<main id="main">
-<h1>{{.Title}}</h1>
+<main id="main"{{if .User}} class="page-sheet"{{end}}>
+<header class="page-heading"><div><h1>{{.Title}}</h1>{{block "page-description" .}}{{end}}</div>{{block "page-meta" .}}{{end}}</header>
 {{template "content" .}}
 </main>
+{{if .User}}</div>{{end}}
 </body>
 </html>
+{{end}}
+
+{{define "primary-navigation"}}
+<a href="/databases"{{if eq .Active "databases"}} aria-current="page"{{end}}>Database</a>
+{{if .User.IsPlatformAdmin}}
+<a href="/admin"{{if eq .Active "admin"}} aria-current="page"{{end}}>Administrasi</a>
+<a href="/admin/connections"{{if eq .Active "connections"}} aria-current="page"{{end}}>Koneksi</a>
+{{end}}
 {{end}}

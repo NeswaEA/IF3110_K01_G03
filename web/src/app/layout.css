@@ -1,14 +1,124 @@
-/* Shared page layout. Wide tables scroll inside their box so narrow screens keep the page usable. */
-.skip-link { position: absolute; left: -9999px; }
-.skip-link:focus { left: 0.5rem; top: 0.5rem; }
-.site-header { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; }
-.site-header nav { display: flex; flex-wrap: wrap; gap: 1rem; }
-.site-header a[aria-current="page"] { font-weight: bold; }
-.scroll-x { overflow-x: auto; max-width: 100%; }
-.viewer { display: flex; flex-wrap: wrap; gap: 1rem; }
-.schema-tree { min-width: 12rem; }
-.schema-tree a[aria-current="page"] { font-weight: bold; }
-.table-detail { flex: 1 1 20rem; min-width: 0; }
-.pager { display: flex; gap: 1rem; align-items: center; }
-/* Fingerprints and SQL definitions have no spaces to break at. */
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-sans/regular.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-sans/medium.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-sans/semibold.ttf") format("truetype");
+}
+
+:root {
+  color-scheme: light;
+  --color-ground: #f4f7f8;
+  --color-surface: #fff;
+  --color-raised: #e9eef0;
+  --color-border: #e6eaed;
+  --color-control: #87949c;
+  --color-text: #131416;
+  --color-muted: #59636b;
+  --color-accent: #1b6c80;
+  --color-access: #18586a;
+  --color-access-surface: #e9f2f5;
+  --color-selection: #dceef2;
+  --sidebar-width: 14.25rem;
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--color-text); background: var(--color-ground); font-size: 0.875rem; line-height: 1.5; }
+::selection { color: var(--color-text); background: var(--color-selection); }
+a { color: inherit; text-underline-offset: 0.2em; }
+button, input, select, textarea { font: inherit; }
+input, textarea { caret-color: var(--color-accent); }
+button { min-block-size: 2.25rem; padding: 0.375rem 0.75rem; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-control); border-radius: 0.375rem; cursor: pointer; }
+button:hover:not(:disabled) { background: var(--color-raised); }
+button:disabled { color: var(--color-muted); cursor: default; }
+:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+pre, code { font-family: ui-monospace, monospace; }
 main code { overflow-wrap: anywhere; }
+main :is(h1, h2, h3, p) { overflow-wrap: anywhere; }
+.visually-hidden { position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.skip-link { position: absolute; inset-inline-start: -9999px; }
+.skip-link:focus { inset-inline-start: 0.5rem; inset-block-start: 0.5rem; z-index: 20; padding: 0.5rem 0.75rem; color: var(--color-text); background: var(--color-surface); }
+
+.app-shell { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); min-block-size: 100svh; }
+.site-sidebar { position: sticky; inset-block-start: 0; display: flex; flex-direction: column; gap: 1.875rem; block-size: 100svh; min-inline-size: 0; overflow-y: auto; padding: 1.5rem 1.125rem 1.25rem; }
+.product-name { display: grid; gap: 0.125rem; padding-inline: 0.625rem; text-decoration: none; }
+.product-name strong { font-size: 1.0625rem; font-weight: 600; letter-spacing: -0.02em; }
+.product-name span { color: var(--color-muted); font-size: 0.8125rem; }
+.site-navigation { display: grid; gap: 0.25rem; }
+.site-navigation a { display: flex; align-items: center; min-block-size: 2.5rem; padding: 0.5rem 0.75rem; border-radius: 0.375rem; text-decoration: none; }
+.site-navigation a:hover, .site-navigation a[aria-current="page"] { background: var(--color-raised); }
+.site-navigation a[aria-current="page"] { font-weight: 600; }
+.sidebar-account { display: grid; gap: 0.125rem; margin-block-start: auto; padding: 1rem 0.625rem 0; border-block-start: 1px solid var(--color-border); font-size: 0.75rem; }
+.sidebar-account strong { font-size: 0.875rem; font-weight: 500; overflow-wrap: anywhere; }
+.sidebar-account span { color: var(--color-muted); }
+.sidebar-account .account-label { margin-block-end: 0.125rem; }
+.app-workspace { min-inline-size: 0; padding-block-end: 0.5rem; }
+.site-header { display: flex; align-items: center; gap: 1rem; min-block-size: 3.5rem; padding: 0.5rem 1.75rem; }
+.workspace-caption { color: var(--color-muted); font-size: 0.8125rem; overflow-wrap: anywhere; }
+.header-account { display: flex; align-items: center; gap: 1rem; margin-inline-start: auto; min-inline-size: 0; }
+.site-user { color: var(--color-muted); font-size: 0.75rem; white-space: nowrap; }
+.site-user strong { display: inline-block; max-inline-size: 12rem; overflow: hidden; color: var(--color-text); font-weight: 500; text-overflow: ellipsis; vertical-align: bottom; }
+.site-header button { font-size: 0.8125rem; }
+.mobile-product-name, .mobile-navigation { display: none; }
+.page-sheet { min-inline-size: 0; min-block-size: calc(100svh - 4rem); margin-inline-end: 0.5rem; padding: 2.25rem 2rem 3rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 1rem; }
+.page-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; margin-block-end: 1.5rem; }
+.page-heading > div { min-inline-size: 0; }
+.page-heading h1 { margin: 0; font-size: 1.625rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.03em; }
+.page-description { max-inline-size: 66ch; margin: 0.625rem 0 0; color: var(--color-muted); }
+.page-count { flex-shrink: 0; padding-block-start: 0.25rem; color: var(--color-muted); font-size: 0.8125rem; }
+
+.scroll-x { max-inline-size: 100%; overflow-x: auto; }
+.viewer { display: flex; flex-wrap: wrap; gap: 1rem; }
+.schema-tree { min-inline-size: 12rem; }
+.schema-tree a[aria-current="page"] { font-weight: 600; }
+.table-detail { flex: 1 1 20rem; min-inline-size: 0; }
+.pager { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+
+@media (max-width: 68.75rem) {
+  .app-shell { display: block; }
+  .site-sidebar { display: none; }
+  .site-header { min-block-size: 4rem; padding-inline: 1.5rem; }
+  .workspace-caption { display: none; }
+  .mobile-product-name { display: flex; gap: 0.5rem; align-items: baseline; min-inline-size: 0; font-weight: 600; text-decoration: none; }
+  .mobile-product-name span { color: var(--color-muted); font-size: 0.75rem; font-weight: 400; }
+  .mobile-navigation { position: relative; display: block; }
+  .mobile-navigation summary { display: flex; align-items: center; min-block-size: 2.75rem; font-size: 0.8125rem; font-weight: 500; cursor: pointer; }
+  .mobile-navigation nav { position: absolute; inset-block-start: 2.75rem; inset-inline-end: 0; z-index: 10; display: grid; gap: 0.25rem; min-inline-size: 12rem; padding: 0.5rem; background: var(--color-surface); border: 1px solid var(--color-control); border-radius: 0.5rem; }
+  .mobile-navigation a { display: flex; align-items: center; min-block-size: 2.75rem; padding: 0.5rem 0.75rem; border-radius: 0.375rem; text-decoration: none; }
+  .mobile-navigation a[aria-current="page"], .mobile-navigation a:hover { background: var(--color-raised); }
+  .page-sheet { min-block-size: calc(100svh - 4.5rem); margin-inline: 0.5rem; padding: 2rem 1.5rem; }
+}
+
+@media (max-width: 37.5rem) {
+  .site-header { gap: 0.75rem; padding-inline: 1.25rem; }
+  .mobile-product-name span { display: none; }
+  .header-account { gap: 0.75rem; }
+  .site-user { max-inline-size: 8rem; overflow: hidden; }
+  .account-prefix { display: none; }
+  .site-user strong { max-inline-size: 8ch; font-size: 0.75rem; }
+  .site-header button { min-block-size: 2.75rem; }
+  .page-sheet { padding: 1.75rem 1.25rem 2.25rem; border-radius: 0.75rem; }
+  .page-heading { gap: 0.75rem; }
+  .page-heading h1 { font-size: 1.625rem; }
+  .page-description { max-inline-size: 32ch; font-size: 0.8125rem; }
+  .page-count { font-size: 0.75rem; text-align: end; }
+
+}
