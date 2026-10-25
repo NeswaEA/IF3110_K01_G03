@@ -91,10 +91,14 @@ func WriteJSON(w http.ResponseWriter, r *http.Request, status int, data any, pag
 		w.WriteHeader(status)
 		return nil
 	}
-	return writeJSON(w, status, struct {
+	body, err := json.Marshal(struct {
 		Data any   `json:"data"`
 		Page *Page `json:"page,omitempty"`
 	}{Data: data, Page: page})
+	if err != nil {
+		return WriteError(w, r, &contracts.DomainError{Code: "INTERNAL_ERROR", Cause: err})
+	}
+	return writeJSONBody(w, status, body)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) error {
@@ -102,9 +106,13 @@ func writeJSON(w http.ResponseWriter, status int, value any) error {
 	if err != nil {
 		return err
 	}
+	return writeJSONBody(w, status, body)
+}
+
+func writeJSONBody(w http.ResponseWriter, status int, body []byte) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	_, err = w.Write(append(body, '\n'))
+	_, err := w.Write(append(body, '\n'))
 	return err
 }
 

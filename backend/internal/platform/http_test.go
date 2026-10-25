@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -184,20 +185,98 @@ func TestSuccessResponses(t *testing.T) {
 	}
 }
 
-func TestMarshalFailureDoesNotWritePartialResponse(t *testing.T) {
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/", nil)
-	if err := platform.WriteJSON(w, r, 201, make(chan int), nil); err == nil {
-		t.Fatal("expected serialization error")
+type failingMarshaler struct{}
+
+func (failingMarshaler) MarshalJSON() ([]byte, error) {
+	return nil, &contracts.DomainError{Code: "FORBIDDEN", Message: "private-credential"}
+}
+
+func TestMarshalFailureWritesSanitizedInternalError(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	for _, tc := range []struct {
+		name string
+		data any
+	}{
+		{"positive infinity", math.Inf(1)},
+		{"negative infinity", math.Inf(-1)},
+		{"NaN", math.NaN()},
+		{"unsupported type", make(chan int)},
+		{"marshaler error", failingMarshaler{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			logs.Reset()
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest("GET", "/", nil)
+			if err := platform.WriteJSON(w, r, 201, map[string]any{"secret": "private-credential", "value": tc.data}, nil); err != nil {
+				t.Fatal(err)
+			}
+			var body struct {
+				Error struct {
+					Code      string            `json:"code"`
+					Message   string            `json:"message"`
+					Fields    map[string]string `json:"fields"`
+					RequestID string            `json:"request_id"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if w.Code != 500 || w.Header().Get("Content-Type") != "application/json; charset=utf-8" || body.Error.Code != "INTERNAL_ERROR" || body.Error.Message != "Terjadi kesalahan internal." || body.Error.Fields == nil || len(body.Error.Fields) != 0 {
+				t.Fatalf("expected a complete internal error response: %d %s", w.Code, w.Body.String())
+			}
+			var logged map[string]any
+			if err := json.Unmarshal(logs.Bytes(), &logged); err != nil {
+				t.Fatal(err)
+			}
+			if body.Error.RequestID == "" || body.Error.RequestID != w.Header().Get("X-Request-ID") || logged["request_id"] != body.Error.RequestID {
+				t.Fatal("response and log must use the same request ID")
+			}
+			if strings.Contains(w.Body.String(), "private-credential") || strings.Contains(logs.String(), "private-credential") {
+				t.Fatal("serialization failure leaked internal details")
+			}
+		})
 	}
-	if w.Body.Len() != 0 {
-		t.Fatal("partial response written")
-	}
-	if err := platform.WriteError(w, r, errors.New("secret")); err != nil {
-		t.Fatal(err)
-	}
-	if w.Code != 500 || strings.Contains(w.Body.String(), "secret") {
-		t.Fatal(w)
+}
+
+type failingResponseWriter struct {
+	*httptest.ResponseRecorder
+	err                  error
+	statuses, bodyWrites int
+}
+
+func (w *failingResponseWriter) WriteHeader(status int) {
+	w.statuses++
+	w.ResponseRecorder.WriteHeader(status)
+}
+
+func (w *failingResponseWriter) Write(body []byte) (int, error) {
+	w.bodyWrites++
+	n, _ := w.ResponseRecorder.Write(body[:len(body)/2])
+	return n, w.err
+}
+
+func TestWriteJSONDoesNotRetryTransportFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		data   any
+		status int
+	}{
+		{"success", map[string]string{"value": "ok"}, 200},
+		{"error fallback", math.Inf(1), 500},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			failure := errors.New("connection closed")
+			w := &failingResponseWriter{ResponseRecorder: httptest.NewRecorder(), err: failure}
+			if err := platform.WriteJSON(w, httptest.NewRequest("GET", "/", nil), 200, tc.data, nil); !errors.Is(err, failure) {
+				t.Fatalf("expected transport error, got %v", err)
+			}
+			if w.Code != tc.status || w.statuses != 1 || w.bodyWrites != 1 {
+				t.Fatalf("response must be attempted once: status=%d headers=%d writes=%d", w.Code, w.statuses, w.bodyWrites)
+			}
+		})
 	}
 }
 
