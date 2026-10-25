@@ -18,6 +18,7 @@ afterEach(() => {
   server.resetHandlers(...handlers);
   posted = null;
   vi.restoreAllMocks();
+  window.history.replaceState(null, "", "/");
 });
 afterAll(() => server.close());
 
@@ -29,6 +30,40 @@ describe("ConnectionsPage", () => {
     expect(screen.getByText("Aktif, belum diuji")).toBeInTheDocument();
     // the registry table (not the create form, which has a Password field) shows no credential
     expect(screen.getAllByRole("table")[0].textContent).not.toMatch(/password|has_credentials/i);
+  });
+
+  it("pages past the first 200 registrations through the page URL", async () => {
+    const offsets: (string | null)[] = [];
+    server.use(
+      http.get("*/api/v1/admin/connections", ({ request }) => {
+        const offset = new URL(request.url).searchParams.get("offset");
+        offsets.push(offset);
+        const data = offset === "0" ? connectionsList.data : offset === "200" ? [connectionsList.data[1]] : [];
+        return HttpResponse.json({ data, page: { limit: 200, offset: Number(offset), has_more: offset === "0" } });
+      }),
+    );
+    const { unmount } = render(<ConnectionsPage />);
+    await screen.findByText("PostgreSQL latihan");
+    expect(screen.getByRole("link", { name: "Berikutnya" })).toHaveAttribute("href", "/admin/connections?offset=200");
+    expect(screen.queryByRole("link", { name: "Sebelumnya" })).not.toBeInTheDocument();
+    unmount();
+
+    window.history.replaceState(null, "", "/admin/connections?offset=200");
+    const second = render(<ConnectionsPage />);
+    await screen.findByText("SQLite latihan");
+    expect(screen.getByText("Menampilkan koneksi 201 sampai 201.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sebelumnya" })).toHaveAttribute("href", "/admin/connections");
+    expect(screen.queryByRole("link", { name: "Berikutnya" })).not.toBeInTheDocument();
+    // actions reload the same page, not the first one
+    await userEvent.click(screen.getByRole("button", { name: "Uji koneksi" }));
+    await screen.findByRole("status");
+    await vi.waitFor(() => expect(offsets).toEqual(["0", "200", "200"]));
+    second.unmount();
+
+    window.history.replaceState(null, "", "/admin/connections?offset=400");
+    render(<ConnectionsPage />);
+    expect(await screen.findByText("Tidak ada koneksi pada halaman ini.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Halaman pertama" })).toHaveAttribute("href", "/admin/connections");
   });
 
   it("registers a SQLite target and reloads", async () => {

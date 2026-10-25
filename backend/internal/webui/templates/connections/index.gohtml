@@ -10,10 +10,16 @@
 </tbody>
 </table>
 </div>
-{{if .Data.HasMore}}<p>Hanya {{len .Data.Rows}} koneksi pertama yang ditampilkan.</p>{{end}}
+<p>Menampilkan koneksi {{.Data.First}} sampai {{.Data.Last}}.</p>
+{{else if .Data.Prev}}
+<p>Tidak ada koneksi pada halaman ini.</p>
 {{else}}
 <p>Belum ada koneksi terdaftar.</p>
 {{end}}
+<nav class="pager" aria-label="Halaman koneksi">
+{{if .Data.Prev}}<a href="/admin/connections">Halaman pertama</a><a href="{{.Data.Prev}}">Sebelumnya</a>{{end}}
+{{if .Data.Next}}<a href="{{.Data.Next}}">Berikutnya</a>{{end}}
+</nav>
 <noscript><p>Formulir tambah, ubah, uji, dan nonaktifkan koneksi memerlukan JavaScript.</p></noscript>
 </section>
 {{end}}

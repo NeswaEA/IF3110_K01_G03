@@ -231,8 +231,13 @@ function target(c: AdminConnection) {
   return `${p.username}@${p.host}:${p.port}/${p.database} (sslmode ${p.sslmode})`;
 }
 
+// The page URL's offset picks the registry page, so paging stays plain document navigation.
+const PAGE_SIZE = 200;
+const pageURL = (offset: number) => (offset > 0 ? `/admin/connections?offset=${offset}` : "/admin/connections");
+
 export function ConnectionsPage() {
-  const [q, reload] = useApi<AdminConnection[]>("/admin/connections?limit=200");
+  const offset = Number(new URLSearchParams(window.location.search).get("offset")) || 0;
+  const [q, reload] = useApi<AdminConnection[]>(`/admin/connections?limit=${PAGE_SIZE}&offset=${offset}`);
   const [notice, setNotice] = useState<Notice>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [editing, setEditing] = useState<AdminConnection | null>(null);
@@ -268,7 +273,7 @@ export function ConnectionsPage() {
       {q.status === "error" && <ErrorState error={q.error} />}
       {q.status === "success" &&
         (q.response.data.length === 0 ? (
-          <EmptyState message="Belum ada koneksi terdaftar." />
+          <EmptyState message={offset > 0 ? "Tidak ada koneksi pada halaman ini." : "Belum ada koneksi terdaftar."} />
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table>
@@ -307,8 +312,22 @@ export function ConnectionsPage() {
                 ))}
               </tbody>
             </table>
+            <p>
+              Menampilkan koneksi {offset + 1} sampai {offset + q.response.data.length}.
+            </p>
           </div>
         ))}
+      {q.status === "success" && (
+        <nav className="pager" aria-label="Halaman koneksi">
+          {offset > 0 && (
+            <>
+              <a href={pageURL(0)}>Halaman pertama</a>
+              <a href={pageURL(Math.max(0, offset - PAGE_SIZE))}>Sebelumnya</a>
+            </>
+          )}
+          {q.response.page?.has_more && offset + PAGE_SIZE <= 100000 && <a href={pageURL(offset + PAGE_SIZE)}>Berikutnya</a>}
+        </nav>
+      )}
       {editing && (
         <EditForm
           key={`${editing.id}:${editing.revision}`}

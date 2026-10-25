@@ -114,8 +114,12 @@ func (s *sources) Database(_ context.Context, _ contracts.AccessChecker, _ strin
 	return connections.Database{}, database.ErrNotFound
 }
 
-func (s *sources) List(context.Context, int, int) ([]connections.AdminConnection, bool, error) {
-	return s.conns, false, nil
+func (s *sources) List(_ context.Context, limit, offset int) ([]connections.AdminConnection, bool, error) {
+	if offset >= len(s.conns) {
+		return nil, false, nil
+	}
+	end := min(len(s.conns), offset+limit)
+	return s.conns[offset:end], end < len(s.conns), nil
 }
 
 func (s *sources) Get(_ context.Context, id string) (connections.AdminConnection, error) {
@@ -382,6 +386,25 @@ func TestConnectionsPageListsRegistry(t *testing.T) {
 	src.conns = nil
 	if _, body := (harness{t, src, admin, nil}).get("/admin/connections"); !strings.Contains(body, "Belum ada koneksi terdaftar.") {
 		t.Fatal("empty registry has no empty state")
+	}
+}
+
+func TestConnectionsPagePagesPastTheFirst200(t *testing.T) {
+	src := newSources(t)
+	for i := range 201 {
+		src.conns = append(src.conns, connections.AdminConnection{ID: fmt.Sprint(i), Name: fmt.Sprintf("Koneksi %03d", i), Driver: database.SQLite, Config: connections.PublicSQLiteConfig{File: "x.sqlite"}})
+	}
+	h := harness{t, src, admin, nil}
+	_, body := h.get("/admin/connections")
+	expect(t, body, []string{"Koneksi 199", "Menampilkan koneksi 1 sampai 200.", `href="/admin/connections?offset=200">Berikutnya`}, "Koneksi 200", "Sebelumnya")
+	_, body = h.get("/admin/connections?offset=200")
+	expect(t, body, []string{"Koneksi 200", "Menampilkan koneksi 201 sampai 201.", `href="/admin/connections">Sebelumnya`}, "Koneksi 199", "Berikutnya")
+	_, body = h.get("/admin/connections?offset=400")
+	expect(t, body, []string{"Tidak ada koneksi pada halaman ini.", "Halaman pertama"}, "Belum ada koneksi terdaftar.")
+	for _, bad := range []string{"-1", "x", "100001"} {
+		if status, _ := h.get("/admin/connections?offset=" + bad); status != 400 {
+			t.Fatal(bad, status)
+		}
 	}
 }
 
