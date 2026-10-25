@@ -1,4 +1,5 @@
 import { ApiRequestError, request } from "../../api/client";
+import { markInvalid } from "../../components/formFeedback";
 
 export function bindGrants(root: HTMLElement, navigate: (url: string) => void): void {
   const forms = [...root.querySelectorAll<HTMLFormElement>("form[data-operation]")];
@@ -12,6 +13,8 @@ export function bindGrants(root: HTMLElement, navigate: (url: string) => void): 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (pending || !form.reportValidity()) return;
+      delete message.dataset.tone;
+      markInvalid(form, []);
       const removing = form.dataset.operation === "remove";
       const databaseId = form.dataset.operation === "set"
         ? form.querySelector<HTMLSelectElement>('[name="database_id"]')!.value
@@ -44,6 +47,8 @@ export function bindGrants(root: HTMLElement, navigate: (url: string) => void): 
         pending = false;
         root.removeAttribute("aria-busy");
         for (const other of forms) other.querySelector<HTMLFieldSetElement>("fieldset")!.disabled = false;
+        message.dataset.tone = "error";
+        markInvalid(form, err instanceof ApiRequestError ? Object.keys(err.fields) : []);
       }
     });
     button.disabled = false;

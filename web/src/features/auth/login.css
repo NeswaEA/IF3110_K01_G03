@@ -1,8 +1,8 @@
-.login-page { display: grid; grid-template-rows: auto 1fr auto; min-block-size: 100svh; padding: 2.375rem 3rem 1.625rem; }
-.login-brand { display: flex; justify-content: center; align-items: baseline; flex-wrap: wrap; gap: 0.75rem; }
+/* Text outside the card sits on the navy end of the gradient: white stays above 5.4:1 within the left 40% of the width. */
+.login-page { display: grid; grid-template-rows: auto 1fr auto; min-block-size: 100svh; padding: 2.375rem 3rem 1.625rem; background: linear-gradient(to right, #000c40, #f0f2f0); }
+.login-brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.75rem; color: #fff; }
 .login-brand strong { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.03em; }
-.login-brand span { color: var(--color-muted); }
-.login-main { inline-size: 100%; max-inline-size: 23.75rem; margin: auto; padding-block: 4rem; }
+.login-main { inline-size: 100%; max-inline-size: 26rem; margin: auto; padding: 2.5rem 2.25rem; background: var(--color-surface); border-radius: 0.75rem; box-shadow: 0 1.5rem 3rem rgb(0 12 64 / 0.28); }
 .login-main .page-heading { margin-block-end: 0.75rem; }
 .login-main .page-heading h1 { font-size: 1.875rem; line-height: 1.25; }
 .login-description { margin: 0 0 1.75rem; color: var(--color-muted); }
@@ -10,21 +10,26 @@
 #login-form fieldset { display: grid; gap: 1.125rem; min-inline-size: 0; margin: 0; padding: 0; border: 0; }
 .login-field { display: grid; gap: 0.5rem; }
 .login-field label { font-weight: 500; }
-#login-form input, #login-form button { inline-size: 100%; min-block-size: 3rem; padding: 0.75rem 0.875rem; border-radius: 0.375rem; }
+#login-form input, #login-form button[type="submit"] { inline-size: 100%; min-block-size: 3rem; padding: 0.75rem 0.875rem; border-radius: 0.375rem; }
 #login-form input { min-inline-size: 0; border: 1px solid var(--color-control); background: var(--color-surface); color: var(--color-text); }
 #login-form input::placeholder { color: var(--color-muted); opacity: 1; }
-#login-form button { margin-block-start: 0.5rem; border: 1px solid var(--color-text); background: var(--color-text); color: var(--color-surface); font-weight: 500; }
-#login-form button:hover:not(:disabled) { background: #30363c; }
-#login-form button:disabled { background: var(--color-raised); border-color: var(--color-control); color: var(--color-muted); }
+#login-form button[type="submit"] { margin-block-start: 0.5rem; border: 1px solid var(--color-text); background: var(--color-text); color: var(--color-surface); font-weight: 500; }
+#login-form button[type="submit"]:hover:not(:disabled) { background: var(--color-primary-hover); }
+#login-form button[type="submit"]:disabled { background: var(--color-raised); border-color: var(--color-control); color: var(--color-muted); }
 #login-form[aria-busy="true"] { cursor: progress; }
+#login-password { padding-inline-end: 3rem; }
 #login-message { margin: 0; overflow-wrap: anywhere; color: var(--color-text); font-size: 0.8125rem; }
 #login-message:not(:empty) { margin-block-start: 1rem; }
-.login-help { margin: 1.5rem 0 0; color: var(--color-muted); font-size: 0.8125rem; line-height: 1.65; }
+.login-help { margin: 1.5rem 0 0; padding-block-start: 1.25rem; border-block-start: 1px solid var(--color-border); color: var(--color-muted); font-size: 0.8125rem; line-height: 1.65; }
 .login-help strong { color: var(--color-text); font-weight: 500; }
-.login-footer p { margin: 0; color: var(--color-muted); font-size: 0.8125rem; }
+.login-footer p { max-inline-size: calc(40vw - 3rem); margin: 0; color: #fff; font-size: 0.8125rem; }
 
+/* Narrow screens run the same gradient top-to-bottom so header and footer text never cross its midpoint. */
 @media (max-width: 50rem) {
-  .login-page { padding-inline: 1.5rem; }
+  .login-page { padding-inline: 1rem; background: linear-gradient(to bottom, #000c40, #f0f2f0); }
+  .login-brand, .login-footer { justify-content: center; text-align: center; }
+  .login-main { align-self: center; margin-block: 1.5rem; padding: 2rem 1.5rem; }
+  .login-footer p { max-inline-size: none; color: var(--color-text); }
 }
 
 @media (max-width: 37.5rem) {
@@ -32,7 +37,7 @@
   .login-brand { gap: 0.5rem; }
   .login-brand strong { font-size: 1.125rem; }
   .login-brand span { font-size: 0.8125rem; }
-  .login-main { padding-block-end: 3.5rem; }
+  .login-main { padding: 1.75rem 1.25rem; }
+  .login-main .page-heading h1 { font-size: 1.625rem; }
   .login-description { margin-block-end: 1.5rem; }
-  .login-footer { text-align: center; }
 }

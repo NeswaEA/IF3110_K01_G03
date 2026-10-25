@@ -160,23 +160,28 @@ function Workbench({ db, initial }: { db: DatabaseSummary; initial?: MigrationIn
 
   return (
     <section className="migrations">
-      <h2>Migrasi: {db.name}</h2>
-      <p>{db.driver} · akses {canEdit ? "lihat dan edit" : "lihat"}</p>
-      <a href={`/databases/${db.id}`}>Lihat schema dan data</a>
-      {canEdit && db.capabilities.schema_diff && <p><a href={`/databases/${db.id}/schema-diff`}>Bandingkan schema</a></p>}
-      {head.status === "success" && <p>Versi committed: {head.response.data.version}</p>}
+      <div className="migration-summary">
+        <div>
+          <h2>Migrasi: {db.name}</h2>
+          <p>{db.driver} · akses {canEdit ? "lihat dan edit" : "lihat"}{head.status === "success" && <> · Versi committed: {head.response.data.version}</>}</p>
+        </div>
+        <nav className="page-actions" aria-label="Halaman database">
+          <a className="button-link button-link-secondary" href={`/databases/${db.id}`}>Lihat schema dan data</a>
+          {canEdit && db.capabilities.schema_diff && <a className="button-link button-link-secondary" href={`/databases/${db.id}/schema-diff`}>Bandingkan schema</a>}
+        </nav>
+      </div>
       {head.status === "error" && <ErrorState error={head.error} />}
-      {notice && <p role="status">{notice}</p>}
+      {notice && <p role="status" className="alert alert-success">{notice}</p>}
       {failure !== null && <ErrorState error={failure} />}
       {canEdit ? (
         <div className="migration-workspace">
           <aside aria-label="Daftar draft">
             <h2>Draft SQL</h2>
-            <button type="button" disabled={busy} onClick={() => { if (confirmDiscard()) showDraft(null); }}>Draft baru</button>
+            <button type="button" className="draft-new" disabled={busy} onClick={() => { if (confirmDiscard()) showDraft(null); }}>Draft baru</button>
             {drafts.status === "loading" && <Loading label="Memuat draft..." />}
             {drafts.status === "error" && <ErrorState error={drafts.error} />}
             {drafts.status === "success" && (drafts.response.data.length === 0 ? <EmptyState message="Belum ada draft." /> : (
-              <ul>{drafts.response.data.map((item) => (
+              <ul className="draft-list">{drafts.response.data.map((item) => (
                 <li key={item.id}><button type="button" disabled={busy} aria-pressed={draft?.id === item.id} onClick={() => {
                   if (!confirmDiscard()) return;
                   void act(async (signal) => {
@@ -200,11 +205,11 @@ function Workbench({ db, initial }: { db: DatabaseSummary; initial?: MigrationIn
             <SQLEditor value={sql} driver={db.driver} readOnly={blocked} onChange={setSQL} onSelection={setExplainSQL} />
             <div className="migration-actions">
               <button type="button" onClick={save} disabled={blocked || !dirty || !title.trim() || !sql.trim() || !Number.isSafeInteger(version) || version < 0}>Simpan draft</button>
-              <button type="button" onClick={execute} disabled={blocked || !draft || dirty || !db.capabilities.transactional_migrations}>Jalankan migrasi</button>
+              <button type="button" className="button-primary" onClick={execute} disabled={blocked || !draft || dirty || !db.capabilities.transactional_migrations}>Jalankan migrasi</button>
             </div>
-            {draft?.applied_at && <p>Draft sudah diterapkan. Buat draft baru untuk perubahan berikutnya.</p>}
-            {!db.capabilities.transactional_migrations && <p>Eksekusi belum tersedia. Admin perlu menguji koneksi dan menyiapkan ledger.</p>}
-            {draft && dirty && <p>Simpan perubahan sebelum menjalankan migrasi.</p>}
+            {draft?.applied_at && <p className="alert alert-success">Draft sudah diterapkan. Buat draft baru untuk perubahan berikutnya.</p>}
+            {!db.capabilities.transactional_migrations && <p className="alert alert-warning">Eksekusi belum tersedia. Admin perlu menguji koneksi dan menyiapkan ledger.</p>}
+            {draft && dirty && <p className="field-hint">Simpan perubahan sebelum menjalankan migrasi.</p>}
             <ExplainPanel databaseId={db.id} sql={explainSQL} canExplain={canEdit && db.capabilities.explain} />
           </div>
         </div>
@@ -216,7 +221,7 @@ function Workbench({ db, initial }: { db: DatabaseSummary; initial?: MigrationIn
         <div className="migration-table"><table>
           <thead><tr><th>Status</th><th>Versi percobaan</th><th>Versi committed</th><th>Pelaksana</th><th>Mulai</th><th>Detail</th></tr></thead>
           <tbody>{history.response.data.map((item) => <tr key={item.id}>
-            <td>{statusLabel[item.status]}</td><td>{item.candidate_version}</td><td>{item.version ?? "belum committed"}</td><td>{item.actor.username}</td><td>{date(item.started_at)}</td>
+            <td><span className="status-badge" data-status={item.status}>{statusLabel[item.status]}</span></td><td>{item.candidate_version}</td><td>{item.version ?? "belum committed"}</td><td>{item.actor.username}</td><td>{date(item.started_at)}</td>
             <td><button type="button" onClick={() => setRun(item)}>Lihat SQL dan status</button></td>
           </tr>)}</tbody>
         </table></div>
@@ -274,15 +279,15 @@ export function RunDetail({ base, run, setRun, canEdit, onTerminal }: {
     finally { setBusy(false); }
   }
 
-  return <section aria-label="Detail eksekusi">
+  return <section className="run-detail" aria-label="Detail eksekusi">
     <h2>Detail eksekusi</h2>
     <p>Status: {statusLabel[run.status]}</p>
     <p>Versi percobaan: {run.candidate_version}; versi committed: {run.version ?? "belum committed"}</p>
     <p>Pelaksana: {run.actor.username}; mulai: {date(run.started_at)}; selesai: {date(run.finished_at)}</p>
     {run.error && <p role="alert">{run.error.code}: {run.error.message}</p>}
     <pre>{run.sql}</pre>
-    {pending(run) && <p>Hasil belum definitif. SQL tidak dijalankan ulang saat memeriksa status.</p>}
-    {stopped && <p>Pemeriksaan otomatis berhenti. Perbarui status atau rekonsiliasi secara manual.</p>}
+    {pending(run) && <p className="alert alert-warning">Hasil belum definitif. SQL tidak dijalankan ulang saat memeriksa status.</p>}
+    {stopped && <p className="alert alert-warning">Pemeriksaan otomatis berhenti. Perbarui status atau rekonsiliasi secara manual.</p>}
     {error !== null && <ErrorState error={error} />}
     {pending(run) && <div className="migration-actions">
       <button type="button" onClick={() => { attempts.current = 0; setStopped(false); setError(null); setRefresh((v) => v + 1); }}>Perbarui status</button>

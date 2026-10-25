@@ -1,26 +1,12 @@
-.access-admin { max-inline-size: 75rem; color: #222; background: #fff; }
-main :is(h1, h2), .site-user { overflow-wrap: anywhere; }
-.site-user { min-inline-size: 0; }
-.admin-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; align-items: center; justify-content: space-between; }
-.admin-tabs { display: flex; flex-wrap: wrap; gap: 1rem; }
-.admin-tabs a[aria-current="page"] { font-weight: bold; }
-.access-admin a { color: #0645ad; }
-.access-admin a { display: inline-flex; align-items: center; min-block-size: 2.75rem; }
-.access-admin table { inline-size: 100%; border-collapse: collapse; }
-.access-admin caption { text-align: start; font-weight: bold; padding-block: 0.5rem; }
-.access-admin th, .access-admin td { padding: 0.5rem; text-align: start; vertical-align: top; border-block-end: 1px solid #777; }
-.access-admin td a { gap: 0.25rem; }
-.access-admin th[scope="row"], .resource-name { overflow-wrap: anywhere; max-inline-size: 16rem; }
-.access-admin .pager { flex-wrap: wrap; }
-.access-admin section { margin-block-start: 2rem; scroll-margin-block-start: 1rem; }
-.access-admin form { max-inline-size: 28rem; margin-block: 1rem; }
-.access-admin fieldset { display: grid; gap: 0.75rem; min-inline-size: 0; border: 1px solid #666; padding: 1rem; }
-.access-admin legend { font-weight: bold; padding-inline: 0.25rem; }
-.access-admin p { overflow-wrap: anywhere; }
-.access-admin fieldset p { margin: 0; }
-.access-admin input:not([type="checkbox"]), .access-admin select { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; min-block-size: 2.75rem; font: inherit; border: 1px solid #666; padding: 0.5rem; color: #222; background: #fff; }
-.access-admin .admin-check { display: flex; gap: 0.5rem; align-items: center; min-block-size: 2.75rem; overflow-wrap: anywhere; }
-.access-admin button { min-block-size: 2.75rem; font: inherit; }
-.access-admin button { border: 1px solid #0645ad; background: #0645ad; color: #fff; padding: 0.5rem 0.75rem; cursor: pointer; }
-.access-admin button:disabled { border-color: #666; background: #e6e6e6; color: #555; cursor: wait; }
-.access-admin :is(a, button, input, select, .scroll-x):focus-visible { outline: 3px solid #0645ad; outline-offset: 3px; }
+.access-admin { max-inline-size: 75rem; }
+.admin-toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; align-items: center; justify-content: space-between; }
+.admin-toolbar p { max-inline-size: 66ch; margin: 0; color: var(--color-muted); }
+.access-admin th[scope="row"], .resource-name { max-inline-size: 16rem; overflow-wrap: anywhere; }
+.access-admin :is(th, td) { vertical-align: middle; }
+.access-admin td a { display: inline-block; padding-block: 0.625rem; }
+.access-admin section { margin-block-start: 2.5rem; scroll-margin-block-start: 1rem; }
+.access-admin section > h2 { margin-block-start: 0; }
+.access-admin form { max-inline-size: 32rem; margin-block: 1rem; }
+.access-admin .admin-check { display: flex; gap: 0.5rem; align-items: center; min-block-size: 2.75rem; font-weight: 400; overflow-wrap: anywhere; }
+.access-admin button { min-block-size: 2.75rem; }
+.access-admin form[aria-busy="true"], .access-admin[aria-busy="true"] { cursor: progress; }

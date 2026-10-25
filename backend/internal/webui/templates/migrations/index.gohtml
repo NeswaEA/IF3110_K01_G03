@@ -1,3 +1,5 @@
+{{define "breadcrumb"}}<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/databases">Database</a><a href="/databases/{{.Data.ID}}">{{.Data.Database.Name}}</a></nav>{{end}}
+
 {{define "content"}}
 <section data-widget="migrations" data-database-id="{{.Data.ID}}" data-initial="{{.Data.Initial}}" aria-live="polite">
 <div class="migrations">

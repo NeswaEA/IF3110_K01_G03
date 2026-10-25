@@ -7,7 +7,7 @@
 {{with .User}}{{assetTags "layout"}}{{end}}
 {{assetTags .Entry}}
 </head>
-<body{{if .User}} class="app-shell"{{else if eq .Entry "login"}} class="login-page"{{end}}>
+<body{{if .User}} class="app-shell"{{else}} class="login-page"{{end}}>
 <a class="skip-link" href="#main">Lewati ke konten utama</a>
 {{with .User}}
 <aside class="site-sidebar" aria-label="Ruang kerja">
@@ -19,7 +19,6 @@
 <div class="app-workspace">
 <header class="site-header">
 <a class="mobile-product-name" href="/databases">IF3110 <span>Database Access</span></a>
-<span class="workspace-caption">{{$.Title}}</span>
 <div class="header-account">
 <span class="site-user"><span class="account-prefix">Masuk sebagai </span><strong title="{{.Username}}">{{.Username}}</strong></span>
 <button type="button" data-action="logout">Keluar</button>
@@ -27,12 +26,12 @@
 <details class="mobile-navigation"><summary>Menu</summary><nav aria-label="Navigasi mobile">{{template "primary-navigation" $}}</nav></details>
 </header>
 {{end}}
-{{if not .User}}{{block "anonymous-header" .}}{{end}}{{end}}
-<main id="main"{{if .User}} class="page-sheet"{{else if eq .Entry "login"}} class="login-main"{{end}}>
-<header class="page-heading"><div><h1>{{block "page-title" .}}{{.Title}}{{end}}</h1>{{block "page-description" .}}{{end}}</div>{{block "page-meta" .}}{{end}}</header>
+{{if not .User}}<header class="login-brand"><strong>IF3110</strong><span>Database Access</span></header>{{end}}
+<main id="main"{{if .User}} class="page-sheet"{{else}} class="login-main"{{end}}>
+<header class="page-heading"><div>{{block "breadcrumb" .}}{{end}}<h1>{{block "page-title" .}}{{.Title}}{{end}}</h1>{{block "page-description" .}}{{end}}</div>{{block "page-meta" .}}{{end}}</header>
 {{template "content" .}}
 </main>
-{{if .User}}</div>{{else}}{{block "anonymous-footer" .}}{{end}}{{end}}
+{{if .User}}</div>{{else}}<footer class="login-footer"><p>Akses database mengikuti izin grup Anda.</p></footer>{{end}}
 </body>
 </html>
 {{end}}

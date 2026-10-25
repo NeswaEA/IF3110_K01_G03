@@ -76,6 +76,17 @@ func (h *HTTPHandler) RequirePage(next http.Handler) http.Handler {
 	})
 }
 
+// OptionalPage attaches the signed-in session when there is one and otherwise
+// serves the page anonymously, for pages such as the 404 where a login redirect is wrong.
+func (h *HTTPHandler) OptionalPage(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if signedIn, err := h.withSession(w, r); err == nil {
+			r = signedIn
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // RedirectToLogin sends the browser to the login page with the current local
 // path as the return target.
 func RedirectToLogin(w http.ResponseWriter, r *http.Request) {

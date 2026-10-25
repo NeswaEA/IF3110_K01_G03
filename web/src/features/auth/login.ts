@@ -1,4 +1,5 @@
 import { ApiRequestError, request, setCsrfToken } from "../../api/client";
+import { enhancePasswords } from "../../components/passwordToggle";
 
 export function bindLogin(form: HTMLFormElement, navigate: (url: string) => void): void {
   const fields = form.querySelector<HTMLFieldSetElement>("fieldset")!;
@@ -7,6 +8,7 @@ export function bindLogin(form: HTMLFormElement, navigate: (url: string) => void
   const password = form.querySelector<HTMLInputElement>('[name="password"]')!;
   let pending = false;
   button.disabled = false;
+  enhancePasswords(form);
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -16,6 +18,7 @@ export function bindLogin(form: HTMLFormElement, navigate: (url: string) => void
     pending = true;
     fields.disabled = true;
     form.setAttribute("aria-busy", "true");
+    delete message.dataset.tone;
     message.textContent = "Memeriksa akun...";
 
     try {
@@ -35,6 +38,7 @@ export function bindLogin(form: HTMLFormElement, navigate: (url: string) => void
             ? "Sesi login kedaluwarsa. Silakan coba masuk lagi."
             : err.message
         : "Tidak dapat masuk. Silakan coba lagi.";
+      message.dataset.tone = "error";
       fields.disabled = false;
       form.removeAttribute("aria-busy");
       pending = false;

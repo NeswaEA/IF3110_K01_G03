@@ -1,11 +1,11 @@
 {{define "content"}}
 <div class="users-admin access-admin" data-return-to="{{.Data.ReturnTo}}">
-<nav class="admin-tabs" aria-label="Administrasi"><a href="/admin/users" aria-current="page">Pengguna</a><a href="/admin/groups">Grup</a></nav>
+<nav class="tabs" aria-label="Administrasi"><a href="/admin/users" aria-current="page">Pengguna</a><a href="/admin/groups">Grup</a></nav>
 <div class="admin-toolbar">
 <p>Kelola akun dan hak admin platform. Akses database diberikan melalui grup.</p>
-<a href="#create-user">Tambah pengguna</a>
+<a class="button-link" href="#create-user">Tambah pengguna</a>
 </div>
-{{if .Data.Notice}}<p role="status">{{.Data.Notice}}</p>{{end}}
+{{if .Data.Notice}}<p class="alert alert-success" role="status">{{.Data.Notice}}</p>{{end}}
 {{if .Data.Rows}}
 <div class="scroll-x" role="region" aria-label="Daftar pengguna" tabindex="0">
 <table>
@@ -20,7 +20,7 @@
 </div>
 <p>Menampilkan pengguna {{.Data.First}} sampai {{.Data.Last}}.</p>
 {{else}}
-<p>Tidak ada pengguna pada halaman ini. Buka halaman pertama atau tambahkan akun baru.</p>
+<p class="empty-state">Tidak ada pengguna pada halaman ini. Buka halaman pertama atau tambahkan akun baru.</p>
 {{end}}
 <nav class="pager" aria-label="Halaman pengguna">
 {{if .Data.Prev}}<a href="/admin/users">Halaman pertama</a><a href="{{.Data.Prev}}">Sebelumnya</a>{{end}}
@@ -44,7 +44,7 @@
 <legend>Ganti password</legend>
 <p>Seluruh sesi akun ini akan dicabut setelah password diganti.</p>
 <label for="reset-user-password">Password baru</label>
-<input id="reset-user-password" name="password" type="password" autocomplete="new-password" aria-describedby="reset-password-help" required>
+<input id="reset-user-password" name="password" type="password" autocomplete="new-password" data-reveal aria-describedby="reset-password-help" required>
 <p id="reset-password-help">Gunakan 12 sampai 128 karakter.</p>
 <button type="submit" disabled>Ganti password</button>
 </fieldset>
@@ -61,7 +61,7 @@
 <input id="new-user-username" name="username" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="username-help" required>
 <p id="username-help">Gunakan 3 sampai 64 karakter a-z, angka, titik, garis bawah, atau tanda minus. Username disimpan dalam huruf kecil.</p>
 <label for="new-user-password">Password awal</label>
-<input id="new-user-password" name="password" type="password" autocomplete="new-password" aria-describedby="new-password-help" required>
+<input id="new-user-password" name="password" type="password" autocomplete="new-password" data-reveal aria-describedby="new-password-help" required>
 <p id="new-password-help">Gunakan 12 sampai 128 karakter.</p>
 <label class="admin-check"><input name="is_platform_admin" type="checkbox"> Admin platform</label>
 <button type="submit" disabled>Buat pengguna</button>

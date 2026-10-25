@@ -1,8 +1,14 @@
+{{define "breadcrumb"}}<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/databases">Database</a></nav>{{end}}
+
+{{define "page-description"}}{{with .Data}}<p class="page-description">Engine {{.DB.Driver}}, akses {{.DB.Access}}{{with .Fingerprint}}; fingerprint <code>{{.}}</code>{{end}}</p>{{end}}{{end}}
+
+{{define "page-meta"}}{{with .Data}}<nav class="page-actions" aria-label="Halaman database">
+<a class="button-link button-link-secondary" href="/databases/{{.DB.ID}}/migrations">Migrasi dan riwayat</a>
+{{if and (eq .DB.EffectiveAccess "edit") .DB.Capabilities.SchemaDiff}}<a class="button-link button-link-secondary" href="/databases/{{.DB.ID}}/schema-diff">Bandingkan schema</a>{{end}}
+</nav>{{end}}{{end}}
+
 {{define "content"}}
 {{with .Data}}
-<p>Engine {{.DB.Driver}}, akses {{.DB.Access}}{{with .Fingerprint}}; fingerprint <code>{{.}}</code>{{end}}</p>
-<p><a href="/databases/{{.DB.ID}}/migrations">Migrasi dan riwayat</a></p>
-{{if and (eq .DB.EffectiveAccess "edit") .DB.Capabilities.SchemaDiff}}<p><a href="/databases/{{.DB.ID}}/schema-diff">Bandingkan schema</a></p>{{end}}
 {{if .SchemaProblem}}
 <div role="alert"><strong>Schema tidak dapat dibaca</strong><p>{{.SchemaProblem}}</p></div>
 {{else}}
@@ -11,7 +17,7 @@
 {{if .Schemas}}
 <ul>
 {{range .Schemas}}
-<li>{{.Name}}
+<li><span class="schema-name">{{.Name}}</span>
 {{if .Tables}}
 <ul>
 {{range .Tables}}<li><a href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{.Name}}</a></li>
@@ -30,6 +36,13 @@
 <section class="table-detail" aria-label="Detail tabel">
 {{with .Selected}}
 <h2>{{.Schema}}.{{.Table.Name}}</h2>
+<nav class="tabs" aria-label="Bagian tabel" data-tabs>
+<a href="#kolom">Kolom <span class="tab-count">{{len .Table.Columns}}</span></a>
+<a href="#constraint">Constraint <span class="tab-count">{{len .Table.Constraints}}</span></a>
+<a href="#indeks">Indeks <span class="tab-count">{{len .Table.Indexes}}</span></a>
+<a href="#data">Data</a>
+</nav>
+<section id="kolom" data-tab-panel>
 <h3>Kolom</h3>
 <div class="scroll-x">
 <table>
@@ -40,31 +53,37 @@
 </tbody>
 </table>
 </div>
+</section>
+<section id="constraint" data-tab-panel>
 <h3>Constraint</h3>
 {{if .Table.Constraints}}
-<ul>
+<ul class="detail-list">
 {{range .Table.Constraints}}<li>{{.Kind}} {{with .Name}}{{.}}{{else}}(tanpa nama){{end}}: <code>{{.Definition}}</code></li>
 {{end}}
 </ul>
 {{else}}
-<p>Tidak ada constraint.</p>
+<p class="empty-state">Tidak ada constraint.</p>
 {{end}}
+</section>
+<section id="indeks" data-tab-panel>
 <h3>Indeks</h3>
 {{if .Table.Indexes}}
-<ul>
+<ul class="detail-list">
 {{range .Table.Indexes}}<li>{{.Name}} ({{if .Columns}}{{range $i, $c := .Columns}}{{if $i}}, {{end}}{{$c}}{{end}}{{else}}ekspresi{{end}}){{if .Primary}}, primary{{else if .Unique}}, unique{{end}}: <code>{{.Definition}}</code></li>
 {{end}}
 </ul>
 {{else}}
-<p>Tidak ada indeks.</p>
+<p class="empty-state">Tidak ada indeks.</p>
 {{end}}
+</section>
+<section id="data" data-tab-panel>
 <h3>Data</h3>
 {{if .DataProblem}}
 <div role="alert"><strong>Data tidak dapat dibaca</strong><p>{{.DataProblem}}</p></div>
 {{else}}{{with .Data}}
-{{if not .OrderStable}}<p>Tabel ini tidak memiliki primary key, sehingga urutan baris antarhalaman tidak dijamin.</p>{{end}}
+{{if not .OrderStable}}<p class="alert alert-warning">Tabel ini tidak memiliki primary key, sehingga urutan baris antarhalaman tidak dijamin.</p>{{end}}
 {{if .Rows}}
-<div class="scroll-x">
+<div class="scroll-x table-scroll" tabindex="0" role="region" aria-label="Baris data">
 <table>
 <thead><tr>{{range .Columns}}<th scope="col">{{.Name}} <small>({{.DataType}})</small></th>{{end}}</tr></thead>
 <tbody>
@@ -74,17 +93,18 @@
 </table>
 </div>
 <nav aria-label="Halaman data" class="pager">
-{{with .Prev}}<a href="{{.}}" rel="prev">Sebelumnya</a>{{end}}
+{{with .Prev}}<a href="{{.}}#data" rel="prev">Sebelumnya</a>{{end}}
 <span>Baris {{.First}}-{{.Last}}</span>
-{{with .Next}}<a href="{{.}}" rel="next">Berikutnya</a>{{end}}
+{{with .Next}}<a href="{{.}}#data" rel="next">Berikutnya</a>{{end}}
 </nav>
 {{else}}
-<p>Tabel tidak memiliki baris pada halaman ini.</p>
-{{with .Prev}}<p><a href="{{.}}" rel="prev">Sebelumnya</a></p>{{end}}
+<p class="empty-state">Tabel tidak memiliki baris pada halaman ini.</p>
+{{with .Prev}}<p><a href="{{.}}#data" rel="prev">Sebelumnya</a></p>{{end}}
 {{end}}
 {{end}}{{end}}
+</section>
 {{else}}
-<p>Pilih tabel untuk melihat struktur dan datanya.</p>
+<p class="empty-state">Pilih tabel untuk melihat struktur dan datanya.</p>
 {{end}}
 </section>
 </div>

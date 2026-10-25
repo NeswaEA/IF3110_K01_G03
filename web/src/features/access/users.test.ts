@@ -168,6 +168,9 @@ describe("user administration forms", () => {
     await waitFor(() => expect(document.querySelector("#create-user-message")).toHaveTextContent("<img src=x onerror=alert(1)>"));
     expect(document.querySelector("img")).toBeNull();
     expect(screen.getByLabelText("Username")).toHaveValue("new-user");
+    expect(screen.getByLabelText("Username")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Username")).toHaveFocus();
+    expect(document.querySelector("#create-user-message")).toHaveAttribute("data-tone", "error");
     expect(navigate).not.toHaveBeenCalled();
   });
 

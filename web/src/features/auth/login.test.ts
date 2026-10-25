@@ -70,6 +70,21 @@ describe("login form", () => {
     expect(csrfRequests).toBe(2);
   });
 
+  it("toggles password visibility and hides it again on submit", async () => {
+    server.use(http.post(`${B}/auth/login`, () => HttpResponse.json({ data: {} })));
+    const user = await fillLogin();
+    const password = screen.getByLabelText("Password");
+    await user.click(screen.getByRole("button", { name: "Tampilkan password" }));
+    expect(password).toHaveAttribute("type", "text");
+    expect(password).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Sembunyikan password" }));
+    expect(password).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Tampilkan password" }));
+    await user.click(screen.getByRole("button", { name: "Masuk" }));
+    expect(password).toHaveAttribute("type", "password");
+    await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));
+  });
+
   it("rejects empty input before making requests", () => {
     fireEvent.submit(form);
     expect(csrfRequests).toBe(0);

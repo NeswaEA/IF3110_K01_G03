@@ -1,7 +1,3 @@
-{{define "anonymous-header"}}
-<header class="login-brand"><strong>IF3110</strong><span>Database Access</span></header>
-{{end}}
-
 {{define "page-title"}}Masuk ke ruang kerja{{end}}
 
 {{define "content"}}
@@ -15,7 +11,7 @@
 </div>
 <div class="login-field">
 <label for="login-password">Password</label>
-<input id="login-password" name="password" type="password" placeholder="Masukkan password" autocomplete="current-password" required>
+<input id="login-password" name="password" type="password" placeholder="Masukkan password" autocomplete="current-password" data-reveal required>
 </div>
 <button type="submit" disabled>Masuk</button>
 </fieldset>
@@ -23,8 +19,4 @@
 </form>
 <noscript><p>Aktifkan JavaScript untuk mengirim login dengan aman.</p></noscript>
 <p class="login-help"><strong>Belum memiliki akses?</strong><br>Hubungi administrator untuk mendapatkan akun atau akses database.</p>
-{{end}}
-
-{{define "anonymous-footer"}}
-<footer class="login-footer"><p>Akses database mengikuti izin grup Anda.</p></footer>
 {{end}}

@@ -327,8 +327,8 @@ func TestDatabaseViewerPagesAndProblems(t *testing.T) {
 		t.Fatal("second page", status, src.reads)
 	}
 	expect(t, body, []string{
-		`href="` + base + `?schema=public&amp;table=items" rel="prev"`,
-		`href="` + base + `?offset=100&amp;schema=public&amp;table=items" rel="next"`, "Baris 51-52",
+		`href="` + base + `?schema=public&amp;table=items#data" rel="prev"`,
+		`href="` + base + `?offset=100&amp;schema=public&amp;table=items#data" rel="next"`, "Baris 51-52",
 	})
 
 	src = newSources(t)
@@ -422,7 +422,8 @@ func TestConnectionsPagePagesPastTheFirst200(t *testing.T) {
 }
 
 func TestStatusPagesAndMissingEntry(t *testing.T) {
-	assets, err := webui.LoadAssets(writeManifest(t, `{"src/pages/layout.ts": {"file": "assets/layout-1.js", "name": "layout", "isEntry": true}}`))
+	assets, err := webui.LoadAssets(writeManifest(t, `{"src/pages/layout.ts": {"file": "assets/layout-1.js", "name": "layout", "isEntry": true},
+		"src/pages/login.ts": {"file": "assets/login-1.js", "name": "login", "isEntry": true}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,11 +431,19 @@ func TestStatusPagesAndMissingEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	anonymous := func(context.Context) (contracts.Principal, bool) { return contracts.Principal{}, false }
 	w := httptest.NewRecorder()
-	renderer.NotFound(w, httptest.NewRequest("GET", "/missing", nil))
-	if w.Code != 404 || !strings.Contains(w.Body.String(), "Halaman tidak ditemukan") || strings.Contains(w.Body.String(), "<nav") {
-		t.Fatalf("anonymous 404 page: %d %s", w.Code, w.Body.String())
+	renderer.NotFound(anonymous)(w, httptest.NewRequest("GET", "/missing", nil))
+	expect(t, w.Body.String(), []string{"Halaman tidak ditemukan", `class="login-page"`, "/assets/login-1.js", `href="/login"`}, "<nav", "Masuk ke ruang kerja")
+	if w.Code != 404 {
+		t.Fatalf("anonymous 404 page: %d", w.Code)
 	}
+	signedIn := func(context.Context) (contracts.Principal, bool) {
+		return contracts.Principal{UserID: "u1", Username: "editor"}, true
+	}
+	w = httptest.NewRecorder()
+	renderer.NotFound(signedIn)(w, httptest.NewRequest("GET", "/missing", nil))
+	expect(t, w.Body.String(), []string{"Halaman tidak ditemukan", `class="app-shell"`, "editor", `href="/databases">Kembali`}, "login-page")
 	// A page whose entry is absent from the build fails as a whole instead of rendering without its script.
 	w = httptest.NewRecorder()
 	renderer.Render(w, 200, "connections/index", webui.Page{Title: "Koneksi", User: &webui.PageUser{Username: "u"}, Entry: "connections"})

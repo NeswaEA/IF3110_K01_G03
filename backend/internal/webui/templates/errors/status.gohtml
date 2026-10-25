@@ -1,4 +1,6 @@
 {{define "content"}}
+<div class="status-page">
 <p>{{.Data}}</p>
-<p><a href="/databases">Kembali ke daftar database</a></p>
+<p>{{if .User}}<a class="button-link" href="/databases">Kembali ke daftar database</a>{{else}}<a class="button-link" href="/login">Masuk</a>{{end}}</p>
+</div>
 {{end}}

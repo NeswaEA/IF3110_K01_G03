@@ -1,12 +1,11 @@
-.schema-diff { max-width: 80rem; margin: 0 auto; padding: 1rem; min-width: 0; }
-.diff-options { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; border: 0; padding: 0; margin: 1rem 0; min-width: 0; }
-.schema-diff label { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
-.schema-diff select, .schema-diff input { box-sizing: border-box; max-width: 100%; padding: .45rem; font: inherit; }
+.schema-diff { min-inline-size: 0; }
+.schema-diff > h2:first-child { margin-block-start: 0; }
+.schema-diff > p { color: var(--color-muted); }
+.diff-options { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; min-inline-size: 0; margin: 1.5rem 0 0.75rem; padding: 1.25rem; background: var(--color-ground); border: 0; border-radius: 0.5rem; }
 .diff-options label { flex: 1 1 14rem; }
-.diff-editor { margin-top: 1.5rem; }
-.diff-editor input { width: min(100%, 36rem); }
-.schema-diff code { overflow-wrap: anywhere; }
-.schema-diff th, .schema-diff td { padding: .5rem; text-align: left; vertical-align: top; }
-.schema-diff caption { text-align: left; font-weight: bold; padding-block: .75rem; }
-.schema-diff button { min-height: 2.5rem; }
-.diff-editor button { margin-block: 1rem; }
+.diff-options button { min-block-size: 2.5rem; }
+.diff-editor { display: grid; gap: 1rem; margin-block-start: 1.5rem; }
+.diff-editor > :is(h3, p) { margin: 0; }
+.diff-editor label { max-inline-size: 36rem; }
+.diff-editor button { justify-self: start; }
+.schema-diff details { margin-block: 0.75rem; }

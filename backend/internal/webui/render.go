@@ -90,16 +90,28 @@ var statusPages = map[int][2]string{
 	http.StatusNotFound:   {"Halaman tidak ditemukan", "Halaman yang Anda minta tidak ada atau tidak dapat Anda akses."},
 }
 
-// Status renders the shared 400/403/404/500 page.
+// Status renders the shared 400/403/404/500 page. Without a user it takes the
+// anonymous shell of the login page, whose script only binds a login form.
 func (r *Renderer) Status(w http.ResponseWriter, status int, user *PageUser) {
 	text, ok := statusPages[status]
 	if !ok {
 		status, text = http.StatusInternalServerError, [2]string{"Terjadi kesalahan", "Terjadi kesalahan internal. Coba lagi nanti."}
 	}
-	r.Render(w, status, "errors/status", Page{Title: text[0], User: user, Data: text[1]})
+	page := Page{Title: text[0], User: user, Data: text[1]}
+	if user == nil {
+		page.Entry = "login"
+	}
+	r.Render(w, status, "errors/status", page)
 }
 
-// NotFound serves the 404 page for any path no other handler claimed.
-func (r *Renderer) NotFound(w http.ResponseWriter, _ *http.Request) {
-	r.Status(w, http.StatusNotFound, nil)
+// NotFound serves the 404 page for any path no other handler claimed. Behind an
+// optional session lookup, a signed-in visitor keeps the full layout.
+func (r *Renderer) NotFound(principal PrincipalFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		var user *PageUser
+		if p, ok := principal(req.Context()); ok {
+			user = UserOf(p)
+		}
+		r.Status(w, http.StatusNotFound, user)
+	}
 }

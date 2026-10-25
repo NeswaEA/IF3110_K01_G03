@@ -1,11 +1,13 @@
+{{define "breadcrumb"}}<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/admin/groups">Grup</a><span>{{.Data.Group.Name}}</span></nav>{{end}}
+
 {{define "content"}}
 <div class="members-admin access-admin" data-group-id="{{.Data.Group.ID}}" data-return-to="{{.Data.ReturnTo}}">
-<nav class="admin-tabs" aria-label="Administrasi"><a href="/admin/users">Pengguna</a><a href="/admin/groups">Grup</a><a href="/admin/groups/{{.Data.Group.ID}}/grants">Hak akses grup ini</a></nav>
+<nav class="tabs" aria-label="Administrasi"><a href="/admin/users">Pengguna</a><a href="/admin/groups">Grup</a><a href="/admin/groups/{{.Data.Group.ID}}/grants">Hak akses grup ini</a></nav>
 <div class="admin-toolbar">
 <p>Anggota memperoleh akses database sesuai grant grup. Keanggotaan tidak mengubah hak admin platform.</p>
-<a href="#add-member">Tambah anggota</a>
+<a class="button-link" href="#add-member">Tambah anggota</a>
 </div>
-{{if .Data.Notice}}<p role="status">{{.Data.Notice}}</p>{{end}}
+{{if .Data.Notice}}<p class="alert alert-success" role="status">{{.Data.Notice}}</p>{{end}}
 <section id="members" aria-labelledby="members-heading" tabindex="-1">
 <h2 id="members-heading">Daftar anggota</h2>
 {{if .Data.Rows}}
@@ -22,7 +24,7 @@
 </div>
 <p>Menampilkan anggota {{.Data.Members.First}} sampai {{.Data.Members.Last}}.</p>
 {{else}}
-<p>Tidak ada anggota pada halaman ini. Buka halaman pertama atau tambahkan anggota baru.</p>
+<p class="empty-state">Tidak ada anggota pada halaman ini. Buka halaman pertama atau tambahkan anggota baru.</p>
 {{end}}
 <nav class="pager" aria-label="Halaman anggota">
 {{if .Data.Members.Prev}}<a href="{{.Data.Members.Start}}">Halaman pertama</a><a href="{{.Data.Members.Prev}}">Sebelumnya</a>{{end}}
@@ -62,7 +64,7 @@
 </form>
 <p>Menampilkan pilihan pengguna {{.Data.Users.First}} sampai {{.Data.Users.Last}}.</p>
 {{else}}
-<p>Tidak ada pilihan pengguna pada halaman ini. Buka halaman pertama atau buat akun pada halaman pengguna.</p>
+<p class="empty-state">Tidak ada pilihan pengguna pada halaman ini. Buka halaman pertama atau buat akun pada halaman pengguna.</p>
 {{end}}
 <nav class="pager" aria-label="Halaman pilihan pengguna">
 {{if .Data.Users.Prev}}<a href="{{.Data.Users.Start}}">Halaman pertama</a><a href="{{.Data.Users.Prev}}">Sebelumnya</a>{{end}}

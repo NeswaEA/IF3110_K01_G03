@@ -1,11 +1,13 @@
+{{define "breadcrumb"}}<nav class="breadcrumb" aria-label="Breadcrumb"><a href="/admin/groups">Grup</a><span>{{.Data.Group.Name}}</span></nav>{{end}}
+
 {{define "content"}}
 <div class="grants-admin access-admin" data-group-id="{{.Data.Group.ID}}" data-return-to="{{.Data.ReturnTo}}">
-<nav class="admin-tabs" aria-label="Administrasi"><a href="/admin/users">Pengguna</a><a href="/admin/groups">Grup</a><a href="/admin/groups/{{.Data.Group.ID}}/members">Anggota grup ini</a></nav>
+<nav class="tabs" aria-label="Administrasi"><a href="/admin/users">Pengguna</a><a href="/admin/groups">Grup</a><a href="/admin/groups/{{.Data.Group.ID}}/members">Anggota grup ini</a></nav>
 <div class="admin-toolbar">
 <p>Hak akses diberikan melalui grup. Pengguna memperoleh level tertinggi dari seluruh grupnya. Admin platform tetap membutuhkan grant untuk mengakses database.</p>
-<a href="#set-grant">Tetapkan hak akses</a>
+<a class="button-link" href="#set-grant">Tetapkan hak akses</a>
 </div>
-{{if .Data.Notice}}<p role="status">{{.Data.Notice}}</p>{{end}}
+{{if .Data.Notice}}<p class="alert alert-success" role="status">{{.Data.Notice}}</p>{{end}}
 <section id="grants" aria-labelledby="grants-heading" tabindex="-1">
 <h2 id="grants-heading">Hak akses database</h2>
 {{if .Data.Rows}}
@@ -22,7 +24,7 @@
 </div>
 <p>Menampilkan grant {{.Data.Grants.First}} sampai {{.Data.Grants.Last}}.</p>
 {{else}}
-<p>Tidak ada grant pada halaman ini. Buka halaman pertama atau tetapkan hak akses baru.</p>
+<p class="empty-state">Tidak ada grant pada halaman ini. Buka halaman pertama atau tetapkan hak akses baru.</p>
 {{end}}
 <nav class="pager" aria-label="Halaman grant">
 {{if .Data.Grants.Prev}}<a href="{{.Data.Grants.Start}}">Halaman pertama</a><a href="{{.Data.Grants.Prev}}">Sebelumnya</a>{{end}}
@@ -80,7 +82,7 @@
 </form>
 <p>Menampilkan pilihan database {{.Data.Databases.First}} sampai {{.Data.Databases.Last}}.</p>
 {{else}}
-<p>Tidak ada pilihan database pada halaman ini. Buka halaman pertama atau daftarkan koneksi pada halaman koneksi.</p>
+<p class="empty-state">Tidak ada pilihan database pada halaman ini. Buka halaman pertama atau daftarkan koneksi pada halaman koneksi.</p>
 {{end}}
 <nav class="pager" aria-label="Halaman pilihan database">
 {{if .Data.Databases.Prev}}<a href="{{.Data.Databases.Start}}">Halaman pertama</a><a href="{{.Data.Databases.Prev}}">Sebelumnya</a>{{end}}

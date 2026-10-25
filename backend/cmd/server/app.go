@@ -87,7 +87,7 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	if err != nil {
 		return nil, nil, err
 	}
-	frontend, closeFrontend, err := newFrontend(runtime.WebDir, http.HandlerFunc(renderer.NotFound))
+	frontend, closeFrontend, err := newFrontend(runtime.WebDir, authHandler.OptionalPage(renderer.NotFound(auth.PrincipalFromContext)))
 	if err != nil {
 		return nil, nil, err
 	}

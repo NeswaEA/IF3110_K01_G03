@@ -1,4 +1,5 @@
 import { ApiRequestError, request } from "../../api/client";
+import { markInvalid } from "../../components/formFeedback";
 import type { Group } from "../../api/types";
 
 export function bindGroups(root: HTMLElement, navigate: (url: string) => void): void {
@@ -13,10 +14,13 @@ export function bindGroups(root: HTMLElement, navigate: (url: string) => void): 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (pending || !form.reportValidity()) return;
+      delete message.dataset.tone;
+      markInvalid(form, []);
       const value = name?.value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, "") ?? "";
       if (name && (Array.from(value).length < 1 || Array.from(value).length > 100 || value.includes("\0"))) {
         message.textContent = "Nama grup harus berisi 1 sampai 100 karakter tanpa karakter NUL.";
-        name.focus();
+        message.dataset.tone = "error";
+        markInvalid(form, ["name"]);
         return;
       }
       const operation = form.dataset.operation!;
@@ -51,6 +55,8 @@ export function bindGroups(root: HTMLElement, navigate: (url: string) => void): 
         pending = false;
         root.removeAttribute("aria-busy");
         for (const other of forms) other.querySelector<HTMLFieldSetElement>("fieldset")!.disabled = false;
+        message.dataset.tone = "error";
+        markInvalid(form, err instanceof ApiRequestError ? Object.keys(err.fields) : []);
       }
     });
     button.disabled = false;

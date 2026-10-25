@@ -105,9 +105,9 @@ export function SchemaDiffPage({ initial, navigate = navigateDocument, confirmDi
   return <section className="schema-diff" aria-busy={busy !== null}>
     <h2>Perbandingan schema: {db.name}</h2>
     <p>Source {db.driver}. Bandingkan dengan schema yang diinginkan, tinjau kandidat SQL, lalu simpan sebagai draft.</p>
-    <nav className="migration-actions"><a href={base}>Lihat schema dan data</a><a href={`${base}/migrations`}>Migrasi dan riwayat</a></nav>
+    <nav className="migration-actions" aria-label="Halaman database"><a className="button-link button-link-secondary" href={base}>Lihat schema dan data</a><a className="button-link button-link-secondary" href={`${base}/migrations`}>Migrasi dan riwayat</a></nav>
     {initial.problem && <p role="alert">{initial.problem}</p>}
-    {initial.comparisons.length === 0 && <p>Belum ada database pembanding sejenis yang dapat Anda lihat.</p>}
+    {initial.comparisons.length === 0 && <p className="empty-state">Belum ada database pembanding sejenis yang dapat Anda lihat.</p>}
     {!initial.problem && initial.schemas.length === 0 && <p>Tidak ada schema pengguna yang dapat dibandingkan.</p>}
     <form onSubmit={generate}>
       <fieldset disabled={locked} className="diff-options">
@@ -121,7 +121,7 @@ export function SchemaDiffPage({ initial, navigate = navigateDocument, confirmDi
       </fieldset>
     </form>
     <p>Perbandingan tidak mengubah target atau membuat draft secara otomatis.</p>
-    {busy && <p role="status">{busy === "generate" ? "Membandingkan schema..." : "Menyimpan draft..."}</p>}
+    {busy && <p role="status" className="loading">{busy === "generate" ? "Membandingkan schema..." : "Menyimpan draft..."}</p>}
     {failure !== null && <ErrorState error={failure} />}
     {failure instanceof ApiRequestError && failure.status === 401 && <p>Sesi berakhir. SQL Anda tetap ada. <a href={loginUrl()} target="_blank" rel="noopener">Masuk lagi di tab baru</a>, lalu kirim kembali secara manual.</p>}
     {validation && <p role="alert">{validation}</p>}
@@ -131,11 +131,11 @@ export function SchemaDiffPage({ initial, navigate = navigateDocument, confirmDi
       <p>Versi source saat dibandingkan: {review.result.expected_version}</p>
       <details><summary>Fingerprint perbandingan</summary><p>Source <code>{review.result.source_fingerprint}</code></p><p>Pembanding <code>{review.result.desired_fingerprint}</code></p></details>
       {!matches && <p role="alert">Pilihan berubah. Bandingkan ulang sebelum menyimpan. SQL sebelumnya tetap ada di halaman.</p>}
-      {review.result.warnings.length > 0 && <div role="alert"><h4>Perlu ditinjau</h4><ul>{review.result.warnings.map((warning, i) => <li key={i}>{warning}</li>)}</ul></div>}
+      {review.result.warnings.length > 0 && <div role="alert" className="alert alert-warning"><h4>Perlu ditinjau</h4><ul>{review.result.warnings.map((warning, i) => <li key={i}>{warning}</li>)}</ul></div>}
       {review.result.changes.length > 0 ? <div className="migration-table"><table>
         <caption>Perubahan schema</caption>
         <thead><tr><th>Perubahan</th><th>Objek</th><th>Destruktif</th></tr></thead>
-        <tbody>{review.result.changes.map((change, i) => <tr key={i}><td>{labels[change.kind] ?? change.kind}</td><td>{change.object}</td><td>{change.destructive ? "Ya, tinjau dampak pada data" : "Tidak"}</td></tr>)}</tbody>
+        <tbody>{review.result.changes.map((change, i) => <tr key={i}><td>{labels[change.kind] ?? change.kind}</td><td>{change.object}</td><td>{change.destructive ? <span className="status-badge" data-status="failed">Ya, tinjau dampak pada data</span> : "Tidak"}</td></tr>)}</tbody>
       </table></div> : review.result.executable && <p>Schema identik. Tidak ada SQL untuk disimpan.</p>}
       {!review.result.executable && <p>Kandidat tidak dapat dibuat dengan cakupan yang didukung. <a href={`${base}/migrations`}>Tulis migrasi manual</a>.</p>}
       {review.result.executable && review.result.candidate_sql.trim() !== "" && <form onSubmit={save} className="diff-editor">
@@ -147,6 +147,6 @@ export function SchemaDiffPage({ initial, navigate = navigateDocument, confirmDi
         <button type="submit" disabled={locked || !matches || !canGenerate || !sql.trim()}>Simpan sebagai draft</button>
       </form>}
     </section>}
-    {saved && <p role="status">Draft tersimpan. <a href={`${base}/migrations?draft=${encodeURIComponent(saved.id)}#migration-draft`}>Buka draft</a>.</p>}
+    {saved && <p role="status" className="alert alert-success">Draft tersimpan. <a href={`${base}/migrations?draft=${encodeURIComponent(saved.id)}#migration-draft`}>Buka draft</a>.</p>}
   </section>;
 }

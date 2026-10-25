@@ -1,11 +1,11 @@
 {{define "content"}}
 <div class="groups-admin access-admin" data-return-to="{{.Data.ReturnTo}}">
-<nav class="admin-tabs" aria-label="Administrasi"><a href="/admin/users">Pengguna</a><a href="/admin/groups" aria-current="page">Grup</a></nav>
+<nav class="tabs" aria-label="Administrasi"><a href="/admin/users">Pengguna</a><a href="/admin/groups" aria-current="page">Grup</a></nav>
 <div class="admin-toolbar">
 <p>Grup menghubungkan pengguna dengan hak akses database. Hak admin platform dikelola pada halaman pengguna.</p>
-<a href="#create-group">Tambah grup</a>
+<a class="button-link" href="#create-group">Tambah grup</a>
 </div>
-{{if .Data.Notice}}<p role="status">{{.Data.Notice}}</p>{{end}}
+{{if .Data.Notice}}<p class="alert alert-success" role="status">{{.Data.Notice}}</p>{{end}}
 {{if .Data.Rows}}
 <div class="scroll-x" role="region" aria-label="Daftar grup" tabindex="0">
 <table>
@@ -20,7 +20,7 @@
 </div>
 <p>Menampilkan grup {{.Data.First}} sampai {{.Data.Last}}.</p>
 {{else}}
-<p>Tidak ada grup pada halaman ini. Buka halaman pertama atau tambahkan grup baru.</p>
+<p class="empty-state">Tidak ada grup pada halaman ini. Buka halaman pertama atau tambahkan grup baru.</p>
 {{end}}
 <nav class="pager" aria-label="Halaman grup">
 {{if .Data.Prev}}<a href="/admin/groups">Halaman pertama</a><a href="{{.Data.Prev}}">Sebelumnya</a>{{end}}

@@ -1,4 +1,5 @@
 import { ApiRequestError, request } from "../../api/client";
+import { markInvalid } from "../../components/formFeedback";
 import type { User } from "../../api/types";
 
 export function bindUsers(root: HTMLElement, navigate: (url: string) => void): void {
@@ -14,9 +15,12 @@ export function bindUsers(root: HTMLElement, navigate: (url: string) => void): v
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (pending || !form.reportValidity()) return;
+      delete message.dataset.tone;
+      markInvalid(form, []);
       if (password && (Array.from(password.value).length < 12 || Array.from(password.value).length > 128)) {
         message.textContent = "Password harus berisi 12 sampai 128 karakter.";
-        password.focus();
+        message.dataset.tone = "error";
+        markInvalid(form, ["password"]);
         return;
       }
       const values = new FormData(form);
@@ -61,6 +65,8 @@ export function bindUsers(root: HTMLElement, navigate: (url: string) => void): v
         pending = false;
         root.removeAttribute("aria-busy");
         for (const other of forms) other.querySelector<HTMLFieldSetElement>("fieldset")!.disabled = false;
+        message.dataset.tone = "error";
+        markInvalid(form, err instanceof ApiRequestError ? Object.keys(err.fields) : []);
       }
     });
     button.disabled = false;

@@ -1,9 +1,10 @@
 // Admin registry of target databases. Secrets are typed into the
 // form and sent once; the API never returns them, so nothing secret is shown.
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type InputHTMLAttributes, type ReactNode } from "react";
 import { ApiRequestError, request } from "../../api/client";
 import type { AdminConnection, Driver, PostgresPublicConfig, PublicConfig } from "../../api/types";
 import { useApi } from "../../api/useApi";
+import { PASSWORD_ICONS, passwordToggleLabel } from "../../components/passwordToggle";
 import { EmptyState, ErrorState, Loading } from "../../components/StatusViews";
 
 type Notice = { kind: "ok" | "error"; text: string } | null;
@@ -28,6 +29,17 @@ function useFieldErrors(idPrefix: string) {
       </span>
     ) : null;
   return [setErrors, fieldError] as const;
+}
+
+function PasswordInput(props: InputHTMLAttributes<HTMLInputElement>) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span className="password-control">
+      <input {...props} type={visible ? "text" : "password"} />
+      <button type="button" className="password-toggle" aria-controls={props.id} aria-label={passwordToggleLabel(visible)}
+        data-visible={visible} onClick={() => setVisible(!visible)} dangerouslySetInnerHTML={{ __html: PASSWORD_ICONS }} />
+    </span>
+  );
 }
 
 // ConfigFields renders the per-driver config inputs. With current set (edit),
@@ -58,21 +70,30 @@ function ConfigFields({ driver, current, idPrefix, fieldError }: {
     <>
       {PG_FIELDS.map((fd) => {
         const secret = fd.name === "password";
+        const error = fieldError(`config.${fd.name}`);
+        const input = {
+          name: fd.name,
+          required: !pg || !secret,
+          defaultValue: secret ? undefined : pg?.[fd.name],
+          placeholder: pg && secret ? "kosongkan untuk mempertahankan" : undefined,
+          autoComplete: secret ? "new-password" : "off",
+          "aria-describedby": `${idPrefix}config.${fd.name}`,
+          "aria-invalid": error ? true : undefined,
+        };
         return (
-          <div key={fd.name}>
-            <label>
-              {fd.label}{" "}
-              <input
-                name={fd.name}
-                type={fd.type}
-                required={!pg || !secret}
-                defaultValue={fd.name === "password" ? undefined : pg?.[fd.name]}
-                placeholder={pg && secret ? "kosongkan untuk mempertahankan" : undefined}
-                autoComplete={secret ? "new-password" : "off"}
-                aria-describedby={`${idPrefix}config.${fd.name}`}
-              />
-            </label>
-            {fieldError(`config.${fd.name}`)}
+          <div key={fd.name} className="form-field">
+            {secret ? (
+              <>
+                <label htmlFor={`${idPrefix}input-password`}>{fd.label}</label>
+                <PasswordInput id={`${idPrefix}input-password`} {...input} />
+              </>
+            ) : (
+              <label>
+                {fd.label}{" "}
+                <input type={fd.type} {...input} />
+              </label>
+            )}
+            {error}
           </div>
         );
       })}
@@ -131,7 +152,7 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} aria-label="Daftarkan koneksi">
+    <form onSubmit={submit} aria-label="Daftarkan koneksi" className="form-card">
       <h2>Daftarkan koneksi</h2>
       <label>
         Nama <input name="name" required maxLength={100} aria-describedby="err-name" />
@@ -198,7 +219,7 @@ function EditForm({ conn, onDone, onCancel }: { conn: AdminConnection; onDone: (
   }
 
   return (
-    <form onSubmit={submit} aria-label={`Ubah koneksi ${conn.name}`}>
+    <form onSubmit={submit} aria-label={`Ubah koneksi ${conn.name}`} className="form-card">
       <h2>Ubah koneksi {conn.name}</h2>
       <label>
         Nama <input name="name" required maxLength={100} defaultValue={conn.name} aria-describedby="edit-err-name" />
@@ -208,12 +229,14 @@ function EditForm({ conn, onDone, onCancel }: { conn: AdminConnection; onDone: (
       <ConfigFields driver={conn.driver} current={conn.config} idPrefix="edit-err-" fieldError={fieldError} />
       {fieldError("config")}
       {failure !== null && <ErrorState error={failure} />}
-      <button type="submit" disabled={busy}>
-        {busy ? "Menyimpan..." : "Simpan perubahan"}
-      </button>{" "}
-      <button type="button" onClick={onCancel}>
-        Batal
-      </button>
+      <div className="form-actions">
+        <button type="submit" disabled={busy}>
+          {busy ? "Menyimpan..." : "Simpan perubahan"}
+        </button>
+        <button type="button" onClick={onCancel}>
+          Batal
+        </button>
+      </div>
     </form>
   );
 }
@@ -268,14 +291,15 @@ export function ConnectionsPage() {
 
   return (
     <section>
-      {notice && <p role={notice.kind === "error" ? "alert" : "status"}>{notice.text}</p>}
+      {notice && <p role={notice.kind === "error" ? "alert" : "status"} className={notice.kind === "error" ? "alert" : "alert alert-success"}>{notice.text}</p>}
       {q.status === "loading" && <Loading />}
       {q.status === "error" && <ErrorState error={q.error} />}
       {q.status === "success" &&
         (q.response.data.length === 0 ? (
           <EmptyState message={offset > 0 ? "Tidak ada koneksi pada halaman ini." : "Belum ada koneksi terdaftar."} />
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div>
+            <div className="scroll-x">
             <table>
               <thead>
                 <tr>
@@ -292,8 +316,8 @@ export function ConnectionsPage() {
                     <td>{c.name}</td>
                     <td>{c.driver}</td>
                     <td>{target(c)}</td>
-                    <td>{statusText(c)}</td>
-                    <td>
+                    <td><span className="status-badge" data-status={!c.active ? "inactive" : c.migration_ready ? "succeeded" : c.last_error_code ? "failed" : "running"}>{statusText(c)}</span></td>
+                    <td className="row-actions">
                       {c.active && (
                         <>
                           <button type="button" disabled={pending === c.id} onClick={() => setEditing(c)}>
@@ -302,7 +326,7 @@ export function ConnectionsPage() {
                           <button type="button" disabled={pending === c.id} onClick={() => act(c, "test")}>
                             Uji koneksi
                           </button>{" "}
-                          <button type="button" disabled={pending === c.id} onClick={() => act(c, "deactivate")}>
+                          <button type="button" className="button-danger" disabled={pending === c.id} onClick={() => act(c, "deactivate")}>
                             Nonaktifkan
                           </button>
                         </>
@@ -312,7 +336,8 @@ export function ConnectionsPage() {
                 ))}
               </tbody>
             </table>
-            <p>
+            </div>
+            <p className="pager">
               Menampilkan koneksi {offset + 1} sampai {offset + q.response.data.length}.
             </p>
           </div>
