@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"regexp"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
@@ -30,8 +29,6 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	mux.HandleFunc("POST /api/v1/databases/{id}/explain", h.explain)
 }
 
-var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-
 // explain checks session and edit access before reading the body, so a
 // user without edit access learns nothing from body validation.
 func (h *Handler) explain(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +38,7 @@ func (h *Handler) explain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if !uuidRe.MatchString(id) {
+	if !contracts.ValidID(id) {
 		_ = platform.WriteError(w, r, &contracts.DomainError{Code: "INVALID_REQUEST", Message: "ID tidak valid.",
 			Fields: map[string]string{"id": "harus UUID huruf kecil"}})
 		return

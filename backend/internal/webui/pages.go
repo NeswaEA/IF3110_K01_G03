@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"regexp"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/connections"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
-	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/viewer"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 )
 
 // PrincipalFunc reads the principal the page guard put on the request context
@@ -27,7 +26,7 @@ type DatabaseSource interface {
 // SchemaSource is the viewer service as the pages read it.
 type SchemaSource interface {
 	Schema(ctx context.Context, databaseID string) (database.SchemaSnapshot, error)
-	Data(ctx context.Context, databaseID, schema, table string, limit, offset int) (database.TableData, viewer.Page, error)
+	Data(ctx context.Context, databaseID, schema, table string, limit, offset int) (database.TableData, platform.Page, error)
 }
 
 // Pages serves the HTML pages. The guard (auth RequirePage when wired) runs
@@ -67,8 +66,6 @@ func RegisterRoutes(mux *http.ServeMux, p *Pages, guard func(http.Handler) http.
 	mux.Handle("GET /admin/groups/{id}/grants", page(p.grantsPage))
 }
 
-var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-
 // authorize returns the signed-in user after the policy allowed action; on
 // failure it has already written the error page or redirect.
 func (p *Pages) authorize(w http.ResponseWriter, r *http.Request, action contracts.Action, databaseID string) (*PageUser, bool) {
@@ -81,7 +78,7 @@ func (p *Pages) authorize(w http.ResponseWriter, r *http.Request, action contrac
 	if action == "" {
 		return user, true
 	}
-	if action != contracts.ManagePlatform && !uuidRe.MatchString(databaseID) {
+	if action != contracts.ManagePlatform && !contracts.ValidID(databaseID) {
 		p.render.Status(w, http.StatusNotFound, user)
 		return user, false
 	}

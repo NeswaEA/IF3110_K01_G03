@@ -3,7 +3,6 @@ package schemadiff
 import (
 	"context"
 	"errors"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -12,8 +11,6 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
 )
-
-var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 const maxVersion int64 = 1<<53 - 2
 
@@ -41,7 +38,7 @@ func (s *Service) Diff(ctx context.Context, p contracts.Principal, sourceID stri
 	if p.UserID == "" {
 		return DiffResult{}, problem("UNAUTHENTICATED", "Silakan login untuk melanjutkan.")
 	}
-	if !uuidPattern.MatchString(sourceID) || !uuidPattern.MatchString(in.DesiredDatabaseID) || !utf8.ValidString(in.Schema) || strings.TrimSpace(in.Schema) == "" || strings.ContainsRune(in.Schema, 0) {
+	if !contracts.ValidID(sourceID) || !contracts.ValidID(in.DesiredDatabaseID) || !utf8.ValidString(in.Schema) || strings.TrimSpace(in.Schema) == "" || strings.ContainsRune(in.Schema, 0) {
 		return DiffResult{}, problem("INVALID_REQUEST", "Database dan schema pembanding harus valid.")
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)

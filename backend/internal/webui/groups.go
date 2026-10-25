@@ -47,7 +47,7 @@ func (p *Pages) groupsPage(w http.ResponseWriter, r *http.Request) {
 		offset = value
 	}
 	selectedID := q.Get("group")
-	if selectedID != "" && !uuidRe.MatchString(selectedID) {
+	if selectedID != "" && !contracts.ValidID(selectedID) {
 		p.render.Status(w, http.StatusBadRequest, user)
 		return
 	}

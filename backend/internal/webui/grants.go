@@ -35,7 +35,7 @@ func (p *Pages) grantsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if !uuidRe.MatchString(id) {
+	if !contracts.ValidID(id) {
 		p.render.Status(w, http.StatusNotFound, user)
 		return
 	}
@@ -53,7 +53,7 @@ func (p *Pages) grantsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	offset, databasesOffset := offsets[0], offsets[1]
 	selectedID := q.Get("database")
-	if selectedID != "" && !uuidRe.MatchString(selectedID) {
+	if selectedID != "" && !contracts.ValidID(selectedID) {
 		p.render.Status(w, http.StatusBadRequest, user)
 		return
 	}

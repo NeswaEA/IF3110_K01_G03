@@ -84,7 +84,7 @@ func parseMigrationQuery(values url.Values) (migrationQuery, error) {
 			return q, errors.New("duplicate migration parameter")
 		}
 	}
-	if (q.draft != "" && !uuidRe.MatchString(q.draft)) || (q.run != "" && !uuidRe.MatchString(q.run)) {
+	if (q.draft != "" && !contracts.ValidID(q.draft)) || (q.run != "" && !contracts.ValidID(q.run)) {
 		return q, errors.New("invalid migration id")
 	}
 	for key, dest := range map[string]*int{"draft_offset": &q.draftOffset, "history_offset": &q.historyOffset} {

@@ -16,7 +16,7 @@ func (s *Service) Execute(ctx context.Context, p contracts.Principal, in Execute
 	if err := s.authorize(ctx, p, in.DatabaseID, contracts.EditDatabase); err != nil {
 		return MigrationRun{}, err
 	}
-	if !uuidPattern.MatchString(in.DraftID) || !uuidPattern.MatchString(in.IdempotencyKey) || in.Revision < 1 || in.Revision > maxInteger || in.ExpectedVersion < 0 || in.ExpectedVersion >= maxInteger {
+	if !contracts.ValidID(in.DraftID) || !contracts.ValidID(in.IdempotencyKey) || in.Revision < 1 || in.Revision > maxInteger || in.ExpectedVersion < 0 || in.ExpectedVersion >= maxInteger {
 		return MigrationRun{}, problem("INVALID_REQUEST", "Draft, revision, versi, atau Idempotency-Key tidak valid.")
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
@@ -210,7 +210,7 @@ func (s *Service) Reconcile(ctx context.Context, p contracts.Principal, database
 	if err := s.authorize(ctx, p, databaseID, contracts.EditDatabase); err != nil {
 		return MigrationRun{}, err
 	}
-	if !uuidPattern.MatchString(runID) {
+	if !contracts.ValidID(runID) {
 		return MigrationRun{}, problem("INVALID_REQUEST", "ID run tidak valid.")
 	}
 	return s.reconcile(ctx, databaseID, runID)

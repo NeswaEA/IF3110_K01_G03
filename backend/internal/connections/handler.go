@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"regexp"
 	"strconv"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
@@ -53,11 +52,9 @@ type Database struct {
 
 var errUnauthenticated = &contracts.DomainError{Code: "UNAUTHENTICATED", Message: "Silakan login untuk melanjutkan."}
 
-var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-
 // validID rejects a malformed path id before it reaches a uuid column.
 func validID(w http.ResponseWriter, r *http.Request, id string) bool {
-	if uuidRe.MatchString(id) {
+	if contracts.ValidID(id) {
 		return true
 	}
 	_ = platform.WriteError(w, r, &contracts.DomainError{Code: "INVALID_REQUEST", Message: "ID tidak valid.",

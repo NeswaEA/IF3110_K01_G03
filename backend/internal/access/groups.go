@@ -287,7 +287,7 @@ func normalizeGroupName(name string) (string, error) {
 }
 
 func validGroupID(id string) error {
-	if !accessIDPattern.MatchString(id) {
+	if !contracts.ValidID(id) {
 		return invalidGroupField("groupId", "Gunakan UUID huruf kecil.")
 	}
 	return nil

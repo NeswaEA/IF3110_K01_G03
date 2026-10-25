@@ -11,6 +11,7 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/connections"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/viewer"
 )
 
@@ -144,7 +145,7 @@ func (p *Pages) databaseDetail(w http.ResponseWriter, r *http.Request) {
 	p.render.Render(w, http.StatusOK, "viewer/database", page)
 }
 
-func newDataView(data database.TableData, pg viewer.Page, prev, next string) *dataView {
+func newDataView(data database.TableData, pg platform.Page, prev, next string) *dataView {
 	v := &dataView{Columns: data.Columns, OrderStable: data.OrderStable, First: pg.Offset + 1, Last: pg.Offset + len(data.Rows)}
 	if pg.Offset > 0 {
 		v.Prev = prev

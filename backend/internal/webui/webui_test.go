@@ -16,7 +16,7 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/connections"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
-	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/viewer"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/webui"
 )
 
@@ -135,9 +135,9 @@ func (s *sources) Schema(context.Context, string) (database.SchemaSnapshot, erro
 	return s.snap, s.schemaErr
 }
 
-func (s *sources) Data(_ context.Context, _, schema, table string, limit, offset int) (database.TableData, viewer.Page, error) {
+func (s *sources) Data(_ context.Context, _, schema, table string, limit, offset int) (database.TableData, platform.Page, error) {
 	s.reads = append(s.reads, fmt.Sprintf("%s.%s limit=%d offset=%d", schema, table, limit, offset))
-	return s.data, viewer.Page{Limit: limit, Offset: offset, HasMore: s.hasMore}, s.dataErr
+	return s.data, platform.Page{Limit: limit, Offset: offset, HasMore: s.hasMore}, s.dataErr
 }
 
 func newSources(t *testing.T) *sources {

@@ -33,7 +33,7 @@ func (h *Handler) diff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if !uuidPattern.MatchString(id) {
+	if !contracts.ValidID(id) {
 		_ = platform.WriteError(w, r, problem("INVALID_REQUEST", "ID database harus UUID huruf kecil."))
 		return
 	}

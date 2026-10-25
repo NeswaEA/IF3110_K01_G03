@@ -20,7 +20,6 @@ const (
 	OutcomeUnknown       = "outcome_unknown"
 )
 
-var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 var fingerprintPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 type MigrationDraft struct {

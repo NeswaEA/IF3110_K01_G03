@@ -48,7 +48,7 @@ func (s *Service) authorize(ctx context.Context, p contracts.Principal, database
 	if p.UserID == "" {
 		return problem("UNAUTHENTICATED", "Silakan login untuk melanjutkan.")
 	}
-	if !uuidPattern.MatchString(databaseID) {
+	if !contracts.ValidID(databaseID) {
 		return problem("INVALID_REQUEST", "ID database tidak valid.")
 	}
 	return s.access.Require(ctx, p, action, databaseID)
@@ -94,7 +94,7 @@ func (s *Service) GetDraft(ctx context.Context, p contracts.Principal, databaseI
 	if err := s.authorize(ctx, p, databaseID, contracts.EditDatabase); err != nil {
 		return MigrationDraft{}, err
 	}
-	if !uuidPattern.MatchString(id) {
+	if !contracts.ValidID(id) {
 		return MigrationDraft{}, problem("INVALID_REQUEST", "ID draft tidak valid.")
 	}
 	return getDraft(ctx, s.store.DB, databaseID, id, false)
@@ -104,7 +104,7 @@ func (s *Service) UpdateDraft(ctx context.Context, p contracts.Principal, databa
 	if err := s.authorize(ctx, p, databaseID, contracts.EditDatabase); err != nil {
 		return MigrationDraft{}, err
 	}
-	if !uuidPattern.MatchString(id) || in.Revision < 1 || in.Revision >= maxInteger {
+	if !contracts.ValidID(id) || in.Revision < 1 || in.Revision >= maxInteger {
 		return MigrationDraft{}, problem("INVALID_REQUEST", "Draft atau revision tidak valid.")
 	}
 	if err := validateDraft(in.DraftInput); err != nil {
@@ -217,7 +217,7 @@ func (s *Service) GetRun(ctx context.Context, p contracts.Principal, databaseID,
 	if err := s.authorize(ctx, p, databaseID, contracts.ViewDatabase); err != nil {
 		return MigrationRun{}, err
 	}
-	if !uuidPattern.MatchString(id) {
+	if !contracts.ValidID(id) {
 		return MigrationRun{}, problem("INVALID_REQUEST", "ID run tidak valid.")
 	}
 	return s.store.run(ctx, databaseID, id)

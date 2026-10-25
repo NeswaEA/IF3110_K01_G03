@@ -76,7 +76,7 @@ func (s *GroupService) changeGrant(ctx context.Context, groupID, databaseID stri
 	if err := validGroupID(groupID); err != nil {
 		return err
 	}
-	if !accessIDPattern.MatchString(databaseID) {
+	if !contracts.ValidID(databaseID) {
 		return invalidGrantField("databaseId", "Gunakan UUID huruf kecil.")
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})

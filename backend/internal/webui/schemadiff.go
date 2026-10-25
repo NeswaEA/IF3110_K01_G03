@@ -33,7 +33,7 @@ func (p *Pages) schemaDiff(w http.ResponseWriter, r *http.Request) {
 	}
 	query := r.URL.Query()
 	desired, schema := query.Get("desired_database_id"), query.Get("schema")
-	if len(query["desired_database_id"]) > 1 || len(query["schema"]) > 1 || desired != "" && !uuidRe.MatchString(desired) || !utf8.ValidString(schema) || strings.ContainsRune(schema, 0) {
+	if len(query["desired_database_id"]) > 1 || len(query["schema"]) > 1 || desired != "" && !contracts.ValidID(desired) || !utf8.ValidString(schema) || strings.ContainsRune(schema, 0) {
 		p.render.Status(w, http.StatusBadRequest, user)
 		return
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"regexp"
 	"time"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
@@ -56,10 +55,8 @@ func NewUserService(
 
 const userColumns = "id, username, is_platform_admin, active, created_at, updated_at"
 
-var accessIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-
 func validUserID(id string) error {
-	if !accessIDPattern.MatchString(id) {
+	if !contracts.ValidID(id) {
 		return invalidUserField("userId", "Gunakan UUID huruf kecil.")
 	}
 	return nil

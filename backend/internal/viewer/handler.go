@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"regexp"
 	"strconv"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
@@ -31,8 +30,6 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	mux.HandleFunc("GET /api/v1/databases/{id}/data", h.data)
 }
 
-var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-
 // authorize requires a session, a well-formed id and view access; on failure
 // it has already written the error response.
 func (h *Handler) authorize(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -42,7 +39,7 @@ func (h *Handler) authorize(w http.ResponseWriter, r *http.Request) (string, boo
 		return "", false
 	}
 	id := r.PathValue("id")
-	if !uuidRe.MatchString(id) {
+	if !contracts.ValidID(id) {
 		_ = platform.WriteError(w, r, invalid(map[string]string{"id": "harus UUID huruf kecil"}))
 		return "", false
 	}
@@ -102,7 +99,7 @@ func (h *Handler) data(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, domainError(err, "Database atau tabel tidak ditemukan."))
 		return
 	}
-	_ = platform.WriteJSON(w, r, http.StatusOK, data, &platform.Page{Limit: page.Limit, Offset: page.Offset, HasMore: page.HasMore})
+	_ = platform.WriteJSON(w, r, http.StatusOK, data, &page)
 }
 
 func invalid(fields map[string]string) error {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 )
 
 // TableReader is implemented by database/postgres.Reader and database/sqlite.Reader.
@@ -26,12 +27,6 @@ const (
 	MaxLimit     = 200
 	MaxOffset    = 100000
 )
-
-type Page struct {
-	Limit   int  `json:"limit"`
-	Offset  int  `json:"offset"`
-	HasMore bool `json:"has_more"`
-}
 
 type Service struct {
 	provider  database.TargetProvider
@@ -60,33 +55,33 @@ func (s *Service) Schema(ctx context.Context, databaseID string) (database.Schem
 }
 
 // Data returns one page of a table. limit 0 means the default.
-func (s *Service) Data(ctx context.Context, databaseID, schema, table string, limit, offset int) (database.TableData, Page, error) {
+func (s *Service) Data(ctx context.Context, databaseID, schema, table string, limit, offset int) (database.TableData, platform.Page, error) {
 	if limit == 0 {
 		limit = DefaultLimit
 	}
 	switch {
 	case schema == "" || table == "":
-		return database.TableData{}, Page{}, ErrInvalid
+		return database.TableData{}, platform.Page{}, ErrInvalid
 	case limit < 1 || limit > MaxLimit, offset < 0 || offset > MaxOffset:
-		return database.TableData{}, Page{}, ErrInvalid
+		return database.TableData{}, platform.Page{}, ErrInvalid
 	case database.Reserved(schema, table):
-		return database.TableData{}, Page{}, database.ErrNotFound
+		return database.TableData{}, platform.Page{}, database.ErrNotFound
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	h, release, err := s.provider.Acquire(ctx, databaseID)
 	if err != nil {
-		return database.TableData{}, Page{}, err
+		return database.TableData{}, platform.Page{}, err
 	}
 	defer release()
 	r, ok := s.readers[h.Driver]
 	if !ok {
-		return database.TableData{}, Page{}, database.ErrTargetUnavailable
+		return database.TableData{}, platform.Page{}, database.ErrTargetUnavailable
 	}
 	data, more, err := r.ReadTable(ctx, h, schema, table, limit, offset)
 	if err != nil {
-		return database.TableData{}, Page{}, err
+		return database.TableData{}, platform.Page{}, err
 	}
-	return data, Page{Limit: limit, Offset: offset, HasMore: more}, nil
+	return data, platform.Page{Limit: limit, Offset: offset, HasMore: more}, nil
 }
