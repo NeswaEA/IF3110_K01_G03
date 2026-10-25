@@ -66,6 +66,11 @@ main :is(h1, h2, h3, p) { overflow-wrap: anywhere; }
 .site-navigation a { display: flex; align-items: center; min-block-size: 2.5rem; padding: 0.5rem 0.75rem; border-radius: 0.375rem; text-decoration: none; }
 .site-navigation a:hover, .site-navigation a[aria-current="page"] { background: var(--color-raised); }
 .site-navigation a[aria-current="page"] { font-weight: 600; }
+.sidebar-targets h2 { margin: 0 0 0.625rem; padding-inline: 0.75rem; color: var(--color-muted); font-size: 0.75rem; font-weight: 500; }
+.sidebar-targets a { display: block; padding: 0.5625rem 0.75rem; border-radius: 0.3125rem; text-decoration: none; }
+.sidebar-targets a:hover { background: var(--color-raised); }
+.sidebar-targets span { display: block; font-size: 0.8125rem; overflow-wrap: anywhere; }
+.sidebar-targets small { display: block; margin-block-start: 0.125rem; color: var(--color-muted); font-size: 0.75rem; }
 .sidebar-account { display: grid; gap: 0.125rem; margin-block-start: auto; padding: 1rem 0.625rem 0; border-block-start: 1px solid var(--color-border); font-size: 0.75rem; }
 .sidebar-account strong { font-size: 0.875rem; font-weight: 500; overflow-wrap: anywhere; }
 .sidebar-account span { color: var(--color-muted); }
@@ -84,6 +89,48 @@ main :is(h1, h2, h3, p) { overflow-wrap: anywhere; }
 .page-heading h1 { margin: 0; font-size: 1.625rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.03em; }
 .page-description { max-inline-size: 66ch; margin: 0.625rem 0 0; color: var(--color-muted); }
 .page-count { flex-shrink: 0; padding-block-start: 0.25rem; color: var(--color-muted); font-size: 0.8125rem; }
+
+.database-filters { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 0.75rem; margin-block: 2rem 1.375rem; }
+.database-filters[hidden], .database-filter-empty[hidden], [data-database-row][hidden] { display: none; }
+.filter-field { display: grid; gap: 0.375rem; min-inline-size: 0; color: var(--color-muted); font-size: 0.75rem; }
+.database-search { flex: 1 1 16rem; max-inline-size: 22.5rem; }
+.filter-field :is(input, select) { inline-size: 100%; min-block-size: 2.5rem; padding: 0.5rem 0.75rem; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-control); border-radius: 0.375rem; font-size: 0.875rem; }
+.filter-field input::placeholder { color: var(--color-muted); opacity: 1; }
+.filter-field select { min-inline-size: 9rem; }
+.database-table-frame { max-inline-size: 100%; overflow-x: auto; padding-inline: 1rem; border: 1px solid var(--color-border); border-radius: 0.5rem; }
+.database-table { inline-size: 100%; border-collapse: collapse; text-align: start; }
+.database-table :is(th, td) { padding: 1.0625rem 1rem; border-block-end: 1px solid var(--color-border); text-align: start; vertical-align: middle; }
+.database-table thead th { padding-block: 0.8125rem; color: var(--color-muted); font-size: 0.75rem; font-weight: 500; white-space: nowrap; }
+.database-table :is(th, td):first-child { padding-inline-start: 0; }
+.database-table :is(th, td):last-child { padding-inline-end: 0; }
+.database-table tbody tr:last-child :is(th, td) { border-block-end: 0; }
+.database-table tbody tr:hover { background: #f9fbfc; }
+.database-identity { inline-size: 38%; min-inline-size: 15rem; font-weight: 400; }
+.database-name { display: block; font-weight: 600; overflow-wrap: anywhere; text-decoration: none; }
+.database-name:hover { text-decoration: underline; }
+.database-id { display: block; margin-block-start: 0.3125rem; color: var(--color-muted); font-size: 0.6875rem; font-variant-numeric: tabular-nums; font-weight: 400; }
+.database-table td { font-size: 0.8125rem; }
+.access-tag { display: inline-block; padding: 0.1875rem 0.5rem; color: var(--color-muted); background: var(--color-raised); border-radius: 0.25rem; font-size: 0.75rem; white-space: nowrap; }
+.access-tag[data-level="edit"] { color: var(--color-access); background: var(--color-access-surface); font-weight: 500; }
+.database-table .database-readiness { color: var(--color-muted); font-size: 0.75rem; white-space: nowrap; }
+.database-table .database-action { inline-size: 5rem; text-align: end; }
+.database-action a { display: inline-flex; align-items: center; gap: 0.5rem; min-block-size: 2.25rem; font-weight: 500; text-decoration: none; }
+.database-action a:hover { text-decoration: underline; }
+.database-list-footer { display: flex; justify-content: space-between; gap: 1.5rem; padding-block-start: 1rem; color: var(--color-muted); font-size: 0.75rem; }
+.database-list-footer p { margin: 0; }
+.database-help { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.5rem; margin-block-start: 2.25rem; padding-block-start: 1.5rem; border-block-start: 1px solid var(--color-border); }
+.database-help h2 { margin: 0 0 0.5rem; font-size: 0.875rem; font-weight: 600; }
+.database-help p { max-inline-size: 56ch; margin: 0; color: var(--color-muted); font-size: 0.8125rem; }
+.database-filter-empty { padding: 3rem 1.25rem; text-align: center; border-block-end: 1px solid var(--color-border); }
+.database-filter-empty h2 { margin: 0 0 0.5rem; font-size: 1rem; font-weight: 600; }
+.database-filter-empty p { margin: 0; color: var(--color-muted); }
+.database-filter-empty button { margin-block-start: 1rem; }
+.database-empty { padding-block: 2.5rem; }
+.database-empty h2 { margin-block: 0 0.75rem; font-size: 1.125rem; font-weight: 500; }
+.database-empty p { max-inline-size: 66ch; color: var(--color-muted); }
+.empty-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem; margin-block-start: 1.5rem; }
+.button-link { display: inline-flex; align-items: center; min-block-size: 2.75rem; padding: 0.625rem 1rem; color: var(--color-surface); background: var(--color-text); border-radius: 0.375rem; text-decoration: none; }
+.button-link:hover { background: #30363c; }
 
 .scroll-x { max-inline-size: 100%; overflow-x: auto; }
 .viewer { display: flex; flex-wrap: wrap; gap: 1rem; }
@@ -120,5 +167,21 @@ main :is(h1, h2, h3, p) { overflow-wrap: anywhere; }
   .page-heading h1 { font-size: 1.625rem; }
   .page-description { max-inline-size: 32ch; font-size: 0.8125rem; }
   .page-count { font-size: 0.75rem; text-align: end; }
-
+  .database-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-block-start: 1.5rem; }
+  .database-search { grid-column: 1 / -1; max-inline-size: none; }
+  .filter-field :is(input, select) { min-block-size: 2.75rem; }
+  .filter-field select { min-inline-size: 0; }
+  .database-table-frame { padding-inline: 0; overflow: visible; border: 0; border-block-start: 1px solid var(--color-border); border-radius: 0; }
+  .database-table :is(tbody, tr, th, td) { display: block; }
+  .database-table thead { display: none; }
+  .database-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.625rem 1rem; padding-block: 1.125rem; border-block-end: 1px solid var(--color-border); }
+  .database-table :is(th, td), .database-table :is(th, td):first-child, .database-table :is(th, td):last-child { padding: 0; border: 0; }
+  .database-table .database-identity { grid-column: 1; grid-row: 1; inline-size: auto; min-inline-size: 0; }
+  .database-id { font-size: 0.6875rem; }
+  .database-table .database-action { grid-column: 2; grid-row: 1; inline-size: auto; }
+  .database-action a { min-block-size: 2.75rem; }
+  .database-table .database-readiness { grid-column: 1 / -1; }
+  .database-readiness::before { content: attr(data-label) ": "; }
+  .database-list-footer { flex-direction: column; gap: 0.5rem; }
+  .database-help { grid-template-columns: 1fr; gap: 1.5rem; margin-block-start: 2rem; }
 }
