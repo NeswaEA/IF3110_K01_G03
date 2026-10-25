@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -28,10 +28,8 @@ func affinity(declared string) database.Encoding {
 		return database.EncText // untyped columns usually hold text; non-UTF-8 bytes fall back to base64
 	case strings.Contains(t, "BLOB"):
 		return database.EncBase64
-	case strings.Contains(t, "REAL"), strings.Contains(t, "FLOA"), strings.Contains(t, "DOUB"):
-		return database.EncNumber
 	}
-	return database.EncDecimalString // NUMERIC affinity
+	return database.EncDecimalString // NUMERIC and REAL affinity: 64-bit integers and Infinity are no JSON numbers
 }
 
 func (Reader) ReadTable(ctx context.Context, t database.TargetHandle, schema, table string, limit, offset int) (database.TableData, bool, error) {
@@ -120,13 +118,14 @@ func convert(enc database.Encoding, v any) any {
 	case nil:
 		return nil
 	case int64:
-		if enc == database.EncNumber && x > -1<<53 && x < 1<<53 {
-			return json.Number(strconv.FormatInt(x, 10))
-		}
 		return strconv.FormatInt(x, 10)
 	case float64:
-		if enc == database.EncNumber {
-			return x
+		// spelled as PostgreSQL does; SQLite stores NaN as NULL
+		if math.IsInf(x, 1) {
+			return "Infinity"
+		}
+		if math.IsInf(x, -1) {
+			return "-Infinity"
 		}
 		return strconv.FormatFloat(x, 'g', -1, 64)
 	case string:
