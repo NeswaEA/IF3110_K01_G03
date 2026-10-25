@@ -241,6 +241,27 @@ func TestRegisterRejectsMetadataAndDuplicates(t *testing.T) {
 	}
 }
 
+// A host-name alias (IP, other DNS name) gets the metadata database past the
+// identity check; opening its pool still refuses it.
+func TestAcquireRejectsMetadataUnderAlias(t *testing.T) {
+	e := newEnv(t, nil)
+	e.svc.opts.MetadataIdentity = "" // stands in for an alias the name check cannot see
+	mu, _ := url.Parse(os.Getenv("TEST_METADATA_DATABASE_URL"))
+	mport, _ := strconv.Atoi(mu.Port())
+	pw, _ := mu.User.Password()
+	cfg := pgJSON(func(m map[string]any) {
+		m["host"], m["port"], m["database"] = mu.Hostname(), mport, strings.TrimPrefix(mu.Path, "/")
+		m["username"], m["password"], m["editor_role"] = mu.User.Username(), pw, mu.User.Username()
+	})
+	got, err := e.svc.Register(ctx, RegisterInput{Name: "meta alias", Driver: database.Postgres, Config: cfg})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := e.reg.Acquire(ctx, got.ID); !errors.Is(err, database.ErrTargetUnavailable) {
+		t.Fatalf("metadata under alias: %v", err)
+	}
+}
+
 func TestListPaginatesAndIncludesInactive(t *testing.T) {
 	e := newEnv(t, nil)
 	for _, n := range []string{"c", "a", "b"} {

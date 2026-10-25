@@ -119,7 +119,7 @@ func (r *Registry) Acquire(ctx context.Context, id string) (database.TargetHandl
 		return database.TargetHandle{}, nil, err
 	}
 	if !e.verified.Load() {
-		if err := r.ping(ctx, e); err != nil {
+		if err := r.ping(ctx, e, row.Driver); err != nil {
 			r.unlease(e)
 			return database.TargetHandle{}, nil, err
 		}
@@ -144,10 +144,20 @@ func (r *Registry) Driver(ctx context.Context, id string) (database.Driver, erro
 	return row.Driver, nil
 }
 
-func (r *Registry) ping(ctx context.Context, e *poolEntry) error {
+func (r *Registry) ping(ctx context.Context, e *poolEntry, driver database.Driver) error {
 	pctx, cancel := context.WithTimeout(ctx, r.opts.ConnectTimeout)
 	defer cancel()
 	err := e.db.PingContext(pctx)
+	if err == nil && driver == database.Postgres {
+		// The metadata database reached through another host name (IP, alias) passes the
+		// identity check at registration; its own tables give it away here.
+		var metadata bool
+		err = e.db.QueryRowContext(pctx, `SELECT count(DISTINCT relname) = 2 FROM pg_class
+			WHERE relname IN ('app_schema_migrations', 'session_tokens')`).Scan(&metadata)
+		if err == nil && metadata {
+			return database.ErrTargetUnavailable
+		}
+	}
 	switch {
 	case err == nil:
 		return nil
