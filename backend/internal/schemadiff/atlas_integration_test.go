@@ -164,19 +164,17 @@ func TestAtlasPostgresCandidateIntegration(t *testing.T) {
 			if _, err := source.DB.Exec(`SET ROLE platform_editor;INSERT INTO ` + qualified + `.parent VALUES(1,'one');RESET ROLE`); err != nil {
 				t.Fatal(err)
 			}
-			if err := (migrations.LedgerInitializer{}).EnsureReady(t.Context(), source); err != nil {
+			if err := (migrations.HistoryInitializer{}).EnsureReady(t.Context(), source); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := meta.Exec(`UPDATE database_connections SET migration_ready=true WHERE id=$1`, source.DatabaseID); err != nil {
 				t.Fatal(err)
 			}
 			access := testkit.NewFixtureAccessChecker()
-			runner := migrations.NewService(meta, registry, postgres.Inspector{}, access, platform.SystemClock{}, migrations.Options{})
 			config := &recordedAtlasConfig{DiffConfigProvider: registry}
 			g := schemadiff.AtlasGenerator{Config: config, Binary: atlasEnv(t, "ATLAS_BIN")}
-			service := schemadiff.NewService(registry, postgres.Inspector{}, access, func(ctx context.Context, p contracts.Principal, id string) (int64, error) {
-				head, err := runner.Head(ctx, p, id)
-				return head.Version, err
+			service := schemadiff.NewService(registry, postgres.Inspector{}, access, func(context.Context, contracts.Principal, string) (int64, error) {
+				return 0, nil
 			}, schemadiff.Options{Generators: map[database.Driver]schemadiff.Generator{database.Postgres: g}})
 			beforeSource, err := (postgres.Inspector{}).Inspect(t.Context(), source)
 			if err != nil {
@@ -216,13 +214,9 @@ func TestAtlasPostgresCandidateIntegration(t *testing.T) {
 			if len(result.Changes) == 0 || result.CandidateSQL == "" || len(result.Warnings) == 0 {
 				t.Fatal("missing changes or destructive warning", result)
 			}
-			draft, err := runner.CreateDraft(t.Context(), principal, source.DatabaseID, migrations.DraftInput{Title: "Atlas candidate", SQL: result.CandidateSQL, ExpectedVersion: result.ExpectedVersion, SourceFingerprint: &result.SourceFingerprint})
-			if err != nil {
-				t.Fatal(err)
-			}
-			run, err := runner.Execute(t.Context(), principal, migrations.ExecuteInput{DatabaseID: source.DatabaseID, DraftID: draft.ID, Revision: draft.Revision, ExpectedVersion: draft.ExpectedVersion, IdempotencyKey: "90000000-0000-4000-8000-000000000001"})
-			if err != nil || run.Status != migrations.Succeeded {
-				t.Fatal("generated DDL failed through runner", run.Status, err)
+			// The candidate runs with the same restricted role user migrations get.
+			if _, err := source.DB.Exec(`BEGIN; SET LOCAL ROLE platform_editor;` + result.CandidateSQL + `; COMMIT`); err != nil {
+				t.Fatal("generated DDL failed as the editor role", err)
 			}
 			after, err := (postgres.Inspector{}).Inspect(t.Context(), source)
 			if err != nil || atlasSchemaFingerprint(t, after, schema) != atlasSchemaFingerprint(t, beforeDesired, schema) {

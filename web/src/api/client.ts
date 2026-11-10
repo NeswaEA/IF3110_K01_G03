@@ -9,7 +9,6 @@ type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 export type RequestOptions = {
   method?: Method;
   body?: unknown;
-  headers?: Record<string, string>;
   signal?: AbortSignal;
 };
 
@@ -105,7 +104,7 @@ export async function request<T>(
   options: RequestOptions = {},
 ): Promise<ApiResponse<T> | undefined> {
   const method = options.method ?? "GET";
-  const headers: Record<string, string> = { Accept: "application/json", ...options.headers };
+  const headers: Record<string, string> = { Accept: "application/json" };
 
   if (MUTATING.has(method)) {
     headers["X-CSRF-Token"] = csrfToken ?? (await refreshCsrf(options.signal));

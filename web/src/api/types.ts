@@ -3,7 +3,6 @@
 
 export type Driver = "postgres" | "sqlite";
 export type AccessLevel = "none" | "view" | "edit";
-export type RunStatus = "running" | "succeeded" | "failed" | "outcome_unknown";
 export type ExplainMode = "estimate";
 export type ConstraintKind = "primary_key" | "foreign_key" | "unique" | "check";
 export type Encoding = "text" | "decimal_string" | "boolean" | "number" | "timestamp" | "json" | "base64";
@@ -17,10 +16,9 @@ export type DiffChangeKind =
 // Backend error codes plus client-only NETWORK_ERROR.
 export type ErrorCode =
   | "INVALID_REQUEST" | "UNAUTHENTICATED" | "FORBIDDEN" | "CSRF_REJECTED" | "NOT_FOUND"
-  | "REVISION_CONFLICT" | "VERSION_CONFLICT" | "RUN_IN_PROGRESS" | "IDEMPOTENCY_CONFLICT"
-  | "TARGET_OUTCOME_UNKNOWN" | "UNSUPPORTED_SQL" | "SQL_EXECUTION_FAILED" | "PLAN_UNSUPPORTED"
+  | "REVISION_CONFLICT" | "VERSION_CONFLICT" | "UNSUPPORTED_SQL" | "SQL_EXECUTION_FAILED" | "PLAN_UNSUPPORTED"
   | "RATE_LIMITED" | "TARGET_UNAVAILABLE" | "TARGET_TIMEOUT" | "INTERNAL_ERROR"
-  | "SCHEMA_CONFLICT" | "DRAFT_APPLIED" | "DUPLICATE_TARGET" | "LEDGER_INCOMPATIBLE"
+  | "SCHEMA_CONFLICT" | "DUPLICATE_TARGET" | "LEDGER_INCOMPATIBLE"
   | "DIFF_UNSUPPORTED" | "DIFF_UNAVAILABLE" | "TARGET_NOT_READY" | "ALREADY_EXISTS" | "LAST_ADMIN"
   | "PAYLOAD_TOO_LARGE" | "EXECUTION_INTERRUPTED" | "NETWORK_ERROR";
 
@@ -78,21 +76,6 @@ export type Schema = { name: string; tables: Table[] };
 export type SchemaSnapshot = { database_id: string; driver: Driver; fingerprint: string; schemas: Schema[] };
 export type DataColumn = { name: string; data_type: string; encoding: Encoding };
 export type TableData = { columns: DataColumn[]; rows: JSONValue[][]; order_stable: boolean };
-
-export type MigrationDraft = {
-  id: string; database_id: string; title: string; sql: string; revision: number;
-  expected_version: number; source_fingerprint: string | null; applied_at: string | null;
-  created_by: string; updated_by: string; created_at: string; updated_at: string;
-};
-export type Actor = { id: string; username: string };
-export type RunError = { code: ErrorCode | string; message: string };
-export type MigrationRun = {
-  id: string; database_id: string; draft_id: string; draft_revision: number;
-  candidate_version: number; version: number | null; sql: string; sql_hash: string;
-  actor: Actor; status: RunStatus; started_at: string; finished_at: string | null;
-  error: RunError | null;
-};
-export type MigrationHead = { version: number; last_run_id: string | null };
 
 export type DiffChange = { kind: DiffChangeKind; object: string; destructive: boolean };
 export type DiffResult = {

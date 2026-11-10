@@ -84,12 +84,12 @@ func TestMetadataMigrationsReplayAndRerun(t *testing.T) {
 		}
 	}
 	var count int
-	if err := db.QueryRow("SELECT count(*) FROM app_schema_migrations WHERE length(checksum)=64 AND applied_at IS NOT NULL").Scan(&count); err != nil || count != 4 {
+	if err := db.QueryRow("SELECT count(*) FROM app_schema_migrations WHERE length(checksum)=64 AND applied_at IS NOT NULL").Scan(&count); err != nil || count != 8 {
 		t.Fatal("migration ledger is incomplete")
 	}
-	var tables int
-	if err := db.QueryRow("SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('users','groups','database_connections','sessions','session_tokens','group_memberships','group_database_access','migration_drafts','migration_runs')").Scan(&tables); err != nil || tables != 9 {
-		t.Fatal("metadata tables are incomplete")
+	var tables, dropped int
+	if err := db.QueryRow("SELECT count(*) FILTER (WHERE table_name NOT IN ('migration_drafts','migration_runs')), count(*) FILTER (WHERE table_name IN ('migration_drafts','migration_runs')) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('users','groups','database_connections','sessions','session_tokens','group_memberships','group_database_access','migrations','migration_revisions','change_requests','migration_executions','migration_batches','migration_history','change_request_approvals','outbox_messages','migration_drafts','migration_runs')").Scan(&tables, &dropped); err != nil || tables != 15 || dropped != 0 {
+		t.Fatal("metadata tables are incomplete or the replaced tables remain")
 	}
 }
 

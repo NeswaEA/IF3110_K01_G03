@@ -110,14 +110,14 @@ func TestFingerprintIgnoresReservedObjects(t *testing.T) {
 
 	pg := sample()
 	pg.Schemas = append(pg.Schemas, database.Schema{Name: "_platform",
-		Tables: []database.Table{{Name: "migration_ledger", Columns: []database.Column{{Name: "version", DataType: "bigint", Ordinal: 1}}}}})
+		Tables: []database.Table{{Name: "migration_history", Columns: []database.Column{{Name: "version", DataType: "bigint", Ordinal: 1}}}}})
 	if mustFP(t, pg) != base {
 		t.Fatal("_platform schema must be excluded")
 	}
 
 	lite := sample()
 	lite.Schemas[0].Tables = append(lite.Schemas[0].Tables,
-		database.Table{Name: "_platform_migration_ledger", Columns: []database.Column{{Name: "version", DataType: "INTEGER", Ordinal: 1}}})
+		database.Table{Name: "_platform_migration_history", Columns: []database.Column{{Name: "version", DataType: "INTEGER", Ordinal: 1}}})
 	if mustFP(t, lite) != base {
 		t.Fatal("_platform_ tables must be excluded")
 	}

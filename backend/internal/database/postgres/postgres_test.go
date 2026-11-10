@@ -212,7 +212,7 @@ func TestReadTable(t *testing.T) {
 	if o, _, err := r.ReadTable(ctx, h, "public", `Odd "Name"`, 50, 0); err != nil || len(o.Rows) != 1 || o.Rows[0][0] != json.Number("1") {
 		t.Errorf("odd %+v %v", o, err)
 	}
-	for _, bad := range [][2]string{{"public", "missing"}, {"_platform", "migration_ledger"},
+	for _, bad := range [][2]string{{"public", "missing"}, {"_platform", "migration_history"},
 		{"public", `items"; DROP TABLE public.items; --`}, {"pg_catalog", "pg_class"}} {
 		if _, _, err := r.ReadTable(ctx, h, bad[0], bad[1], 50, 0); !errors.Is(err, database.ErrNotFound) {
 			t.Errorf("%v: %v", bad, err)

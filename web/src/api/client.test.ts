@@ -94,22 +94,20 @@ describe("request", () => {
     await expect(p).rejects.toMatchObject({ name: "AbortError" });
   });
 
-  it("fetches a CSRF token lazily and sends it, plus caller headers, on mutations", async () => {
+  it("fetches a CSRF token lazily and sends it on mutations", async () => {
     let seen: Headers | undefined;
     server.use(
       http.get(`${B}/auth/csrf`, () => HttpResponse.json({ data: { csrf_token: "tok" } })),
-      http.post(`${B}/databases/1/migration-drafts/2/execute`, ({ request: r }) => {
+      http.post(`${B}/databases/1/schema-diff`, ({ request: r }) => {
         seen = r.headers;
         return HttpResponse.json({ data: { ok: true } });
       }),
     );
-    await request("/databases/1/migration-drafts/2/execute", {
+    await request("/databases/1/schema-diff", {
       method: "POST",
-      body: { revision: 1 },
-      headers: { "Idempotency-Key": "k-1" },
+      body: { schema: "public" },
     });
     expect(seen?.get("x-csrf-token")).toBe("tok");
-    expect(seen?.get("idempotency-key")).toBe("k-1");
     expect(seen?.get("content-type")).toBe("application/json");
   });
 

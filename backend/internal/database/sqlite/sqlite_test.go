@@ -31,7 +31,7 @@ func fixtureDB(t *testing.T) database.TargetHandle {
 		t.Fatal(err)
 	}
 	// reserved ledger must stay invisible
-	if _, err := db.Exec(`CREATE TABLE _platform_migration_ledger (version INTEGER PRIMARY KEY)`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE _platform_migration_history (version INTEGER PRIMARY KEY)`); err != nil {
 		t.Fatal(err)
 	}
 	return database.TargetHandle{DatabaseID: "30000000-0000-4000-8000-000000000002", Driver: database.SQLite, DB: db}
@@ -198,7 +198,7 @@ func TestReadTable(t *testing.T) {
 	}
 
 	for _, bad := range []struct{ schema, table string }{
-		{"main", "missing"}, {"main", "_platform_migration_ledger"}, {"main", "sqlite_schema"},
+		{"main", "missing"}, {"main", "_platform_migration_history"}, {"main", "sqlite_schema"},
 		{"other", "items"}, {"main", `items"; DROP TABLE items; --`},
 	} {
 		if _, _, err := r.ReadTable(ctx, h, bad.schema, bad.table, 50, 0); !errors.Is(err, database.ErrNotFound) {

@@ -15,7 +15,6 @@ import (
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/auth"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/connections"
-	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/migrations"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/schemadiff"
 	metadata "github.com/NeswaEA/IF3110_K01_G03/backend/migrations"
@@ -135,7 +134,7 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 	}
 	defer close()
 	h = platform.RequestID(h)
-	request := func(method, path, body string, cookie *http.Cookie, csrf string, extra ...map[string]string) *httptest.ResponseRecorder {
+	request := func(method, path, body string, cookie *http.Cookie, csrf string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
 		r.Header.Set("Origin", cfg.AppOrigin)
 		r.Header.Set("Content-Type", "application/json")
@@ -145,11 +144,6 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		}
 		if csrf != "" {
 			r.Header.Set("X-CSRF-Token", csrf)
-		}
-		for _, headers := range extra {
-			for name, value := range headers {
-				r.Header.Set(name, value)
-			}
 		}
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
@@ -247,7 +241,6 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		{"GET", "/databases/" + databaseID + "/schema-diff?desired_database_id=" + desiredID + "&schema=main", "", edit, 200, `data-widget="schema-diff"`},
 		{"GET", "/databases/" + databaseID + "/schema-diff?desired_database_id=" + desiredID + "&schema=main", "", edit, 200, `name="desired_database_id"`},
 		{"GET", "/api/v1/missing", "", edit, 404, "NOT_FOUND"},
-		{"GET", base + "/migration-runs", "", edit, 200, `"data":[]`},
 		{"GET", "/databases", "", loginState{}, 302, ""},
 		{"GET", "/", "", view, 302, ""},
 		{"GET", "/databases", "", view, 200, `<a class="database-name" href="/databases/` + databaseID + `">demo</a>`},
@@ -256,7 +249,6 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		{"GET", "/databases/" + databaseID + "?schema=main&table=items", "", view, 200, "<td>sample</td>"},
 		{"GET", "/databases/" + databaseID + "?schema=main&table=missing", "", view, 404, "Halaman tidak ditemukan"},
 		{"GET", "/databases/" + databaseID, "", admin, 404, "Halaman tidak ditemukan"},
-		{"GET", "/databases/" + databaseID + "/migrations", "", view, 200, `data-widget="migrations"`},
 		{"GET", "/admin/connections", "", view, 403, "Akses ditolak"},
 		{"GET", "/admin/connections", "", admin, 200, `data-widget="connections"`},
 		{"GET", "/admin", "", loginState{}, 302, ""},
@@ -343,109 +335,37 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 	if err := target.QueryRow(`SELECT count(*) FROM pragma_table_info('items') WHERE name='status'`).Scan(&unexpected); err != nil || unexpected != 0 {
 		t.Fatal("schema diff applied candidate", err)
 	}
-	if err := db.QueryRow(`SELECT (SELECT count(*) FROM migration_runs)+(SELECT count(*) FROM migration_drafts)`).Scan(&unexpected); err != nil || unexpected != 0 {
-		t.Fatal("schema diff created run or draft", err)
+	if err := db.QueryRow(`SELECT (SELECT count(*) FROM migrations)+(SELECT count(*) FROM migration_executions)`).Scan(&unexpected); err != nil || unexpected != 0 {
+		t.Fatal("schema diff created a migration or execution", err)
 	}
 	w = request("POST", base+"/schema-diff", `{"desired_database_id":"90000000-0000-4000-8000-000000000099","schema":"main"}`, edit.cookie, edit.csrf)
 	if w.Code != 404 {
 		t.Fatal("unauthorized desired database", w.Code, w.Body.String())
 	}
-	draftBody := `{"title":"HTTP migration","sql":"CREATE TABLE migrated(id INTEGER PRIMARY KEY); INSERT INTO migrated VALUES(1);","expected_version":0}`
-	for _, denied := range []struct {
-		who    loginState
-		status int
-	}{{view, 403}, {loginState{}, 401}, {loginState{edit.cookie, ""}, 403}} {
-		if w := request("POST", base+"/migration-drafts", draftBody, denied.who.cookie, denied.who.csrf); w.Code != denied.status {
-			t.Fatalf("migration access: %d %s", w.Code, w.Body.String())
-		}
-	}
-	w = request("POST", base+"/migration-drafts", draftBody, edit.cookie, edit.csrf)
-	var draft struct {
-		Data migrations.MigrationDraft `json:"data"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &draft); err != nil || w.Code != 201 {
-		t.Fatal("create draft", w.Code, w.Body.String())
-	}
-	executePath := base + "/migration-drafts/" + draft.Data.ID + "/execute"
-	idempotencyHeaders := map[string]string{"Idempotency-Key": "70000000-0000-4000-8000-000000000001"}
-	for _, denied := range []struct {
-		who    loginState
-		status int
-	}{{view, 403}, {loginState{}, 401}, {loginState{edit.cookie, ""}, 403}} {
-		w := request("POST", executePath, `{"revision":1,"expected_version":0}`, denied.who.cookie, denied.who.csrf, idempotencyHeaders)
-		if w.Code != denied.status {
-			t.Fatalf("execute access: %d %s", w.Code, w.Body.String())
-		}
-	}
-	w = request("POST", executePath, `{"revision":1,"expected_version":0}`, edit.cookie, edit.csrf, idempotencyHeaders)
-	var run struct {
-		Data migrations.MigrationRun `json:"data"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil || w.Code != 200 || run.Data.Status != migrations.Succeeded {
-		t.Fatal("execute", w.Code, w.Body.String())
-	}
-	firstRun := run.Data.ID
-	pagePath := "/databases/" + databaseID + "/migrations"
-	for _, tc := range []struct {
-		who      loginState
-		query    string
-		status   int
-		contains string
+	// An execution row is history: the registration may no longer point at another target.
+	const migrationID, executionID = "40000000-0000-4000-8000-000000000001", "50000000-0000-4000-8000-000000000001"
+	const editorID = "10000000-0000-4000-8000-000000000003"
+	for _, stmt := range []struct {
+		query string
+		args  []any
 	}{
-		{edit, "?draft=" + draft.Data.ID + "&run=" + firstRun, 200, "CREATE TABLE migrated"},
-		{view, "?run=" + firstRun, 200, "Status: Berhasil"},
-		{view, "?draft=" + draft.Data.ID, 403, "Akses ditolak"},
-		{edit, "?run=90000000-0000-4000-8000-000000000099", 404, "Halaman tidak ditemukan"},
-		{edit, "?history_offset=-1", 400, "Permintaan tidak valid"},
+		{`INSERT INTO migrations (id, database_id, title, created_by, updated_by, created_at, updated_at) VALUES ($1, $2, 'HTTP migration', $3, $3, now(), now())`, []any{migrationID, databaseID, editorID}},
+		{`INSERT INTO migration_revisions (migration_id, revision, up_sql, down_sql, mode, content_hash, created_by, created_at) VALUES ($1, 1, 'CREATE TABLE migrated(id INTEGER)', 'DROP TABLE migrated', 'normal', decode(repeat('00', 32), 'hex'), $2, now())`, []any{migrationID, editorID}},
+		{`INSERT INTO migration_executions (id, database_id, number, migration_id, action, direction, mode, migration_revision, content_hash, status, max_attempts, chain_root_id, enqueued_by, enqueued_by_name, enqueued_at) VALUES ($1, $2, 1, $3, 'dry_run', 'up', 'normal', 1, decode(repeat('00', 32), 'hex'), 'queued', 3, $1, $4, 'editor', now())`, []any{executionID, databaseID, migrationID, editorID}},
 	} {
-		w := request("GET", pagePath+tc.query, "", tc.who.cookie, "")
-		if w.Code != tc.status || !strings.Contains(w.Body.String(), tc.contains) {
-			t.Fatal("server-rendered migration page", w.Code, w.Body.String())
+		if _, err := db.Exec(stmt.query, stmt.args...); err != nil {
+			t.Fatal(err)
 		}
 	}
-	if w := request("POST", base+"/migration-runs/"+firstRun+"/reconcile", `{}`, view.cookie, view.csrf); w.Code != 403 {
-		t.Fatal("view reconciled run", w.Code)
-	}
-	w = request("POST", executePath, `{"revision":1,"expected_version":0}`, edit.cookie, edit.csrf, idempotencyHeaders)
-	if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil || w.Code != 200 || run.Data.ID != firstRun {
-		t.Fatal("duplicate execute", w.Code, w.Body.String())
-	}
-	if w := request("GET", base+"/migration-runs/"+firstRun, "", view.cookie, ""); w.Code != 200 || !strings.Contains(w.Body.String(), `"username":"editor"`) {
-		t.Fatal("view history", w.Code, w.Body.String())
-	}
-	if w := request("GET", base+"/migration-drafts/"+draft.Data.ID, "", view.cookie, ""); w.Code != 403 {
-		t.Fatal("view read draft", w.Code)
-	}
-	w = request("PATCH", "/api/v1/admin/connections/"+databaseID, `{"revision":1,"config":{"file":"different.sqlite"}}`, admin.cookie, admin.csrf)
-	if w.Code != 409 || !strings.Contains(w.Body.String(), "REVISION_CONFLICT") {
-		t.Fatal("history did not lock target", w.Code, w.Body.String())
-	}
-	w = request("POST", base+"/migration-drafts", `{"title":"HTTP rollback","sql":"INSERT INTO migrated VALUES(2); INSERT INTO missing_table VALUES(3);","expected_version":1}`, edit.cookie, edit.csrf)
-	if err := json.Unmarshal(w.Body.Bytes(), &draft); err != nil || w.Code != 201 {
-		t.Fatal("create rollback draft", w.Code, w.Body.String())
-	}
-	idempotencyHeaders["Idempotency-Key"] = "70000000-0000-4000-8000-000000000002"
-	w = request("POST", base+"/migration-drafts/"+draft.Data.ID+"/execute", `{"revision":1,"expected_version":1}`, edit.cookie, edit.csrf, idempotencyHeaders)
-	if w.Code != 422 || !strings.Contains(w.Body.String(), `"run_id"`) {
-		t.Fatal("failed execution", w.Code, w.Body.String())
-	}
-	var count int
-	if err := target.QueryRow("SELECT count(*) FROM migrated").Scan(&count); err != nil || count != 1 {
-		t.Fatal("HTTP execution did not roll back")
-	}
-	w = request("GET", base+"/migration-head", "", view.cookie, "")
-	if w.Code != 200 || !strings.Contains(w.Body.String(), `"version":1`) {
-		t.Fatal("failed run advanced head", w.Code, w.Body.String())
-	}
-	var runsBefore, runsAfter int
-	if err := db.QueryRow(`SELECT count(*) FROM migration_runs WHERE database_id=$1`, databaseID).Scan(&runsBefore); err != nil || runsBefore < 2 {
-		t.Fatal("runs before disable", runsBefore, err)
+	var executionsBefore, executionsAfter int
+	if err := db.QueryRow(`SELECT count(*) FROM migration_executions WHERE database_id=$1`, databaseID).Scan(&executionsBefore); err != nil || executionsBefore != 1 {
+		t.Fatal("executions before disable", executionsBefore, err)
 	}
 	if w := request("DELETE", "/api/v1/admin/connections/"+databaseID, "", admin.cookie, admin.csrf); w.Code != 204 {
 		t.Fatal("disable failed", w.Code)
 	}
-	if err := db.QueryRow(`SELECT count(*) FROM migration_runs WHERE database_id=$1`, databaseID).Scan(&runsAfter); err != nil || runsAfter != runsBefore {
-		t.Fatal("disable lost migration history", runsBefore, runsAfter, err)
+	if err := db.QueryRow(`SELECT count(*) FROM migration_executions WHERE database_id=$1`, databaseID).Scan(&executionsAfter); err != nil || executionsAfter != executionsBefore {
+		t.Fatal("disable lost migration history", executionsBefore, executionsAfter, err)
 	}
 	for _, who := range []loginState{view, edit} {
 		if w := request("GET", "/api/v1/auth/me", "", who.cookie, ""); w.Code != 401 {

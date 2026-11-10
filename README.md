@@ -5,9 +5,9 @@ Aplikasi web untuk **mengelola akses database, menelusuri schema dan data, serta
 Admin mendaftarkan database target (PostgreSQL atau SQLite) dan memberi hak akses per database melalui group. Pengguna hanya melihat database yang boleh mereka akses:
 
 - dengan akses **lihat**, pengguna dapat membaca schema, data, dan riwayat migrasi;
-- dengan akses **edit**, pengguna juga dapat menulis migrasi SQL, menganalisis rencana eksekusinya, dan menjalankannya.
+- dengan akses **edit**, pengguna juga dapat membandingkan schema dan menyiapkan perubahan.
 
-Setiap migrasi berjalan dalam satu transaksi: seluruhnya di-commit bila berhasil, seluruhnya di-rollback bila gagal. Hasilnya tercatat dalam riwayat linear per database.
+> **Status Milestone 2.** Runner migrasi sinkron Milestone 1 (draft, run, ledger target) sudah dihapus. Penggantinya adalah alur migration dengan review, approval leader, queue, dan worker, yang sedang dibangun di atas schema metadata `0005`–`0008` dan tabel riwayat target `_platform.migration_history`. Target dari Milestone 1 yang masih memiliki `_platform.migration_ledger` ditolak dengan `LEDGER_INCOMPATIBLE`; reset volume development sekali dengan `sh scripts/dev-up.sh down -v`.
 
 ## Fitur
 
@@ -17,8 +17,7 @@ Setiap migrasi berjalan dalam satu transaksi: seluruhnya di-commit bila berhasil
 | Otorisasi | Hak `lihat`/`edit` per database melalui group; hak efektif adalah yang tertinggi dari semua group pengguna. Admin platform terpisah dari akses ke target |
 | Registry koneksi | Admin mendaftarkan, mengubah, menguji, dan menonaktifkan koneksi. Kredensial disimpan terenkripsi (AES-GCM) dan tidak pernah dikirim ke browser |
 | Viewer | Schema, tabel, kolom, constraint, indeks, dan data dengan pagination. Nilai `NULL`, bigint besar, desimal, dan biner ditampilkan tanpa kehilangan makna |
-| Migrasi | Editor SQL, draft dengan revisi, eksekusi transaksional, riwayat dengan versi, pelaksana, waktu, dan status; hasil yang tidak pasti direkonsiliasi, bukan diulang otomatis |
-| Bonus: SQLite | Viewer, migrasi, dan kontrol akses juga berjalan untuk SQLite |
+| Bonus: SQLite | Viewer, perbandingan schema, dan kontrol akses juga berjalan untuk SQLite |
 | Bonus: EXPLAIN | Analisis rencana eksekusi satu statement (mode estimasi, tanpa `ANALYZE`) untuk PostgreSQL dan SQLite |
 
 ### Session
@@ -82,7 +81,7 @@ Buka http://localhost:8080.
 
 `app-up.sh seed` membuat akun `fixture-admin` (admin platform), `editor`, `viewer`, dan `outsider`, beserta group, hak akses, dan empat koneksi demo. Password semua akun demo adalah nilai `FIXTURE_PASSWORD` di `.env` Anda.
 
-`seed` mengisi file SQLite `demo.sqlite` serta pembanding `demo_desired.sqlite`, dan membuat/mengisi PostgreSQL `demo_desired`. Target yang sudah memiliki objek, termasuk ledger migrasi, dilewati. File SQLite yang sudah ada tetapi masih kosong dapat diisi dalam satu transaksi. Data dan riwayat migrasi tetap tersimpan saat `seed` dijalankan ulang.
+`seed` mengisi file SQLite `demo.sqlite` serta pembanding `demo_desired.sqlite`, dan membuat/mengisi PostgreSQL `demo_desired`. Target yang sudah memiliki objek, termasuk riwayat migrasi, dilewati. File SQLite yang sudah ada tetapi masih kosong dapat diisi dalam satu transaksi. Data dan riwayat migrasi tetap tersimpan saat `seed` dijalankan ulang.
 
 Kedua pembanding memakai schema dasar demo, lalu menambahkan `items.status`, index `items_status_idx`, dan tabel `item_tags`. Fixture dasarnya ada di `tests/fixtures/{postgres,sqlite}/demo.sql`; tambahan pembanding ada di `desired.sql` pada folder yang sama. Database lama yang sudah berisi pekerjaan tidak otomatis diubah agar mengikuti fixture baru.
 
@@ -90,22 +89,21 @@ Menjalankan `seed` ulang mencabut session akun demo, jadi login kembali setelahn
 
 Untuk mengatur akses database, buka Administrasi → Grup → Hak akses pada grup yang dipilih. Pilih database dan level `view` atau `edit`; grant yang sudah ada dapat diubah atau dicabut. Penurunan `edit` ke `view` dan pencabutan grant mengakhiri seluruh sesi anggota grup, termasuk admin yang menjadi anggota.
 
-Sebelum migrasi dapat dijalankan pada sebuah koneksi, admin harus **menguji koneksi itu terlebih dahulu** di halaman Koneksi. Sampai diuji, halaman migrasi menjawab `TARGET_NOT_READY`.
+Sebelum sebuah koneksi dipakai sebagai source perbandingan atau target migrasi, admin harus **menguji koneksi itu terlebih dahulu** di halaman Koneksi. Pengujian menyiapkan tabel riwayat migrasi di target; sampai diuji, operasi tersebut menjawab `TARGET_NOT_READY`.
 
 ### Perbandingan schema
 
-Pengguna dengan akses edit dapat membuka **Bandingkan schema** dari halaman database atau migrasi, atau langsung ke `/databases/{id}/schema-diff`. Halaman dirender Go dan dapat dibuka lewat URL/refresh biasa; JavaScript menangani interaksi di halaman tersebut tanpa router klien.
+Pengguna dengan akses edit dapat membuka **Bandingkan schema** dari halaman database, atau langsung ke `/databases/{id}/schema-diff`. Halaman dirender Go dan dapat dibuka lewat URL/refresh biasa; JavaScript menangani interaksi di halaman tersebut tanpa router klien.
 
-1. Admin menguji koneksi source terlebih dahulu. Pembanding cukup memiliki akses view dan tidak memerlukan ledger.
+1. Admin menguji koneksi source terlebih dahulu. Pembanding cukup memiliki akses view dan tidak memerlukan tabel riwayat.
 2. Pilih database pembanding sejenis dan schema, lalu tekan **Bandingkan schema**.
-3. Tinjau daftar perubahan, penanda destruktif, dan warning. Kandidat yang executable dapat diedit dengan editor SQL yang sama seperti migrasi manual.
-4. Isi judul dan tekan **Simpan sebagai draft**. Aplikasi membuka draft terpilih di halaman migrasi; pengguna menjalankannya sendiri lewat runner yang sama.
+3. Tinjau daftar perubahan, penanda destruktif, warning, dan kandidat SQL (hanya baca).
 
-Schema identik atau perubahan unsupported tidak menawarkan penyimpanan kandidat kosong/parsial. Mengubah pilihan menonaktifkan penyimpanan hasil lama; generate ulang meminta konfirmasi bila SQL telah diedit. Error, konflik, atau sesi kedaluwarsa mempertahankan input. Login ulang dapat dilakukan di tab baru, lalu pengguna mengirim kembali secara manual.
+Schema identik atau perubahan unsupported tidak menampilkan kandidat kosong/parsial. Mengubah pilihan menandai hasil lama sebagai usang. Sesi kedaluwarsa menampilkan tautan login di tab baru; perbandingan lalu diulang secara manual.
 
 ### API schema diff
 
-`POST /api/v1/databases/{id}/schema-diff` memerlukan session, CSRF, izin edit pada source, dan view pada pembanding. Source harus sudah diuji admin; pembanding tidak memerlukan ledger. Engine kedua database harus sama. Gunakan schema `public` untuk demo PostgreSQL atau `main` untuk SQLite.
+`POST /api/v1/databases/{id}/schema-diff` memerlukan session, CSRF, izin edit pada source, dan view pada pembanding. Source harus sudah diuji admin; pembanding tidak memerlukan tabel riwayat. Engine kedua database harus sama. Gunakan schema `public` untuk demo PostgreSQL atau `main` untuk SQLite.
 
 Setelah login sebagai `editor`, contoh berikut dapat dijalankan dari console browser pada aplikasi lokal:
 
@@ -122,9 +120,9 @@ const result = await fetch('/api/v1/databases/30000000-0000-4000-8000-0000000000
 console.log(result);
 ```
 
-Respons berisi `changes`, `warnings`, `candidate_sql`, `executable`, `expected_version`, serta fingerprint source/pembanding. Diff tidak menjalankan kandidat atau membuat draft. Kandidat non-executable selalu kosong; SQL yang akan dijalankan tetap perlu ditinjau dan disimpan sebagai draft. Draft dari halaman diff menyimpan SQL hasil edit, `expected_version`, dan `source_fingerprint` dari hasil perbandingan, sehingga runner dapat menolak target yang berubah setelahnya.
+Respons berisi `changes`, `warnings`, `candidate_sql`, `executable`, `expected_version`, serta fingerprint source/pembanding. Diff tidak menjalankan kandidat dan tidak menulis metadata. Kandidat non-executable selalu kosong. `expected_version` adalah head riwayat migrasi source saat dibandingkan.
 
-`DIFF_TIMEOUT` membatasi perbandingan (default `30s`). Capability `schema_diff` aktif untuk SQLite; PostgreSQL memerlukan probe Atlas Community v1.3.0 yang berhasil saat startup. `ATLAS_BIN` kosong memakai `atlas` dari PATH; image aplikasi sudah menyertakan binary tersebut. Atlas yang hilang menonaktifkan capability PostgreSQL dan menghasilkan `DIFF_UNAVAILABLE` bila endpoint dipanggil, sementara migrasi manual tetap tersedia. Rincian ada di [petunjuk Atlas](infra/atlas/README.md).
+`DIFF_TIMEOUT` membatasi perbandingan (default `30s`). Capability `schema_diff` aktif untuk SQLite; PostgreSQL memerlukan probe Atlas Community v1.3.0 yang berhasil saat startup. `ATLAS_BIN` kosong memakai `atlas` dari PATH; image aplikasi sudah menyertakan binary tersebut. Atlas yang hilang menonaktifkan capability PostgreSQL dan menghasilkan `DIFF_UNAVAILABLE` bila endpoint dipanggil. Rincian ada di [petunjuk Atlas](infra/atlas/README.md).
 
 Di dalam Compose, aplikasi mencapai PostgreSQL target sebagai `target-postgres` port `5432`. Gunakan alamat ini saat mendaftarkan koneksi baru lewat halaman Koneksi.
 
@@ -172,13 +170,13 @@ Untuk memilih skenario, gunakan misalnya `sh scripts/test-e2e.sh --grep 'rolls b
 GitHub Actions menjalankan pemeriksaan pada setiap push, pull request, dan pemicu manual:
 
 - **Backend:** format Go, vet, build ketiga command, dan seluruh test dengan race detector.
-- **Frontend:** `npm ci`, typecheck, test, build, serta uji loader fixture SQLite dengan Node.js 24.22.0. Test halaman diff mencakup edit kandidat, perubahan pilihan, klik ganda, hasil kosong/unsupported, dan pemeliharaan input saat gagal atau sesi berakhir.
-- **Metadata migrations:** CLI migrasi dijalankan dua kali pada PostgreSQL kosong, lalu test replay, checksum, rollback, concurrency, dan constraint.
-- **Bonus SQLite:** adapter, registry, runner, EXPLAIN, dan integrasi server pada job tersendiri. Beberapa test juga memeriksa PostgreSQL agar perilaku kedua engine tetap konsisten.
-- **Bonus Atlas:** membangun Community v1.3.0 dari commit rilis, menyiapkan database pembanding, lalu menguji config, generator, runner, dan endpoint PostgreSQL dengan session/CSRF nyata.
-- **Browser workflows:** Chromium dengan aplikasi dan database asli untuk login, readiness admin, migrasi sukses/rollback, history tanpa JavaScript, View Only, CSRF, konflik, sesi berakhir, seleksi EXPLAIN, diff editable, fingerprint stale, serta reconcile setelah commit nyata.
+- **Frontend:** `npm ci`, typecheck, test, build, serta uji loader fixture SQLite dengan Node.js 24.22.0. Test halaman diff mencakup perubahan pilihan, klik ganda, hasil kosong/unsupported, escaping, dan sesi berakhir.
+- **Metadata migrations:** CLI migrasi dijalankan dua kali pada PostgreSQL kosong, lalu test replay, checksum, rollback, concurrency, constraint, dan trigger append-only/imutabilitas.
+- **Bonus SQLite:** adapter, registry, inisialisasi riwayat target, EXPLAIN, dan integrasi server pada job tersendiri. Beberapa test juga memeriksa PostgreSQL agar perilaku kedua engine tetap konsisten.
+- **Bonus Atlas:** membangun Community v1.3.0 dari commit rilis, menyiapkan database pembanding, lalu menguji config, generator, penerapan kandidat sebagai `platform_editor`, dan endpoint PostgreSQL dengan session/CSRF nyata.
+- **Browser workflows:** Chromium dengan aplikasi dan database asli untuk login, readiness admin, redirect anonim, status 404, dan penolakan View Only pada perbandingan schema.
 
-Backend CI juga memeriksa bootstrap PostgreSQL desired dan pengulangan seed yang mempertahankan data/ledger. Uji loader SQLite dapat dijalankan dengan `node --test scripts/seed-sqlite.test.mjs` pada Node.js 24.22.0. `scripts/test-postgres-fixture.sh <container>` hanya untuk container test baru tanpa `demo_desired`, dengan folder fixture PostgreSQL terpasang pada `/fixtures`.
+Backend CI juga memeriksa bootstrap PostgreSQL desired dan pengulangan seed yang mempertahankan data/riwayat migrasi. Uji loader SQLite dapat dijalankan dengan `node --test scripts/seed-sqlite.test.mjs` pada Node.js 24.22.0. `scripts/test-postgres-fixture.sh <container>` hanya untuk container test baru tanpa `demo_desired`, dengan folder fixture PostgreSQL terpasang pada `/fixtures`.
 
 Setiap job backend memakai PostgreSQL 17.11 metadata dan target yang terpisah, dengan role target `platform_runner` dan `platform_editor`. Kredensial `ci_*` hanya untuk database sementara job; CI tidak membaca `.env` lokal atau membutuhkan secret repository. Hasil Go ditulis ke job summary; test case yang dilewati atau filter yang tidak menjalankan test membuat job gagal. Package tanpa test tetap diperbolehkan. Job bonus berjalan independen, sehingga kegagalan Atlas tidak membatalkan job wajib. Action dikunci dengan commit SHA dan image PostgreSQL dengan digest.
 
@@ -188,10 +186,10 @@ Setiap job backend memakai PostgreSQL 17.11 metadata dan target yang terpisah, d
 - **Multipage.**
   - Setiap URL dirender di server dan dapat dibuka langsung atau di-refresh.
   - Perpindahan halaman memakai link biasa.
-  - JavaScript hanya dipakai untuk bagian interaktif (form koneksi, editor migrasi, panel EXPLAIN), yang dipasang pada elemen `data-widget`.
+  - JavaScript hanya dipakai untuk bagian interaktif (form koneksi, admin akses, perbandingan schema), yang dipasang pada elemen `data-widget`.
   - URL yang tidak dikenal menjawab 404.
 - **Terdiri dari dua jenis database.**
-  - Database *metadata* menyimpan pengguna, session, hak akses, registry, draft, dan riwayat.
+  - Database *metadata* menyimpan pengguna, session, hak akses, registry, migration beserta revisi, request, approval, eksekusi, mirror riwayat, dan outbox.
   - Database *target* adalah database yang dikelola pengguna.
   - Metadata tidak dapat didaftarkan sebagai target.
 - **Akses dicek di backend** pada setiap request, baik halaman maupun API; tombol di UI hanya kenyamanan.
@@ -203,10 +201,11 @@ Setiap job backend memakai PostgreSQL 17.11 metadata dan target yang terpisah, d
 backend/
   cmd/server, cmd/migrate, cmd/seed   aplikasi, migrasi metadata, bootstrap admin/data demo
   internal/auth, access               session, login, CSRF, kebijakan akses
+  internal/contracts, testkit         interface lintas modul dan fake untuk test
   internal/connections                registry koneksi dan enkripsi kredensial
   internal/database                   kontrak target, adapter postgres/ dan sqlite/
   internal/viewer, explain            pembacaan schema/data dan rencana eksekusi
-  internal/migrations                 draft, eksekusi transaksional, riwayat, rekonsiliasi
+  internal/migrations                 inisialisasi riwayat target dan model migration
   internal/webui                      halaman HTML dan template
   migrations/                         migrasi schema metadata
 web/src/

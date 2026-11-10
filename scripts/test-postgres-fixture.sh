@@ -16,16 +16,16 @@ DO $$ BEGIN
  END IF;
 END $$;
 INSERT INTO public.item_tags VALUES(1,2,'keep');
-CREATE TABLE _platform.migration_ledger(version integer PRIMARY KEY);
-INSERT INTO _platform.migration_ledger VALUES(7);
+CREATE TABLE _platform.migration_history(seq integer PRIMARY KEY);
+INSERT INTO _platform.migration_history VALUES(7);
 SQL
 psql_target -d postgres -v fixture_dir="$fixture_dir" < infra/postgres/seed-desired.sql
 psql_target -d demo_desired <<'SQL'
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.items) <> 3 OR
     (SELECT label FROM public.item_tags WHERE id=1) IS DISTINCT FROM 'keep' OR
-    (SELECT version FROM _platform.migration_ledger) IS DISTINCT FROM 7 THEN
-  RAISE EXCEPTION 'fixture rerun changed existing data or ledger';
+    (SELECT seq FROM _platform.migration_history) IS DISTINCT FROM 7 THEN
+  RAISE EXCEPTION 'fixture rerun changed existing data or migration history';
  END IF;
 END $$;
 SQL

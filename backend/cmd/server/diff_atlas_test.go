@@ -144,12 +144,8 @@ func TestPostgresSchemaDiffHTTP(t *testing.T) {
 			} else if w.Code != 503 || !strings.Contains(w.Body.String(), "DIFF_UNAVAILABLE") {
 				t.Fatal("missing Atlas not reported", w.Code, w.Body.String())
 			}
-			w = request("GET", base+"/migration-head", "", editor)
-			if w.Code != 200 {
-				t.Fatal("Atlas failure broke manual migration head", w.Code, w.Body.String())
-			}
 			var count int
-			if err := db.QueryRow(`SELECT (SELECT count(*) FROM migration_drafts)+(SELECT count(*) FROM migration_runs)`).Scan(&count); err != nil || count != 0 {
+			if err := db.QueryRow(`SELECT (SELECT count(*) FROM migrations)+(SELECT count(*) FROM migration_executions)`).Scan(&count); err != nil || count != 0 {
 				t.Fatal("diff created metadata", count, err)
 			}
 		})

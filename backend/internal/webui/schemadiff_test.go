@@ -5,6 +5,7 @@ import (
 	"errors"
 	"html"
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -14,6 +15,19 @@ import (
 )
 
 const desiredDatabaseID = "30000000-0000-4000-8000-000000000003"
+
+func initialState(t *testing.T, body string) map[string]json.RawMessage {
+	t.Helper()
+	attribute := regexp.MustCompile(`data-initial="([^"]*)"`).FindStringSubmatch(body)
+	if len(attribute) != 2 {
+		t.Fatal("missing initial state")
+	}
+	var state map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(html.UnescapeString(attribute[1])), &state); err != nil {
+		t.Fatal("invalid initial state:", err)
+	}
+	return state
+}
 
 func diffSources(t *testing.T) *sources {
 	s := newSources(t)
@@ -33,7 +47,7 @@ func TestSchemaDiffPageRendersChoicesAndBootstrap(t *testing.T) {
 			t.Fatal(status, body)
 		}
 		expect(t, body, []string{"Perbandingan schema: PostgreSQL latihan", `name="desired_database_id"`, `value="` + desiredDatabaseID + `" selected`, "Pembanding view", `value="public" selected`, `disabled>Bandingkan schema`, `/assets/schemadiff-1.js`}, "SQLite latihan", "secret-session-id")
-		initial := initialMigrationState(t, body)
+		initial := initialState(t, body)
 		var comparisons []connections.Database
 		if err := json.Unmarshal(initial["comparisons"], &comparisons); err != nil || len(comparisons) != 1 || comparisons[0].ID != desiredDatabaseID || comparisons[0].EffectiveAccess != contracts.AccessView {
 			t.Fatal("wrong comparisons", comparisons, err)
