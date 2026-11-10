@@ -1,0 +1,653 @@
+openapi: 3.1.0
+info:
+  title: IF3110 Database Platform API
+  version: 2.0.0
+  description: >-
+    JSON API under /api/v1. Success bodies are {"data": ...}; lists add "page".
+    Errors are {"error": Error}. Every response carries X-Request-ID. Each feature
+    owner adds its paths here; components are shared.
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths: {}
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+      description: Opaque HttpOnly session cookie.
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Required on every mutation, from GET /auth/csrf; kept in memory only.
+
+  headers:
+    XRequestID:
+      description: Request identifier, repeated in error bodies.
+      schema:
+        type: string
+    Location:
+      description: URL of the created execution.
+      schema:
+        type: string
+
+  parameters:
+    DatabaseId:
+      name: id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/UUID'
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+  responses:
+    BadRequest:
+      description: Invalid JSON, query or path (INVALID_REQUEST, PAYLOAD_TOO_LARGE).
+      headers: { X-Request-ID: { $ref: '#/components/headers/XRequestID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Unauthenticated:
+      description: Not signed in, or the session expired or was revoked.
+      headers: { X-Request-ID: { $ref: '#/components/headers/XRequestID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Forbidden:
+      description: FORBIDDEN, CSRF_REJECTED or NOT_LEADER.
+      headers: { X-Request-ID: { $ref: '#/components/headers/XRequestID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    NotFound:
+      description: Missing, or not visible to the caller.
+      headers: { X-Request-ID: { $ref: '#/components/headers/XRequestID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Conflict:
+      description: State conflict; the code says which.
+      headers: { X-Request-ID: { $ref: '#/components/headers/XRequestID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Unprocessable:
+      description: Well-formed request the domain rejects; the code says why.
+      headers: { X-Request-ID: { $ref: '#/components/headers/XRequestID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    TooManyRequests:
+      description: RATE_LIMITED.
+      headers: { X-Request-ID: { $ref: '#/components/headers/XRequestID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    InternalError:
+      description: INTERNAL_ERROR; details are only in the server log.
+      headers: { X-Request-ID: { $ref: '#/components/headers/XRequestID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    TargetFailure:
+      description: TARGET_UNAVAILABLE (502), DIFF_UNAVAILABLE or TARGET_NOT_READY (503), TARGET_TIMEOUT (504).
+      headers: { X-Request-ID: { $ref: '#/components/headers/XRequestID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+
+  schemas:
+    # --- primitives -------------------------------------------------------
+    UUID:
+      type: string
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    Timestamp:
+      type: string
+      format: date-time
+    BigIntString:
+      description: A bigint sent as a decimal string.
+      type: string
+      pattern: '^-?[0-9]+$'
+    Fingerprint:
+      type: string
+      pattern: '^sha256:[0-9a-f]{64}$'
+    JSONValue: {}
+
+    # --- envelope ---------------------------------------------------------
+    Page:
+      type: object
+      required: [limit, offset, has_more]
+      properties:
+        limit: { type: integer }
+        offset: { type: integer }
+        has_more: { type: boolean }
+    Error:
+      type: object
+      required: [code, message, fields, request_id]
+      properties:
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        message: { type: string }
+        fields:
+          type: object
+          additionalProperties: { type: string }
+        request_id: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/Error' }
+
+    # --- enums ------------------------------------------------------------
+    ErrorCode:
+      type: string
+      enum: [INVALID_REQUEST, UNAUTHENTICATED, FORBIDDEN, CSRF_REJECTED, NOT_LEADER, NOT_FOUND,
+        REVISION_CONFLICT, VERSION_CONFLICT, SCHEMA_CONFLICT, DUPLICATE_TARGET, LEDGER_INCOMPATIBLE,
+        ALREADY_EXISTS, LAST_ADMIN, MIGRATION_LOCKED, REQUEST_EXISTS, REQUEST_NOT_OPEN, APPROVAL_REQUIRED,
+        ROLLBACK_NOT_ALLOWED, FORWARD_NOT_ALLOWED, RESUME_NOT_ALLOWED, EXECUTION_NOT_ACTIVE, LEADER_REQUIRED,
+        PAYLOAD_TOO_LARGE, UNSUPPORTED_SQL, SQL_EXECUTION_FAILED, PLAN_UNSUPPORTED, DIFF_UNSUPPORTED,
+        NOT_REVERSIBLE, VALIDATION_FAILED, INVALID_BATCH_TEMPLATE, UNSUPPORTED_MODE, RATE_LIMITED,
+        INTERNAL_ERROR, TARGET_UNAVAILABLE, DIFF_UNAVAILABLE, TARGET_NOT_READY, TARGET_TIMEOUT]
+    RunErrorCode:
+      type: string
+      enum: [SQL_EXECUTION_FAILED, STATEMENT_TIMEOUT, LOCK_TIMEOUT, APPROVAL_REVOKED, ACCESS_REVOKED,
+        REVISION_CHANGED, POSITION_CHANGED, SCHEMA_CONFLICT, TARGET_NOT_READY, TARGET_UNAVAILABLE,
+        TARGET_TIMEOUT, LEDGER_INCOMPATIBLE, EXECUTION_INTERRUPTED, RETRY_EXHAUSTED, STOPPED,
+        INVALID_BATCH_RESULT, INTERNAL_ERROR]
+    Driver: { type: string, enum: [postgres, sqlite] }
+    AccessLevel: { type: string, enum: [none, view, edit] }
+    GrantLevel: { type: string, enum: [view, edit] }
+    ConstraintKind: { type: string, enum: [primary_key, foreign_key, unique, check] }
+    Encoding: { type: string, enum: [text, decimal_string, boolean, number, timestamp, json, base64] }
+    DiffChangeKind:
+      type: string
+      enum: [add_table, drop_table, alter_table, add_column, drop_column, alter_column, add_index,
+        drop_index, alter_index, add_constraint, drop_constraint, alter_constraint, other]
+    MigrationMode: { type: string, enum: [normal, batch] }
+    MigrationStatus: { type: string, enum: [pending, applied, rolled_back, superseded, partial] }
+    RequestAction: { type: string, enum: [apply, rollback, forward] }
+    RequestStatus: { type: string, enum: [pending_review, approved, rejected, cancelled, executed] }
+    ExecutionAction: { type: string, enum: [apply, rollback, forward, resume, dry_run] }
+    ExecutionDirection: { type: string, enum: [up, down] }
+    ExecutionStatus:
+      type: string
+      enum: [queued, held, running, succeeded, failed, partial, partially_reverted, outcome_unknown, cancelled]
+    ApprovalDecision: { type: string, enum: [approved, rejected] }
+    LintSeverity: { type: string, enum: [error, warning, info] }
+    LintCategory: { type: string, enum: [safety, data_loss, locking, compatibility, reversibility, batch] }
+    DryRunStatus: { type: string, enum: [passed, failed, skipped, timeout] }
+    DatabaseEventType: { type: string, enum: [execution.updated, request.updated, migration.updated, head.updated] }
+
+    # --- identity and access ----------------------------------------------
+    Actor:
+      type: object
+      required: [id, username]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        username: { type: string }
+    User:
+      type: object
+      required: [id, username, is_platform_admin, active, created_at, updated_at]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        username: { type: string }
+        is_platform_admin: { type: boolean }
+        active: { type: boolean }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+    CurrentUser:
+      type: object
+      required: [id, username, is_platform_admin]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        username: { type: string }
+        is_platform_admin: { type: boolean }
+    Group:
+      type: object
+      required: [id, name, leader, created_at, updated_at]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        name: { type: string }
+        leader:
+          oneOf:
+            - $ref: '#/components/schemas/Actor'
+            - type: 'null'
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+    Grant:
+      type: object
+      required: [database_id, level]
+      properties:
+        database_id: { $ref: '#/components/schemas/UUID' }
+        level: { $ref: '#/components/schemas/GrantLevel' }
+
+    # --- connections ------------------------------------------------------
+    Capabilities:
+      type: object
+      required: [transactional_migrations, schema_diff, explain, explain_analyze, batch_migrations, dry_run]
+      properties:
+        transactional_migrations: { type: boolean }
+        schema_diff: { type: boolean }
+        explain: { type: boolean }
+        explain_analyze: { type: boolean }
+        batch_migrations: { type: boolean }
+        dry_run: { type: boolean }
+    DatabaseSummary:
+      type: object
+      required: [id, name, driver, revision, effective_access, capabilities]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        name: { type: string }
+        driver: { $ref: '#/components/schemas/Driver' }
+        revision: { type: integer }
+        effective_access: { $ref: '#/components/schemas/AccessLevel' }
+        capabilities: { $ref: '#/components/schemas/Capabilities' }
+    PostgresPublicConfig:
+      type: object
+      required: [host, port, database, username, sslmode, editor_role, has_credentials]
+      properties:
+        host: { type: string }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        database: { type: string }
+        username: { type: string }
+        sslmode: { type: string, enum: [disable, require, verify-ca, verify-full] }
+        editor_role: { type: string }
+        has_credentials: { type: boolean }
+    SQLitePublicConfig:
+      type: object
+      required: [file]
+      properties:
+        file: { type: string }
+    PublicConfig:
+      oneOf:
+        - $ref: '#/components/schemas/PostgresPublicConfig'
+        - $ref: '#/components/schemas/SQLitePublicConfig'
+    AdminConnection:
+      type: object
+      required: [id, name, driver, revision, active, migration_ready, config, last_checked_at, last_error_code]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        name: { type: string }
+        driver: { $ref: '#/components/schemas/Driver' }
+        revision: { type: integer }
+        active: { type: boolean }
+        migration_ready: { type: boolean }
+        config: { $ref: '#/components/schemas/PublicConfig' }
+        last_checked_at: { type: [string, 'null'], format: date-time }
+        last_error_code: { type: [string, 'null'] }
+
+    # --- viewer, explain, diff --------------------------------------------
+    SchemaSnapshot:
+      type: object
+      required: [database_id, driver, fingerprint, schemas]
+      properties:
+        database_id: { $ref: '#/components/schemas/UUID' }
+        driver: { $ref: '#/components/schemas/Driver' }
+        fingerprint: { $ref: '#/components/schemas/Fingerprint' }
+        schemas: { type: array, items: { $ref: '#/components/schemas/Schema' } }
+    Schema:
+      type: object
+      required: [name, tables]
+      properties:
+        name: { type: string }
+        tables: { type: array, items: { $ref: '#/components/schemas/Table' } }
+    Table:
+      type: object
+      required: [name, columns, constraints, indexes]
+      properties:
+        name: { type: string }
+        columns: { type: array, items: { $ref: '#/components/schemas/Column' } }
+        constraints: { type: array, items: { $ref: '#/components/schemas/Constraint' } }
+        indexes: { type: array, items: { $ref: '#/components/schemas/Index' } }
+    Column:
+      type: object
+      required: [name, data_type, nullable, default, ordinal]
+      properties:
+        name: { type: string }
+        data_type: { type: string }
+        nullable: { type: boolean }
+        default: { type: [string, 'null'] }
+        ordinal: { type: integer }
+    Constraint:
+      type: object
+      required: [name, kind, columns, definition, references]
+      properties:
+        name: { type: [string, 'null'] }
+        kind: { $ref: '#/components/schemas/ConstraintKind' }
+        columns: { type: array, items: { type: string } }
+        definition: { type: string }
+        references:
+          oneOf:
+            - $ref: '#/components/schemas/ForeignReference'
+            - type: 'null'
+    ForeignReference:
+      type: object
+      required: [schema, table, columns, on_update, on_delete]
+      properties:
+        schema: { type: string }
+        table: { type: string }
+        columns: { type: array, items: { type: string } }
+        on_update: { type: string }
+        on_delete: { type: string }
+    Index:
+      type: object
+      required: [name, unique, primary, columns, definition]
+      properties:
+        name: { type: string }
+        unique: { type: boolean }
+        primary: { type: boolean }
+        columns: { type: array, items: { type: string } }
+        definition: { type: string }
+    DataColumn:
+      type: object
+      required: [name, data_type, encoding]
+      properties:
+        name: { type: string }
+        data_type: { type: string }
+        encoding: { $ref: '#/components/schemas/Encoding' }
+    TableData:
+      type: object
+      required: [columns, rows, order_stable]
+      properties:
+        columns: { type: array, items: { $ref: '#/components/schemas/DataColumn' } }
+        rows:
+          type: array
+          items: { type: array, items: { $ref: '#/components/schemas/JSONValue' } }
+        order_stable: { type: boolean }
+    PlanNode:
+      type: object
+      required: [id, parent_id, operation, relation, index, estimated_rows, estimated_cost, actual_time_ms, actual_rows]
+      properties:
+        id: { type: string }
+        parent_id: { type: [string, 'null'] }
+        operation: { type: string }
+        relation: { type: [string, 'null'] }
+        index: { type: [string, 'null'] }
+        estimated_rows: { type: [number, 'null'] }
+        estimated_cost: { type: [number, 'null'] }
+        actual_time_ms: { type: [number, 'null'] }
+        actual_rows: { type: [number, 'null'] }
+    PlanResult:
+      type: object
+      required: [driver, mode, nodes, raw, warnings]
+      properties:
+        driver: { $ref: '#/components/schemas/Driver' }
+        mode: { type: string, enum: [estimate] }
+        nodes: { type: array, items: { $ref: '#/components/schemas/PlanNode' } }
+        raw: { type: [object, array] }
+        warnings: { type: array, items: { type: string } }
+    DiffChange:
+      type: object
+      required: [kind, object, destructive]
+      properties:
+        kind: { $ref: '#/components/schemas/DiffChangeKind' }
+        object: { type: string }
+        destructive: { type: boolean }
+    DiffResult:
+      type: object
+      required: [driver, expected_version, source_fingerprint, desired_fingerprint, changes, candidate_sql, warnings, executable]
+      properties:
+        driver: { $ref: '#/components/schemas/Driver' }
+        expected_version: { type: integer, minimum: 0 }
+        source_fingerprint: { $ref: '#/components/schemas/Fingerprint' }
+        desired_fingerprint: { $ref: '#/components/schemas/Fingerprint' }
+        changes: { type: array, items: { $ref: '#/components/schemas/DiffChange' } }
+        candidate_sql: { type: string }
+        warnings: { type: array, items: { type: string } }
+        executable: { type: boolean }
+
+    # --- migration workflow -----------------------------------------------
+    RunError:
+      description: Always sanitised; the engine message only appears for SQL_EXECUTION_FAILED.
+      type: object
+      required: [code, message]
+      properties:
+        code: { $ref: '#/components/schemas/RunErrorCode' }
+        message: { type: string }
+    BatchConfig:
+      type: object
+      required: [schema, table, key_column, batch_size, pause_ms]
+      additionalProperties: false
+      properties:
+        schema: { type: string, minLength: 1 }
+        table: { type: string, minLength: 1 }
+        key_column: { type: string, minLength: 1 }
+        batch_size: { type: integer, minimum: 1 }
+        pause_ms: { type: integer, minimum: 0, maximum: 60000 }
+    LintFinding:
+      type: object
+      required: [rule, severity, category, message, direction, statement_index]
+      properties:
+        rule: { type: string }
+        severity: { $ref: '#/components/schemas/LintSeverity' }
+        category: { $ref: '#/components/schemas/LintCategory' }
+        message: { type: string }
+        direction: { $ref: '#/components/schemas/ExecutionDirection' }
+        statement_index: { type: [integer, 'null'] }
+    DryRunReport:
+      type: object
+      required: [execution_id, revision, status, reversible, schema_changes, message, duration_ms, finished_at]
+      properties:
+        execution_id: { $ref: '#/components/schemas/UUID' }
+        revision: { type: integer }
+        status: { $ref: '#/components/schemas/DryRunStatus' }
+        reversible: { type: [boolean, 'null'] }
+        schema_changes: { type: array, items: { $ref: '#/components/schemas/DiffChange' } }
+        message: { type: [string, 'null'] }
+        duration_ms: { type: number }
+        finished_at: { $ref: '#/components/schemas/Timestamp' }
+    MigrationRevision:
+      type: object
+      required: [revision, up_sql, down_sql, irreversible_reason, mode, batch, content_hash, lint, created_by, created_at]
+      properties:
+        revision: { type: integer, minimum: 1 }
+        up_sql: { type: string }
+        down_sql: { type: [string, 'null'] }
+        irreversible_reason: { type: [string, 'null'] }
+        mode: { $ref: '#/components/schemas/MigrationMode' }
+        batch:
+          oneOf:
+            - $ref: '#/components/schemas/BatchConfig'
+            - type: 'null'
+        content_hash: { $ref: '#/components/schemas/Fingerprint' }
+        lint: { type: array, items: { $ref: '#/components/schemas/LintFinding' } }
+        created_by: { $ref: '#/components/schemas/Actor' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+    Migration:
+      type: object
+      required: [id, database_id, title, description, status, version, locked, current, source_fingerprint,
+        open_request, latest_dry_run, created_by, updated_by, created_at, updated_at]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        database_id: { $ref: '#/components/schemas/UUID' }
+        title: { type: string }
+        description: { type: string }
+        status: { $ref: '#/components/schemas/MigrationStatus' }
+        version: { type: [integer, 'null'] }
+        locked: { type: boolean }
+        current: { $ref: '#/components/schemas/MigrationRevision' }
+        source_fingerprint:
+          oneOf:
+            - $ref: '#/components/schemas/Fingerprint'
+            - type: 'null'
+        open_request:
+          oneOf:
+            - $ref: '#/components/schemas/ChangeRequest'
+            - type: 'null'
+        latest_dry_run:
+          description: Latest dry-run of the current revision.
+          oneOf:
+            - $ref: '#/components/schemas/DryRunReport'
+            - type: 'null'
+        created_by: { $ref: '#/components/schemas/Actor' }
+        updated_by: { $ref: '#/components/schemas/Actor' }
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+    NamedRef:
+      type: object
+      required: [id, name]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        name: { type: string }
+    RequiredApproval:
+      type: object
+      required: [group, leader, decision, comment, decided_at]
+      properties:
+        group: { $ref: '#/components/schemas/NamedRef' }
+        leader:
+          oneOf:
+            - $ref: '#/components/schemas/Actor'
+            - type: 'null'
+        decision: { type: string, enum: [pending, approved, rejected] }
+        comment: { type: [string, 'null'] }
+        decided_at: { type: [string, 'null'], format: date-time }
+    ChangeRequest:
+      type: object
+      required: [id, database_id, migration_id, migration_title, action, migration_revision, content_hash,
+        head_at_request, target_execution_id, batch_size, note, status, requested_by, approvals,
+        execution_id, created_at, updated_at]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        database_id: { $ref: '#/components/schemas/UUID' }
+        migration_id: { $ref: '#/components/schemas/UUID' }
+        migration_title: { type: string }
+        action: { $ref: '#/components/schemas/RequestAction' }
+        migration_revision: { type: integer }
+        content_hash: { $ref: '#/components/schemas/Fingerprint' }
+        head_at_request: { type: integer, minimum: 0 }
+        target_execution_id:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        batch_size: { type: [integer, 'null'] }
+        note: { type: string }
+        status: { $ref: '#/components/schemas/RequestStatus' }
+        requested_by: { $ref: '#/components/schemas/Actor' }
+        approvals: { type: array, items: { $ref: '#/components/schemas/RequiredApproval' } }
+        execution_id:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        created_at: { $ref: '#/components/schemas/Timestamp' }
+        updated_at: { $ref: '#/components/schemas/Timestamp' }
+    ExecutionBatch:
+      type: object
+      required: [batch_size, scope_from, scope_to, cursor, batches_committed, rows_committed, estimated_batches, stop_requested]
+      properties:
+        batch_size: { type: integer }
+        scope_from: { oneOf: [{ $ref: '#/components/schemas/BigIntString' }, { type: 'null' }] }
+        scope_to: { oneOf: [{ $ref: '#/components/schemas/BigIntString' }, { type: 'null' }] }
+        cursor: { oneOf: [{ $ref: '#/components/schemas/BigIntString' }, { type: 'null' }] }
+        batches_committed: { type: integer }
+        rows_committed: { $ref: '#/components/schemas/BigIntString' }
+        estimated_batches: { type: [integer, 'null'] }
+        stop_requested: { type: boolean }
+    Execution:
+      type: object
+      required: [id, number, database_id, migration_id, migration_title, change_request_id, action, direction,
+        mode, status, attempt, max_attempts, migration_revision, version, reverts_execution_id,
+        resumes_execution_id, chain_root_id, batch, held_reason, actor, enqueued_at, started_at,
+        finished_at, error, trace_id, history_seq, dry_run]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        number: { type: integer, minimum: 1 }
+        database_id: { $ref: '#/components/schemas/UUID' }
+        migration_id: { $ref: '#/components/schemas/UUID' }
+        migration_title: { type: string }
+        change_request_id:
+          description: Null for dry_run and resume; resume continues the approval of its chain root.
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        action: { $ref: '#/components/schemas/ExecutionAction' }
+        direction: { $ref: '#/components/schemas/ExecutionDirection' }
+        mode: { $ref: '#/components/schemas/MigrationMode' }
+        status: { $ref: '#/components/schemas/ExecutionStatus' }
+        attempt: { type: integer, minimum: 0 }
+        max_attempts: { type: integer, minimum: 1 }
+        migration_revision: { type: integer }
+        version: { type: [integer, 'null'] }
+        reverts_execution_id: { oneOf: [{ $ref: '#/components/schemas/UUID' }, { type: 'null' }] }
+        resumes_execution_id: { oneOf: [{ $ref: '#/components/schemas/UUID' }, { type: 'null' }] }
+        chain_root_id: { $ref: '#/components/schemas/UUID' }
+        batch:
+          oneOf:
+            - $ref: '#/components/schemas/ExecutionBatch'
+            - type: 'null'
+        held_reason: { type: [string, 'null'] }
+        actor: { $ref: '#/components/schemas/Actor' }
+        enqueued_at: { $ref: '#/components/schemas/Timestamp' }
+        started_at: { type: [string, 'null'], format: date-time }
+        finished_at: { type: [string, 'null'], format: date-time }
+        error:
+          oneOf:
+            - $ref: '#/components/schemas/RunError'
+            - type: 'null'
+        trace_id: { type: [string, 'null'] }
+        history_seq: { type: [integer, 'null'] }
+        dry_run:
+          oneOf:
+            - $ref: '#/components/schemas/DryRunReport'
+            - type: 'null'
+    BatchRecord:
+      type: object
+      required: [batch_no, direction, cursor_from, cursor_to, rows, committed_at]
+      properties:
+        batch_no: { type: integer, minimum: 1 }
+        direction: { $ref: '#/components/schemas/ExecutionDirection' }
+        cursor_from: { $ref: '#/components/schemas/BigIntString' }
+        cursor_to: { $ref: '#/components/schemas/BigIntString' }
+        rows: { type: integer }
+        committed_at: { $ref: '#/components/schemas/Timestamp' }
+    HistoryRecord:
+      type: object
+      required: [seq, execution_id, migration_id, migration_revision, action, version, head_after,
+        reverts_execution_id, sql_executed, sql_hash, mode, batches, rows, actor, committed_at]
+      properties:
+        seq: { type: integer, minimum: 1 }
+        execution_id: { $ref: '#/components/schemas/UUID' }
+        migration_id: { $ref: '#/components/schemas/UUID' }
+        migration_revision: { type: integer }
+        action: { $ref: '#/components/schemas/RequestAction' }
+        version: { type: integer, minimum: 1 }
+        head_after: { type: integer, minimum: 0 }
+        reverts_execution_id: { oneOf: [{ $ref: '#/components/schemas/UUID' }, { type: 'null' }] }
+        sql_executed: { type: string }
+        sql_hash: { $ref: '#/components/schemas/Fingerprint' }
+        mode: { $ref: '#/components/schemas/MigrationMode' }
+        batches: { type: integer }
+        rows: { $ref: '#/components/schemas/BigIntString' }
+        actor: { $ref: '#/components/schemas/Actor' }
+        committed_at: { $ref: '#/components/schemas/Timestamp' }
+    TimelineEntry:
+      type: object
+      required: [execution, committed]
+      properties:
+        execution: { $ref: '#/components/schemas/Execution' }
+        committed:
+          oneOf:
+            - $ref: '#/components/schemas/HistoryRecord'
+            - type: 'null'
+    DatabaseHead:
+      type: object
+      required: [version, migration_id, history_seq, blocked, blocking_execution_id]
+      properties:
+        version: { type: integer, minimum: 0 }
+        migration_id: { oneOf: [{ $ref: '#/components/schemas/UUID' }, { type: 'null' }] }
+        history_seq: { type: integer, minimum: 0 }
+        blocked: { type: boolean }
+        blocking_execution_id: { oneOf: [{ $ref: '#/components/schemas/UUID' }, { type: 'null' }] }
+    ReviewItem:
+      type: object
+      required: [request, database, my_groups]
+      properties:
+        request: { $ref: '#/components/schemas/ChangeRequest' }
+        database: { $ref: '#/components/schemas/NamedRef' }
+        my_groups: { type: array, items: { $ref: '#/components/schemas/NamedRef' } }
+    DatabaseEvent:
+      description: The JSON "data" line of an SSE event; a refetch signal only.
+      type: object
+      required: [database_id, resource_id, status, at]
+      properties:
+        database_id: { $ref: '#/components/schemas/UUID' }
+        resource_id: { type: string }
+        status: { type: string }
+        at: { $ref: '#/components/schemas/Timestamp' }

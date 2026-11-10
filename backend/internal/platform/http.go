@@ -122,12 +122,10 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) error {
 		Message   string            `json:"message"`
 		Fields    map[string]string `json:"fields"`
 		RequestID string            `json:"request_id"`
-		RunID     *string           `json:"run_id,omitempty"`
 	}{Code: "INTERNAL_ERROR", Message: "Terjadi kesalahan internal.", Fields: map[string]string{}, RequestID: ensureRequestID(w, r)}
 	status := http.StatusInternalServerError
 	var domain *contracts.DomainError
 	if errors.As(err, &domain) && domain != nil {
-		response.RunID = domain.RunID
 		if mapped, ok := errorStatuses[domain.Code]; ok && mapped != http.StatusInternalServerError {
 			status = mapped
 			response.Code = domain.Code
@@ -152,12 +150,15 @@ var errorStatuses = map[string]int{
 	"UNAUTHENTICATED": 401,
 	"FORBIDDEN":       403, "CSRF_REJECTED": 403,
 	"NOT_FOUND":         404,
-	"REVISION_CONFLICT": 409, "VERSION_CONFLICT": 409, "RUN_IN_PROGRESS": 409,
-	"IDEMPOTENCY_CONFLICT": 409, "TARGET_OUTCOME_UNKNOWN": 409,
-	"SCHEMA_CONFLICT": 409, "DRAFT_APPLIED": 409, "DUPLICATE_TARGET": 409,
+	"REVISION_CONFLICT": 409, "VERSION_CONFLICT": 409,
+	"SCHEMA_CONFLICT": 409, "DUPLICATE_TARGET": 409,
 	"LEDGER_INCOMPATIBLE": 409, "ALREADY_EXISTS": 409, "LAST_ADMIN": 409,
+	"MIGRATION_LOCKED": 409, "REQUEST_EXISTS": 409, "REQUEST_NOT_OPEN": 409, "APPROVAL_REQUIRED": 409,
+	"ROLLBACK_NOT_ALLOWED": 409, "FORWARD_NOT_ALLOWED": 409, "RESUME_NOT_ALLOWED": 409,
+	"EXECUTION_NOT_ACTIVE": 409, "LEADER_REQUIRED": 409, "NOT_LEADER": 403,
 	"PAYLOAD_TOO_LARGE": 413,
 	"UNSUPPORTED_SQL":   422, "SQL_EXECUTION_FAILED": 422, "PLAN_UNSUPPORTED": 422, "DIFF_UNSUPPORTED": 422,
+	"NOT_REVERSIBLE": 422, "VALIDATION_FAILED": 422, "INVALID_BATCH_TEMPLATE": 422, "UNSUPPORTED_MODE": 422,
 	"RATE_LIMITED":       429,
 	"INTERNAL_ERROR":     500,
 	"TARGET_UNAVAILABLE": 502,

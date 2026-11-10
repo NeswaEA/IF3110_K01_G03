@@ -282,21 +282,21 @@ func TestWriteJSONDoesNotRetryTransportFailures(t *testing.T) {
 
 func TestErrorStatusesAndRedaction(t *testing.T) {
 	groups := map[int][]string{
-		400: {"INVALID_REQUEST"}, 401: {"UNAUTHENTICATED"}, 403: {"FORBIDDEN", "CSRF_REJECTED"}, 404: {"NOT_FOUND"},
-		409: {"REVISION_CONFLICT", "VERSION_CONFLICT", "RUN_IN_PROGRESS", "IDEMPOTENCY_CONFLICT", "TARGET_OUTCOME_UNKNOWN", "SCHEMA_CONFLICT", "DRAFT_APPLIED", "DUPLICATE_TARGET", "LEDGER_INCOMPATIBLE", "ALREADY_EXISTS", "LAST_ADMIN"},
-		413: {"PAYLOAD_TOO_LARGE"}, 422: {"UNSUPPORTED_SQL", "SQL_EXECUTION_FAILED", "PLAN_UNSUPPORTED", "DIFF_UNSUPPORTED"}, 429: {"RATE_LIMITED"},
-		500: {"INTERNAL_ERROR", "UNKNOWN_CODE", "NETWORK_ERROR", "EXECUTION_INTERRUPTED"}, 502: {"TARGET_UNAVAILABLE"}, 503: {"DIFF_UNAVAILABLE", "TARGET_NOT_READY"}, 504: {"TARGET_TIMEOUT"},
+		400: {"INVALID_REQUEST"}, 401: {"UNAUTHENTICATED"}, 403: {"FORBIDDEN", "CSRF_REJECTED", "NOT_LEADER"}, 404: {"NOT_FOUND"},
+		409: {"REVISION_CONFLICT", "VERSION_CONFLICT", "SCHEMA_CONFLICT", "DUPLICATE_TARGET", "LEDGER_INCOMPATIBLE", "ALREADY_EXISTS", "LAST_ADMIN",
+			"MIGRATION_LOCKED", "REQUEST_EXISTS", "REQUEST_NOT_OPEN", "APPROVAL_REQUIRED", "ROLLBACK_NOT_ALLOWED", "FORWARD_NOT_ALLOWED", "RESUME_NOT_ALLOWED", "EXECUTION_NOT_ACTIVE", "LEADER_REQUIRED"},
+		413: {"PAYLOAD_TOO_LARGE"}, 422: {"UNSUPPORTED_SQL", "SQL_EXECUTION_FAILED", "PLAN_UNSUPPORTED", "DIFF_UNSUPPORTED", "NOT_REVERSIBLE", "VALIDATION_FAILED", "INVALID_BATCH_TEMPLATE", "UNSUPPORTED_MODE"}, 429: {"RATE_LIMITED"},
+		500: {"INTERNAL_ERROR", "UNKNOWN_CODE", "NETWORK_ERROR", "EXECUTION_INTERRUPTED", "DRAFT_APPLIED", "RUN_IN_PROGRESS"}, 502: {"TARGET_UNAVAILABLE"}, 503: {"DIFF_UNAVAILABLE", "TARGET_NOT_READY"}, 504: {"TARGET_TIMEOUT"},
 	}
 	for status, codes := range groups {
 		for _, code := range codes {
 			t.Run(code, func(t *testing.T) {
 				w := httptest.NewRecorder()
-				runID := "50000000-0000-4000-8000-000000000001"
 				message := "Pesan aman"
 				if status == 500 {
 					message = "secret"
 				}
-				err := fmt.Errorf("wrapped: %w", &contracts.DomainError{Code: code, Message: message, RunID: &runID, Cause: errors.New("secret")})
+				err := fmt.Errorf("wrapped: %w", &contracts.DomainError{Code: code, Message: message, Cause: errors.New("secret")})
 				if err := platform.WriteError(w, httptest.NewRequest("GET", "/", nil), err); err != nil {
 					t.Fatal(err)
 				}
@@ -305,7 +305,6 @@ func TestErrorStatusesAndRedaction(t *testing.T) {
 						Code      string            `json:"code"`
 						Fields    map[string]string `json:"fields"`
 						RequestID string            `json:"request_id"`
-						RunID     string            `json:"run_id"`
 					} `json:"error"`
 				}
 				if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
@@ -314,7 +313,7 @@ func TestErrorStatusesAndRedaction(t *testing.T) {
 				if status == 500 {
 					code = "INTERNAL_ERROR"
 				}
-				if w.Code != status || body.Error.Code != code || body.Error.Fields == nil || body.Error.RunID != runID || body.Error.RequestID != w.Header().Get("X-Request-ID") || strings.Contains(w.Body.String(), "secret") {
+				if w.Code != status || body.Error.Code != code || body.Error.Fields == nil || body.Error.RequestID != w.Header().Get("X-Request-ID") || strings.Contains(w.Body.String(), "secret") {
 					t.Fatal(w)
 				}
 			})
