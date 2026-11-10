@@ -52,8 +52,8 @@ func TestDataValidatesBeforeTouchingTarget(t *testing.T) {
 		{"public", "items", -1, 0, ErrInvalid},
 		{"public", "items", 10, -1, ErrInvalid},
 		{"public", "items", 10, 100001, ErrInvalid},
-		{"_platform", "migration_ledger", 10, 0, database.ErrNotFound},
-		{"main", "_platform_migration_ledger", 10, 0, database.ErrNotFound},
+		{"_platform", "migration_history", 10, 0, database.ErrNotFound},
+		{"main", "_platform_migration_history", 10, 0, database.ErrNotFound},
 	}
 	for _, c := range cases {
 		if _, _, err := s.Data(context.Background(), "db", c.schema, c.table, c.limit, c.offset); !errors.Is(err, c.want) {

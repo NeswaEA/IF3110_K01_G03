@@ -24,7 +24,6 @@ const manifest = `{
   "_shared.js": {"file": "assets/shared-1.js", "css": ["assets/shared-1.css"]},
   "src/pages/layout.ts": {"file": "assets/layout-1.js", "name": "layout", "isEntry": true, "imports": ["_shared.js"]},
   "src/pages/connections.ts": {"file": "assets/connections-1.js", "name": "connections", "isEntry": true, "imports": ["_shared.js"], "css": ["assets/connections-1.css"]},
-  "src/pages/migrations.ts": {"file": "assets/migrations-1.js", "name": "migrations", "isEntry": true},
   "src/pages/schemadiff.tsx": {"file": "assets/schemadiff-1.js", "name": "schemadiff", "isEntry": true}
 }`
 
@@ -163,10 +162,6 @@ type harness struct {
 }
 
 func (h harness) get(path string) (int, string) {
-	return h.getMigrations(path, newMigrationSource(h.t))
-}
-
-func (h harness) getMigrations(path string, source webui.MigrationSource) (int, string) {
 	h.t.Helper()
 	assets, err := webui.LoadAssets(writeManifest(h.t, manifest))
 	if err != nil {
@@ -188,7 +183,7 @@ func (h harness) getMigrations(path string, source webui.MigrationSource) (int, 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { guarded++; next.ServeHTTP(w, r) })
 	}
 	mux := http.NewServeMux()
-	webui.RegisterRoutes(mux, webui.NewPages(renderer, fakeAccess{h.access}, principal, login, h.src, h.src, nil, nil).WithMigrations(source), guard)
+	webui.RegisterRoutes(mux, webui.NewPages(renderer, fakeAccess{h.access}, principal, login, h.src, h.src, nil, nil), guard)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 	if guarded != 1 {
@@ -236,13 +231,10 @@ func TestLayoutAndPolicy(t *testing.T) {
 			[]string{"&lt;script&gt;alert(1)&lt;/script&gt;"}, []string{"<script>alert(1)</script>", `href="/admin/connections"`}},
 		{"root redirects", viewerUser, nil, "/", 302, nil, nil},
 		{"guard rejected", nil, nil, "/databases", 302, nil, nil},
-		{"database without grant", viewerUser, notFound, "/databases/" + databaseID, 404, []string{"Halaman tidak ditemukan"}, []string{"Migrasi dan riwayat"}},
+		{"database without grant", viewerUser, notFound, "/databases/" + databaseID, 404, []string{"Halaman tidak ditemukan"}, []string{"Lihat schema"}},
 		{"malformed database id", viewerUser, nil, "/databases/not-a-uuid", 404, []string{"Halaman tidak ditemukan"}, nil},
 		{"policy failure", viewerUser, errors.New("database down"), "/databases/" + databaseID, 500, []string{"Terjadi kesalahan"}, []string{"database down"}},
 		{"deactivated user", viewerUser, &contracts.DomainError{Code: "UNAUTHENTICATED"}, "/admin/connections", 302, nil, nil},
-		{"migrations page", viewerUser, nil, "/databases/" + databaseID + "/migrations", 200,
-			[]string{`data-widget="migrations"`, `data-database-id="` + databaseID + `"`, "/assets/migrations-1.js"}, nil},
-		{"migrations without grant", viewerUser, notFound, "/databases/" + databaseID + "/migrations", 404, []string{"Halaman tidak ditemukan"}, []string{"data-widget"}},
 		{"connections for non-admin", viewerUser, forbidden, "/admin/connections", 403, []string{"Akses ditolak"}, []string{`data-widget="connections"`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -299,7 +291,7 @@ func TestDatabaseViewerIsServerRendered(t *testing.T) {
 	}
 	expect(t, body, []string{
 		"<title>PostgreSQL latihan", "Engine postgres, akses lihat dan edit", src.snap.Fingerprint,
-		`href="` + base + `/migrations"`, `href="` + base + `?schema=public&amp;table=items"`, "Pilih tabel",
+		`href="` + base + `?schema=public&amp;table=items"`, "Pilih tabel",
 	}, "<table")
 
 	status, body = harness{t, src, viewerUser, nil}.get(base + "?schema=public&table=items")
@@ -359,7 +351,7 @@ func TestDatabaseViewerPagesAndProblems(t *testing.T) {
 		{"target unavailable", func(s *sources) { s.schemaErr = database.ErrTargetUnavailable }, base, 502, "Target tidak dapat dihubungi"},
 		{"schema timeout", func(s *sources) { s.schemaErr = database.ErrTargetTimeout }, base, 504, "Target tidak merespons"},
 		{"unknown table", func(*sources) {}, base + "?schema=public&table=missing", 404, "Halaman tidak ditemukan"},
-		{"reserved namespace is not in the snapshot", func(*sources) {}, base + "?schema=_platform&table=migration_ledger", 404, "Halaman tidak ditemukan"},
+		{"reserved namespace is not in the snapshot", func(*sources) {}, base + "?schema=_platform&table=migration_history", 404, "Halaman tidak ditemukan"},
 		{"bad offset", func(*sources) {}, table + "&offset=-1", 400, "Permintaan tidak valid"},
 		{"huge offset", func(*sources) {}, table + "&offset=100001", 400, "Permintaan tidak valid"},
 		{"inactive database", func(s *sources) { s.dbs = nil }, base, 404, "Halaman tidak ditemukan"},

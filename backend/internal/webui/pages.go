@@ -32,15 +32,14 @@ type SchemaSource interface {
 // Pages serves the HTML pages. The guard (auth RequirePage when wired) runs
 // before every signed-in page; each handler still checks the same policy as the API.
 type Pages struct {
-	render          *Renderer
-	access          contracts.AccessChecker
-	principal       PrincipalFunc
-	login           http.HandlerFunc
-	databases       DatabaseSource
-	schemas         SchemaSource
-	users           UserSource
-	groups          GroupSource
-	migrationSource MigrationSource
+	render    *Renderer
+	access    contracts.AccessChecker
+	principal PrincipalFunc
+	login     http.HandlerFunc
+	databases DatabaseSource
+	schemas   SchemaSource
+	users     UserSource
+	groups    GroupSource
 }
 
 func NewPages(render *Renderer, access contracts.AccessChecker, principal PrincipalFunc, login http.HandlerFunc,
@@ -56,7 +55,6 @@ func RegisterRoutes(mux *http.ServeMux, p *Pages, guard func(http.Handler) http.
 	}))
 	mux.Handle("GET /databases", page(p.databaseList))
 	mux.Handle("GET /databases/{id}", page(p.databaseDetail))
-	mux.Handle("GET /databases/{id}/migrations", page(p.migrations))
 	mux.Handle("GET /databases/{id}/schema-diff", page(p.schemaDiff))
 	mux.Handle("GET /admin/connections", page(p.connectionsPage))
 	mux.Handle("GET /admin", page(p.adminPage))

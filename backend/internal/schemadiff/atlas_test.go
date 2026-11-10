@@ -233,7 +233,7 @@ func TestAtlasTransactionalDDL(t *testing.T) {
 	for _, sql := range []string{
 		`BEGIN;CREATE TABLE items(id int);COMMIT;`, `SELECT 1;`, `INSERT INTO items VALUES(1);`, `VACUUM;`, `CREATE DATABASE other;`,
 		`SET ROLE editor;`, `ALTER TABLE public.items OWNER TO other;`, `CREATE INDEX CONCURRENTLY idx ON public.items(id);`, `DROP INDEX CONCURRENTLY public.idx;`,
-		`CREATE TABLE _platform.secrets(id int);`, `DROP TABLE _platform.migration_ledger;`, `CREATE TABLE public._platform_reserved(id int);`,
+		`CREATE TABLE _platform.secrets(id int);`, `DROP TABLE _platform.migration_history;`, `CREATE TABLE public._platform_reserved(id int);`,
 		`CREATE TABLE other.items(id int);`, `CREATE TABLE public.items(id int DEFAULT set_config('role','admin',false));`,
 		`CREATE TABLE public.items(id int DEFAULT pg_catalog.pg_read_file('/secret')::int);`, `CREATE TEMP TABLE public.items(id int);`,
 		`CREATE TABLE public.items(id int) PARTITION BY RANGE(id);`, `CREATE TABLE public.items() INHERITS(public.parent);`,

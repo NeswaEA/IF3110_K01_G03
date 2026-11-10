@@ -40,10 +40,10 @@ test("an existing empty file is initialized", (t) => {
   assert.equal(seedSQLite(file, [path.join(fixtures, "demo.sql"), path.join(fixtures, "desired.sql")]), true);
 });
 
-test("existing data and ledger are kept", (t) => {
+test("existing data and migration history are kept", (t) => {
   const file = fileFor(t);
   let db = new DatabaseSync(file);
-  db.exec("CREATE TABLE mine(value TEXT); INSERT INTO mine VALUES('keep'); CREATE TABLE _platform_migration_ledger(version INTEGER); INSERT INTO _platform_migration_ledger VALUES(7)");
+  db.exec("CREATE TABLE mine(value TEXT); INSERT INTO mine VALUES('keep'); CREATE TABLE _platform_migration_history(seq INTEGER); INSERT INTO _platform_migration_history VALUES(7)");
   const before = db.prepare("SELECT name,sql FROM sqlite_schema ORDER BY name").all();
   db.close();
   assert.equal(seedSQLite(file, [path.join(fixtures, "demo.sql"), path.join(fixtures, "desired.sql")]), false);
@@ -51,7 +51,7 @@ test("existing data and ledger are kept", (t) => {
   try {
     assert.deepEqual(db.prepare("SELECT name,sql FROM sqlite_schema ORDER BY name").all(), before);
     assert.equal(db.prepare("SELECT value FROM mine").get().value, "keep");
-    assert.equal(db.prepare("SELECT version FROM _platform_migration_ledger").get().version, 7);
+    assert.equal(db.prepare("SELECT seq FROM _platform_migration_history").get().seq, 7);
   } finally {
     db.close();
   }

@@ -4,7 +4,6 @@ type DomainError struct {
 	Code    string
 	Message string
 	Fields  map[string]string
-	RunID   *string
 	Cause   error `json:"-"`
 }
 

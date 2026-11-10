@@ -16,7 +16,7 @@ const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 beforeEach(() => {
   setCsrfToken("t");
-  history.replaceState(null, "", "/databases/abc/migrations?draft=1");
+  history.replaceState(null, "", "/databases/abc?table=items");
   document.body.innerHTML = "<main><h1>Migrasi</h1></main>";
 });
 afterEach(() => server.resetHandlers());
@@ -43,7 +43,7 @@ describe("mountWidget", () => {
     server.use(http.get(`${B}/probe`, unauthorized));
     await expect(request("/probe")).rejects.toMatchObject({ status: 401 });
     const link = screen.getByRole("link", { name: "Masuk lagi di tab baru" });
-    expect(link).toHaveAttribute("href", "/login?next=%2Fdatabases%2Fabc%2Fmigrations%3Fdraft%3D1");
+    expect(link).toHaveAttribute("href", "/login?next=%2Fdatabases%2Fabc%3Ftable%3Ditems");
     expect(link).toHaveAttribute("target", "_blank");
     expect(screen.getByRole("textbox", { name: "SQL" })).toHaveValue("SELECT 1");
     showSessionExpired();

@@ -103,7 +103,8 @@ func (h *HTTPHandler) withSession(w http.ResponseWriter, r *http.Request) (*http
 		return r, err
 	}
 	h.setCookie(w, session)
-	return r.WithContext(context.WithValue(r.Context(), sessionContextKey{}, session)), nil
+	ctx := platform.WithActorID(context.WithValue(r.Context(), sessionContextKey{}, session), session.Principal.UserID)
+	return r.WithContext(ctx), nil
 }
 
 func (h *HTTPHandler) RequireCSRF(next http.Handler) http.Handler {

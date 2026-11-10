@@ -3,7 +3,7 @@
 {{define "page-description"}}{{with .Data}}<p class="page-description">Engine {{.DB.Driver}}, akses {{.DB.Access}}{{with .Fingerprint}}; fingerprint <code>{{.}}</code>{{end}}</p>{{end}}{{end}}
 
 {{define "page-meta"}}{{with .Data}}<nav class="page-actions" aria-label="Halaman database">
-<a class="button-link button-link-secondary" href="/databases/{{.DB.ID}}/migrations">Migrasi dan riwayat</a>
+
 {{if and (eq .DB.EffectiveAccess "edit") .DB.Capabilities.SchemaDiff}}<a class="button-link button-link-secondary" href="/databases/{{.DB.ID}}/schema-diff">Bandingkan schema</a>{{end}}
 </nav>{{end}}{{end}}
 

@@ -85,7 +85,7 @@ func TestViewerHandlerAccess(t *testing.T) {
 		{testkit.UserView, "/api/v1/databases/" + testkit.DBPG + "/data?table=items", 400, "INVALID_REQUEST"},
 		{testkit.UserView, data + "&limit=201", 400, "INVALID_REQUEST"},
 		{testkit.UserView, data + "&offset=-1", 400, "INVALID_REQUEST"},
-		{testkit.UserView, "/api/v1/databases/" + testkit.DBPG + "/data?schema=_platform&table=migration_ledger", 404, "NOT_FOUND"},
+		{testkit.UserView, "/api/v1/databases/" + testkit.DBPG + "/data?schema=_platform&table=migration_history", 404, "NOT_FOUND"},
 	}
 	for _, c := range cases {
 		if status, out := h.get(c.user, c.path); status != c.status || errCode(out) != c.code {

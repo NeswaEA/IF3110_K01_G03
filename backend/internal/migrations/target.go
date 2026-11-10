@@ -116,26 +116,6 @@ func (t *targetTransaction) close() {
 	_ = t.conn.Close()
 }
 
-func ledgerTable(d database.Driver) string {
-	if d == database.Postgres {
-		return `_platform.migration_ledger`
-	}
-	return `_platform_migration_ledger`
-}
-
-func readHead(ctx context.Context, q database.SQLExecutor, d database.Driver) (MigrationHead, error) {
-	var h MigrationHead
-	var id string
-	err := q.QueryRowContext(ctx, "SELECT version, run_id FROM "+ledgerTable(d)+" ORDER BY version DESC LIMIT 1").Scan(&h.Version, &id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return h, nil
-	}
-	if err == nil {
-		h.LastRunID = &id
-	}
-	return h, err
-}
-
 func targetError(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
