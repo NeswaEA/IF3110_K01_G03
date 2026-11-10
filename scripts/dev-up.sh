@@ -1,5 +1,5 @@
 #!/bin/sh
-# Start the metadata and target PostgreSQL 17.11 containers (and load the demo fixture on first start).
+# Start the metadata and target PostgreSQL 17.11 containers (loading the demo fixture on first start) and NATS JetStream.
 # Usage: scripts/dev-up.sh            (needs .env, copied from .env.example)
 #        scripts/dev-up.sh down -v    (stop and delete the data volumes)
 set -eu
@@ -8,4 +8,4 @@ cd "$(dirname "$0")/.."
 if [ "$#" -gt 0 ]; then
   exec docker compose --env-file .env -f infra/docker/compose.yml "$@"
 fi
-exec docker compose --env-file .env -f infra/docker/compose.yml up -d --wait metadata-postgres target-postgres
+exec docker compose --env-file .env -f infra/docker/compose.yml up -d --wait metadata-postgres target-postgres nats

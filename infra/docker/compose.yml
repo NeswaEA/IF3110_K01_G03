@@ -1,6 +1,6 @@
 # Run from the repository root:
 #   scripts/init-env.sh     # or copy .env.example to .env and fill the secrets
-#   docker compose --env-file .env -f infra/docker/compose.yml up -d metadata-postgres target-postgres
+#   docker compose --env-file .env -f infra/docker/compose.yml up -d metadata-postgres target-postgres nats
 # The app container (profile "app") is built, migrated and started by scripts/app-up.sh.
 # Metadata and target databases are separate servers with separate credentials.
 name: if3110
@@ -30,6 +30,8 @@ services:
       POSTGRES_USER: target_admin
       POSTGRES_PASSWORD: ${TARGET_ADMIN_PASSWORD:?set TARGET_ADMIN_PASSWORD in .env}
       TARGET_RUNNER_PASSWORD: ${TARGET_RUNNER_PASSWORD:?set TARGET_RUNNER_PASSWORD in .env}
+    # A dead worker host's session (and its migration lock) ends within about 25 seconds.
+    command: ["postgres", "-c", "tcp_keepalives_idle=10", "-c", "tcp_keepalives_interval=5", "-c", "tcp_keepalives_count=3"]
     ports:
       - "127.0.0.1:15433:5432"
     volumes:
@@ -42,6 +44,15 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Job queue: JetStream with file storage so queued jobs survive restarts.
+  nats:
+    image: nats:2.15.2@sha256:b6c40dcfe5ae9174dcafa9c43f800afb93b8b0ffcde02ac00efc6b66031d9a50
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "127.0.0.1:14222:4222"
+    volumes:
+      - nats-data:/data
 
   backend:
     profiles: ["app"]
@@ -69,3 +80,4 @@ volumes:
   metadata-data:
   target-data:
   sqlite-data:
+  nats-data:

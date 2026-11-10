@@ -53,6 +53,7 @@ Aturan tambahan:
 | Frontend | Halaman multipage dirender server; TypeScript, Vite, dan widget React untuk bagian interaktif; editor SQL textarea dengan seleksi dan indentasi buatan sendiri |
 | Database | PostgreSQL 17.11 (metadata aplikasi dan target), SQLite (target tambahan) |
 | Driver | pgx v5, go-sqlite3 (butuh CGO), pg_query_go untuk mem-parse SQL PostgreSQL |
+| Queue | NATS 2.15.2 dengan JetStream (file storage), port host `127.0.0.1:14222` |
 | Logging | `log/slog` JSON ke stdout dengan redaksi kunci sensitif serta `request_id`, `actor_id`, `trace_id`, `span_id`; level lewat `LOG_LEVEL` |
 | Runtime | Docker Compose; image dibangun mengikuti arsitektur host |
 
@@ -68,7 +69,7 @@ Dari root repository:
 
 ```sh
 sh scripts/init-env.sh      # buat .env dan isi secret lokal secara acak
-sh scripts/dev-up.sh        # nyalakan PostgreSQL metadata dan target
+sh scripts/dev-up.sh        # nyalakan PostgreSQL metadata dan target, serta NATS JetStream
 sh scripts/app-up.sh seed   # build image, migrasi metadata, isi data demo, jalankan aplikasi
 ```
 
