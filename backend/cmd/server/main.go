@@ -2,8 +2,9 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -13,8 +14,17 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	level := slog.LevelInfo
+	if raw := os.Getenv("LOG_LEVEL"); raw != "" {
+		if err := level.UnmarshalText([]byte(raw)); err != nil {
+			slog.Error("LOG_LEVEL must be debug, info, warn or error")
+			os.Exit(1)
+		}
+	}
+	slog.SetDefault(platform.NewLogger(os.Stdout, level, nil).With("service", "dbplatform-api"))
 	if err := run(ctx); err != nil {
-		log.Fatal(err)
+		slog.Error("server stopped", "event", "server.failed", "error", err.Error())
+		os.Exit(1)
 	}
 }
 
@@ -43,6 +53,6 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	log.Printf("HTTP server listening on %s", server.Addr)
+	slog.Info("HTTP server listening", "event", "server.listening", "addr", server.Addr)
 	return platform.Serve(ctx, server, listener)
 }
