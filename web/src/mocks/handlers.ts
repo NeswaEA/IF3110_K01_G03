@@ -6,6 +6,7 @@ import connectionsTestOk from "../../../tests/fixtures/api/connections_test_ok.j
 import connectionsErrorRevisionConflict from "../../../tests/fixtures/api/connections_error_revision_conflict.json";
 import connectionsErrorValidation from "../../../tests/fixtures/api/connections_error_validation.json";
 import databasesList from "../../../tests/fixtures/api/databases_list.json";
+import usersList from "../../../tests/fixtures/api/users_list.json";
 import explainErrorMultiple from "../../../tests/fixtures/api/explain_error_multiple_statements.json";
 import explainErrorUnsupported from "../../../tests/fixtures/api/explain_error_unsupported.json";
 import explainPg from "../../../tests/fixtures/api/explain_pg.json";
@@ -52,6 +53,23 @@ export const handlers: RequestHandler[] = [
 
   http.delete(`${API}/admin/connections/:id`, ({ params }) =>
     connectionsList.data.some((c) => c.id === params.id) ? new HttpResponse(null, { status: 204 }) : notFound(),
+  ),
+
+  http.get(`${API}/admin/users`, () => HttpResponse.json(usersList)),
+
+  http.post(`${API}/admin/users`, async ({ request }) => {
+    const body = (await request.json()) as { username: string; is_platform_admin?: boolean };
+    return HttpResponse.json({ data: { ...usersList.data[0], id: "10000000-0000-4000-8000-000000000099", username: body.username, is_platform_admin: !!body.is_platform_admin } }, { status: 201 });
+  }),
+
+  http.patch(`${API}/admin/users/:userId`, async ({ params, request }) => {
+    const current = usersList.data.find((u) => u.id === params.userId);
+    if (!current) return notFound();
+    return HttpResponse.json({ data: { ...current, ...((await request.json()) as object) } });
+  }),
+
+  http.put(`${API}/admin/users/:userId/password`, ({ params }) =>
+    usersList.data.some((u) => u.id === params.userId) ? new HttpResponse(null, { status: 204 }) : notFound(),
   ),
 
   http.get(`${API}/databases`, () => HttpResponse.json(databasesList)),

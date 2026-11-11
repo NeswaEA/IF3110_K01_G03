@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Data pengguna tidak valid.",
+    "fields": { "password": "Gunakan 12-128 karakter." },
+    "request_id": "req-users-validation"
+  }
+}

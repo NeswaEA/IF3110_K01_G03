@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "LEADER_REQUIRED",
+    "message": "Ganti leader grup yang dipimpin pengguna ini sebelum menonaktifkannya.",
+    "fields": {},
+    "request_id": "req-access-leader-required"
+  }
+}

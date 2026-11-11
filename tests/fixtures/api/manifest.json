@@ -6,6 +6,7 @@
     "connections_*": "Connection administration responses and validation errors.",
     "databases_*": "Accessible database lists and capabilities.",
     "viewer_*": "Schema, table data, and viewer error responses.",
-    "explain_*": "Execution plans and unsupported statement errors."
+    "explain_*": "Execution plans and unsupported statement errors.",
+    "users_*": "User administration list and validation errors."
   }
 }

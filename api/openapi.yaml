@@ -369,6 +369,124 @@ paths:
         '502': { $ref: '#/components/responses/TargetFailure' }
         '503': { $ref: '#/components/responses/TargetFailure' }
         '504': { $ref: '#/components/responses/TargetFailure' }
+  # --- admin: users -------------------------------------------------------
+  /admin/users:
+    get:
+      operationId: listUsers
+      parameters:
+        - $ref: '#/components/parameters/WideLimit'
+        - $ref: '#/components/parameters/WideOffset'
+      responses:
+        '200':
+          description: Accounts ordered by username.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/User' } }
+                  page: { $ref: '#/components/schemas/Page' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      operationId: createUser
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              additionalProperties: false
+              properties:
+                username: { type: string }
+                password: { type: string }
+                is_platform_admin: { type: boolean }
+      responses:
+        '201':
+          description: The new account, active.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/UUID' }
+    patch:
+      operationId: updateUser
+      summary: Activate, deactivate, grant or revoke platform admin. The last active admin and leaders of groups with grants stay active.
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: false
+              properties:
+                active: { type: boolean }
+                is_platform_admin: { type: boolean }
+      responses:
+        '200':
+          description: The updated account.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/users/{userId}/password:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/UUID' }
+    put:
+      operationId: resetUserPassword
+      summary: Set a new password and end every session of the account.
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              additionalProperties: false
+              properties:
+                password: { type: string }
+      responses:
+        '204': { description: Password replaced. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
   # --- admin: groups ------------------------------------------------------
   /admin/groups/{groupId}/leader:
     put:

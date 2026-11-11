@@ -13,6 +13,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAdminConnectionsRouteImport } from './routes/_app/admin/connections'
+import { Route as AppAdminUsersRouteImport } from './routes/_app/admin/users'
 import { Route as AppDatabasesIndexRouteImport } from './routes/_app/databases/index'
 import { Route as AppDatabasesDatabaseIdIndexRouteImport } from './routes/_app/databases/$databaseId/index'
 
@@ -35,6 +36,11 @@ const AppAdminConnectionsRoute = AppAdminConnectionsRouteImport.update({
   path: '/admin/connections',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
+  id: '/admin/users',
+  path: '/admin/users',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDatabasesIndexRoute = AppDatabasesIndexRouteImport.update({
   id: '/databases/',
   path: '/databases/',
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
   '/admin/connections': typeof AppAdminConnectionsRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/databases/': typeof AppDatabasesIndexRoute
   '/databases/$databaseId/': typeof AppDatabasesDatabaseIdIndexRoute
 }
@@ -58,6 +65,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/': typeof AppIndexRoute
   '/admin/connections': typeof AppAdminConnectionsRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/databases': typeof AppDatabasesIndexRoute
   '/databases/$databaseId': typeof AppDatabasesDatabaseIdIndexRoute
 }
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_app/': typeof AppIndexRoute
   '/_app/admin/connections': typeof AppAdminConnectionsRoute
+  '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/databases/': typeof AppDatabasesIndexRoute
   '/_app/databases/$databaseId/': typeof AppDatabasesDatabaseIdIndexRoute
 }
@@ -76,6 +85,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/admin/connections'
+    | '/admin/users'
     | '/databases/'
     | '/databases/$databaseId/'
   fileRoutesByTo: FileRoutesByTo
@@ -83,6 +93,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/'
     | '/admin/connections'
+    | '/admin/users'
     | '/databases'
     | '/databases/$databaseId'
   id:
@@ -91,6 +102,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_app/'
     | '/_app/admin/connections'
+    | '/_app/admin/users'
     | '/_app/databases/'
     | '/_app/databases/$databaseId/'
   fileRoutesById: FileRoutesById
@@ -130,6 +142,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminConnectionsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/admin/users': {
+      id: '/_app/admin/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AppAdminUsersRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/databases/': {
       id: '/_app/databases/'
       path: '/databases'
@@ -150,6 +169,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
   AppAdminConnectionsRoute: typeof AppAdminConnectionsRoute
+  AppAdminUsersRoute: typeof AppAdminUsersRoute
   AppDatabasesIndexRoute: typeof AppDatabasesIndexRoute
   AppDatabasesDatabaseIdIndexRoute: typeof AppDatabasesDatabaseIdIndexRoute
 }
@@ -157,6 +177,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppIndexRoute: AppIndexRoute,
   AppAdminConnectionsRoute: AppAdminConnectionsRoute,
+  AppAdminUsersRoute: AppAdminUsersRoute,
   AppDatabasesIndexRoute: AppDatabasesIndexRoute,
   AppDatabasesDatabaseIdIndexRoute: AppDatabasesDatabaseIdIndexRoute,
 }
