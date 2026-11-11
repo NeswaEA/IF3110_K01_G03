@@ -30,7 +30,7 @@ func seedDB(t *testing.T) *sql.DB {
 		}
 		t.Skip("TEST_METADATA_DATABASE_URL is not set")
 	}
-	admin, err := platform.OpenMetadataDB(t.Context(), dsn)
+	admin, err := platform.OpenDatabase(t.Context(), dsn, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func seedDB(t *testing.T) *sql.DB {
 	t.Setenv("BOOTSTRAP_ADMIN_PASSWORD", "initial password 123")
 	t.Setenv("FIXTURE_PASSWORD", "fixture password 123")
 	t.Setenv("CONNECTION_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 32)))
-	db, err := platform.OpenMetadataDB(t.Context(), u.String())
+	db, err := platform.OpenDatabase(t.Context(), u.String(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

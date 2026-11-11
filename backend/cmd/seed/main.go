@@ -32,7 +32,7 @@ func run(ctx context.Context, args []string, stdin io.Reader) error {
 	if args[0] != "admin" && os.Getenv("APP_ENV") != "development" && os.Getenv("APP_ENV") != "test" {
 		return errors.New(args[0] + " requires APP_ENV=development or test")
 	}
-	db, err := platform.OpenMetadataDB(ctx, os.Getenv("METADATA_DATABASE_URL"))
+	db, err := platform.OpenDatabase(ctx, os.Getenv("METADATA_DATABASE_URL"), nil)
 	if err != nil {
 		return err
 	}

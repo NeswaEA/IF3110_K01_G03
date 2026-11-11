@@ -42,7 +42,7 @@ func newSessionFixture(t *testing.T) sessionFixture {
 		}
 		t.Skip("TEST_METADATA_DATABASE_URL is not set")
 	}
-	admin, err := platform.OpenMetadataDB(t.Context(), dsn)
+	admin, err := platform.OpenDatabase(t.Context(), dsn, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/telemetry"
 )
 
 func main() {
@@ -33,7 +34,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	db, err := platform.OpenMetadataDB(ctx, cfg.MetadataDatabaseURL)
+	db, err := platform.OpenDatabase(ctx, cfg.MetadataDatabaseURL, telemetry.PgxTracer("metadata", ""))
 	if err != nil {
 		return err
 	}

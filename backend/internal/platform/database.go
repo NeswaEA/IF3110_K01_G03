@@ -11,7 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 )
 
-func OpenMetadataDB(ctx context.Context, dsn string) (*sql.DB, error) {
+// OpenDatabase opens the metadata pool; tracer (nil in CLIs) records every statement.
+func OpenDatabase(ctx context.Context, dsn string, tracer pgx.QueryTracer) (*sql.DB, error) {
 	if strings.TrimSpace(dsn) == "" {
 		return nil, errors.New("METADATA_DATABASE_URL is required")
 	}
@@ -20,6 +21,7 @@ func OpenMetadataDB(ctx context.Context, dsn string) (*sql.DB, error) {
 		return nil, errors.New("METADATA_DATABASE_URL is invalid")
 	}
 	cfg.ConnectTimeout = 5 * time.Second
+	cfg.Tracer = tracer
 	db := stdlib.OpenDB(*cfg)
 	db.SetMaxOpenConns(5)
 	db.SetMaxIdleConns(2)

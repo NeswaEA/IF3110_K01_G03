@@ -27,7 +27,7 @@ func migrationDB(t *testing.T) *sql.DB {
 		}
 		t.Skip("TEST_METADATA_DATABASE_URL is not set")
 	}
-	admin, err := platform.OpenMetadataDB(context.Background(), dsn)
+	admin, err := platform.OpenDatabase(context.Background(), dsn, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

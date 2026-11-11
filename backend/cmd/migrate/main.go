@@ -26,7 +26,7 @@ func run(ctx context.Context, args []string) error {
 	if len(args) != 1 || args[0] != "up" {
 		return errors.New("usage: migrate up")
 	}
-	db, err := platform.OpenMetadataDB(ctx, os.Getenv("METADATA_DATABASE_URL"))
+	db, err := platform.OpenDatabase(ctx, os.Getenv("METADATA_DATABASE_URL"), nil)
 	if err != nil {
 		return err
 	}

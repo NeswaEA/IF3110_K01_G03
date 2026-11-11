@@ -62,7 +62,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return errors.New("CONNECTION_ENCRYPTION_KEY must encode 32 bytes in base64")
 	}
-	db, err := platform.OpenMetadataDB(ctx, cfg.MetadataDatabaseURL)
+	db, err := platform.OpenDatabase(ctx, cfg.MetadataDatabaseURL, telemetry.PgxTracer("metadata", ""))
 	if err != nil {
 		return err
 	}
