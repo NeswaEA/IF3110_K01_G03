@@ -13,8 +13,10 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAdminConnectionsRouteImport } from './routes/_app/admin/connections'
+import { Route as AppAdminGroupsRouteImport } from './routes/_app/admin/groups'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin/users'
 import { Route as AppDatabasesIndexRouteImport } from './routes/_app/databases/index'
+import { Route as AppAdminGroupsGroupIdRouteImport } from './routes/_app/admin/groups/$groupId'
 import { Route as AppDatabasesDatabaseIdIndexRouteImport } from './routes/_app/databases/$databaseId/index'
 
 const AppRoute = AppRouteImport.update({
@@ -36,6 +38,11 @@ const AppAdminConnectionsRoute = AppAdminConnectionsRouteImport.update({
   path: '/admin/connections',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdminGroupsRoute = AppAdminGroupsRouteImport.update({
+  id: '/admin/groups',
+  path: '/admin/groups',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
   id: '/admin/users',
   path: '/admin/users',
@@ -45,6 +52,11 @@ const AppDatabasesIndexRoute = AppDatabasesIndexRouteImport.update({
   id: '/databases/',
   path: '/databases/',
   getParentRoute: () => AppRoute,
+} as any)
+const AppAdminGroupsGroupIdRoute = AppAdminGroupsGroupIdRouteImport.update({
+  id: '/$groupId',
+  path: '/$groupId',
+  getParentRoute: () => AppAdminGroupsRoute,
 } as any)
 const AppDatabasesDatabaseIdIndexRoute =
   AppDatabasesDatabaseIdIndexRouteImport.update({
@@ -57,16 +69,20 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
   '/admin/connections': typeof AppAdminConnectionsRoute
+  '/admin/groups': typeof AppAdminGroupsRouteWithChildren
   '/admin/users': typeof AppAdminUsersRoute
   '/databases/': typeof AppDatabasesIndexRoute
+  '/admin/groups/$groupId': typeof AppAdminGroupsGroupIdRoute
   '/databases/$databaseId/': typeof AppDatabasesDatabaseIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/': typeof AppIndexRoute
   '/admin/connections': typeof AppAdminConnectionsRoute
+  '/admin/groups': typeof AppAdminGroupsRouteWithChildren
   '/admin/users': typeof AppAdminUsersRoute
   '/databases': typeof AppDatabasesIndexRoute
+  '/admin/groups/$groupId': typeof AppAdminGroupsGroupIdRoute
   '/databases/$databaseId': typeof AppDatabasesDatabaseIdIndexRoute
 }
 export interface FileRoutesById {
@@ -75,8 +91,10 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_app/': typeof AppIndexRoute
   '/_app/admin/connections': typeof AppAdminConnectionsRoute
+  '/_app/admin/groups': typeof AppAdminGroupsRouteWithChildren
   '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/databases/': typeof AppDatabasesIndexRoute
+  '/_app/admin/groups/$groupId': typeof AppAdminGroupsGroupIdRoute
   '/_app/databases/$databaseId/': typeof AppDatabasesDatabaseIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -85,16 +103,20 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/admin/connections'
+    | '/admin/groups'
     | '/admin/users'
     | '/databases/'
+    | '/admin/groups/$groupId'
     | '/databases/$databaseId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
     | '/'
     | '/admin/connections'
+    | '/admin/groups'
     | '/admin/users'
     | '/databases'
+    | '/admin/groups/$groupId'
     | '/databases/$databaseId'
   id:
     | '__root__'
@@ -102,8 +124,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/_app/'
     | '/_app/admin/connections'
+    | '/_app/admin/groups'
     | '/_app/admin/users'
     | '/_app/databases/'
+    | '/_app/admin/groups/$groupId'
     | '/_app/databases/$databaseId/'
   fileRoutesById: FileRoutesById
 }
@@ -142,6 +166,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminConnectionsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/admin/groups': {
+      id: '/_app/admin/groups'
+      path: '/admin/groups'
+      fullPath: '/admin/groups'
+      preLoaderRoute: typeof AppAdminGroupsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/admin/users': {
       id: '/_app/admin/users'
       path: '/admin/users'
@@ -156,6 +187,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDatabasesIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/admin/groups/$groupId': {
+      id: '/_app/admin/groups/$groupId'
+      path: '/$groupId'
+      fullPath: '/admin/groups/$groupId'
+      preLoaderRoute: typeof AppAdminGroupsGroupIdRouteImport
+      parentRoute: typeof AppAdminGroupsRoute
+    }
     '/_app/databases/$databaseId/': {
       id: '/_app/databases/$databaseId/'
       path: '/databases/$databaseId'
@@ -166,9 +204,22 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppAdminGroupsRouteChildren {
+  AppAdminGroupsGroupIdRoute: typeof AppAdminGroupsGroupIdRoute
+}
+
+const AppAdminGroupsRouteChildren: AppAdminGroupsRouteChildren = {
+  AppAdminGroupsGroupIdRoute: AppAdminGroupsGroupIdRoute,
+}
+
+const AppAdminGroupsRouteWithChildren = AppAdminGroupsRoute._addFileChildren(
+  AppAdminGroupsRouteChildren,
+)
+
 interface AppRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
   AppAdminConnectionsRoute: typeof AppAdminConnectionsRoute
+  AppAdminGroupsRoute: typeof AppAdminGroupsRouteWithChildren
   AppAdminUsersRoute: typeof AppAdminUsersRoute
   AppDatabasesIndexRoute: typeof AppDatabasesIndexRoute
   AppDatabasesDatabaseIdIndexRoute: typeof AppDatabasesDatabaseIdIndexRoute
@@ -177,6 +228,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppIndexRoute: AppIndexRoute,
   AppAdminConnectionsRoute: AppAdminConnectionsRoute,
+  AppAdminGroupsRoute: AppAdminGroupsRouteWithChildren,
   AppAdminUsersRoute: AppAdminUsersRoute,
   AppDatabasesIndexRoute: AppDatabasesIndexRoute,
   AppDatabasesDatabaseIdIndexRoute: AppDatabasesDatabaseIdIndexRoute,

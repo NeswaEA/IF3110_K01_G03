@@ -1,0 +1,8 @@
+{
+  "data": [
+    { "id": "20000000-0000-4000-8000-000000000001", "name": "fixture-view", "leader": { "id": "10000000-0000-4000-8000-000000000002", "username": "viewer" }, "created_at": "2026-11-10T08:00:00Z", "updated_at": "2026-11-10T08:00:00Z" },
+    { "id": "20000000-0000-4000-8000-000000000002", "name": "fixture-edit", "leader": { "id": "10000000-0000-4000-8000-000000000005", "username": "lead" }, "created_at": "2026-11-10T08:00:00Z", "updated_at": "2026-11-10T08:00:00Z" },
+    { "id": "20000000-0000-4000-8000-000000000004", "name": "fixture-new", "leader": null, "created_at": "2026-11-11T08:00:00Z", "updated_at": "2026-11-11T08:00:00Z" }
+  ],
+  "page": { "limit": 200, "offset": 0, "has_more": false }
+}

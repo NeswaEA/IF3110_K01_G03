@@ -488,6 +488,242 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/InternalError' }
   # --- admin: groups ------------------------------------------------------
+  /admin/groups:
+    get:
+      operationId: listGroups
+      parameters:
+        - $ref: '#/components/parameters/WideLimit'
+        - $ref: '#/components/parameters/WideOffset'
+      responses:
+        '200':
+          description: Groups ordered by name, with their leader.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Group' } }
+                  page: { $ref: '#/components/schemas/Page' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      operationId: createGroup
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        '201':
+          description: The new group, without leader or members.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Group' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/groups/{groupId}:
+    parameters:
+      - name: groupId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/UUID' }
+    patch:
+      operationId: renameGroup
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        '200':
+          description: The renamed group.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Group' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      operationId: deleteGroup
+      summary: Delete the group with its memberships and grants; its members' sessions end.
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        '204': { description: Deleted. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/groups/{groupId}/members:
+    parameters:
+      - name: groupId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/UUID' }
+    get:
+      operationId: listGroupMembers
+      parameters:
+        - $ref: '#/components/parameters/WideLimit'
+        - $ref: '#/components/parameters/WideOffset'
+      responses:
+        '200':
+          description: Members of the group.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/User' } }
+                  page: { $ref: '#/components/schemas/Page' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/groups/{groupId}/members/{userId}:
+    parameters:
+      - name: groupId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/UUID' }
+      - name: userId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/UUID' }
+    put:
+      operationId: addGroupMember
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '204': { description: Member (already) in the group. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      operationId: removeGroupMember
+      summary: Remove a member; the leader cannot be removed (LEADER_REQUIRED).
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        '204': { description: Removed. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/groups/{groupId}/grants:
+    parameters:
+      - name: groupId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/UUID' }
+    get:
+      operationId: listGroupGrants
+      parameters:
+        - $ref: '#/components/parameters/WideLimit'
+        - $ref: '#/components/parameters/WideOffset'
+      responses:
+        '200':
+          description: Databases the group may view or edit.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Grant' } }
+                  page: { $ref: '#/components/schemas/Page' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/groups/{groupId}/grants/{databaseId}:
+    parameters:
+      - name: groupId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/UUID' }
+      - name: databaseId
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/UUID' }
+    put:
+      operationId: setGroupGrant
+      summary: Grant or change access; a group without an active leader cannot receive a new grant (LEADER_REQUIRED).
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [level]
+              additionalProperties: false
+              properties:
+                level: { $ref: '#/components/schemas/GrantLevel' }
+      responses:
+        '200':
+          description: The stored grant.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Grant' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      operationId: removeGroupGrant
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        '204': { description: Revoked. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /admin/groups/{groupId}/leader:
     put:
       operationId: setGroupLeader

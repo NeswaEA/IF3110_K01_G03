@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "LEADER_REQUIRED",
+    "message": "Tetapkan leader aktif untuk grup ini sebelum memberi hak akses.",
+    "fields": {},
+    "request_id": "req-groups-leader-required"
+  }
+}

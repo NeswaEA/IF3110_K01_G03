@@ -7,6 +7,9 @@ import connectionsErrorRevisionConflict from "../../../tests/fixtures/api/connec
 import connectionsErrorValidation from "../../../tests/fixtures/api/connections_error_validation.json";
 import databasesList from "../../../tests/fixtures/api/databases_list.json";
 import usersList from "../../../tests/fixtures/api/users_list.json";
+import groupsGrants from "../../../tests/fixtures/api/groups_grants.json";
+import groupsList from "../../../tests/fixtures/api/groups_list.json";
+import groupsMembers from "../../../tests/fixtures/api/groups_members.json";
 import explainErrorMultiple from "../../../tests/fixtures/api/explain_error_multiple_statements.json";
 import explainErrorUnsupported from "../../../tests/fixtures/api/explain_error_unsupported.json";
 import explainPg from "../../../tests/fixtures/api/explain_pg.json";
@@ -71,6 +74,30 @@ export const handlers: RequestHandler[] = [
   http.put(`${API}/admin/users/:userId/password`, ({ params }) =>
     usersList.data.some((u) => u.id === params.userId) ? new HttpResponse(null, { status: 204 }) : notFound(),
   ),
+
+  http.get(`${API}/admin/groups`, () => HttpResponse.json(groupsList)),
+  http.post(`${API}/admin/groups`, async ({ request }) =>
+    HttpResponse.json({ data: { ...groupsList.data[2], id: "20000000-0000-4000-8000-000000000099", ...((await request.json()) as object) } }, { status: 201 }),
+  ),
+  http.patch(`${API}/admin/groups/:groupId`, async ({ params, request }) => {
+    const current = groupsList.data.find((g) => g.id === params.groupId);
+    return current ? HttpResponse.json({ data: { ...current, ...((await request.json()) as object) } }) : notFound();
+  }),
+  http.delete(`${API}/admin/groups/:groupId`, () => new HttpResponse(null, { status: 204 })),
+  http.get(`${API}/admin/groups/:groupId/members`, () => HttpResponse.json(groupsMembers)),
+  http.put(`${API}/admin/groups/:groupId/members/:userId`, () => new HttpResponse(null, { status: 204 })),
+  http.delete(`${API}/admin/groups/:groupId/members/:userId`, () => new HttpResponse(null, { status: 204 })),
+  http.put(`${API}/admin/groups/:groupId/leader`, async ({ params, request }) => {
+    const current = groupsList.data.find((g) => g.id === params.groupId);
+    const { user_id } = (await request.json()) as { user_id: string };
+    const leader = usersList.data.find((u) => u.id === user_id);
+    return current && leader ? HttpResponse.json({ data: { ...current, leader: { id: leader.id, username: leader.username } } }) : notFound();
+  }),
+  http.get(`${API}/admin/groups/:groupId/grants`, () => HttpResponse.json(groupsGrants)),
+  http.put(`${API}/admin/groups/:groupId/grants/:databaseId`, async ({ params, request }) =>
+    HttpResponse.json({ data: { database_id: params.databaseId, ...((await request.json()) as object) } }),
+  ),
+  http.delete(`${API}/admin/groups/:groupId/grants/:databaseId`, () => new HttpResponse(null, { status: 204 })),
 
   http.get(`${API}/databases`, () => HttpResponse.json(databasesList)),
 

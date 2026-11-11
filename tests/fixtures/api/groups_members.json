@@ -1,0 +1,7 @@
+{
+  "data": [
+    { "id": "10000000-0000-4000-8000-000000000003", "username": "editor", "is_platform_admin": false, "active": true, "created_at": "2026-11-10T08:00:00Z", "updated_at": "2026-11-10T08:00:00Z" },
+    { "id": "10000000-0000-4000-8000-000000000005", "username": "lead", "is_platform_admin": false, "active": true, "created_at": "2026-11-10T08:00:00Z", "updated_at": "2026-11-10T08:00:00Z" }
+  ],
+  "page": { "limit": 200, "offset": 0, "has_more": false }
+}
