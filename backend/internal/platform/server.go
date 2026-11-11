@@ -11,7 +11,7 @@ import (
 func NewHTTPServer(addr string, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              addr,
-		Handler:           RequestID(handler),
+		Handler:           RequestID(LogRequests(handler)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      40 * time.Second,

@@ -15,6 +15,9 @@ type actorIDKey struct{}
 
 // WithActorID marks ctx with the signed-in user so every log line carries actor_id.
 func WithActorID(ctx context.Context, userID string) context.Context {
+	if entry, ok := ctx.Value(requestLogKey{}).(*requestLog); ok {
+		entry.actor = userID
+	}
 	return context.WithValue(ctx, actorIDKey{}, userID)
 }
 

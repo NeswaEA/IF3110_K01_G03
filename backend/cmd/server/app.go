@@ -125,7 +125,7 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	mux := http.NewServeMux()
 	platform.RegisterHealthRoutes(mux, db)
 	authHandler.RegisterRoutes(mux)
-	secured := authHandler.RequireSession(authHandler.RequireCSRF(protected))
+	secured := authHandler.RequireSession(authHandler.RequireCSRF(platform.Route(protected)))
 	mux.Handle("/api/", secured)
 	mux.Handle("/api", secured)
 	webui.RegisterRoutes(mux, webui.NewPages(renderer, policy, auth.PrincipalFromContext, auth.RedirectToLogin, connectionService, viewService, userService, groupService), authHandler.RequirePage)
