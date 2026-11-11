@@ -134,15 +134,24 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 		sse.Heartbeat = runtime.SSEHeartbeat
 	}
 	jobs.RegisterRoutes(protected, sse)
-	protected.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	unknownAPI := func(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, &contracts.DomainError{Code: "NOT_FOUND", Message: "Endpoint tidak ditemukan."})
-	})
+	}
+	protected.HandleFunc("/", unknownAPI)
 	mux := http.NewServeMux()
 	platform.RegisterHealthRoutes(mux, db)
 	authHandler.RegisterRoutes(mux)
 	secured := authHandler.RequireSession(authHandler.RequireCSRF(platform.Route(telemetry.Route(protected))))
-	mux.Handle("/api/", secured)
-	mux.Handle("/api", secured)
+	// Unknown API paths are a 404 even without a session; the endpoint list is public in the OpenAPI document.
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, pattern := protected.Handler(r); pattern == "/" {
+			unknownAPI(w, r)
+			return
+		}
+		secured.ServeHTTP(w, r)
+	})
+	mux.Handle("/api/", api)
+	mux.Handle("/api", api)
 	webui.RegisterRoutes(mux, webui.NewPages(renderer, policy, auth.PrincipalFromContext, auth.RedirectToLogin, connectionService, viewService, userService, groupService), authHandler.RequirePage)
 	mux.Handle("/", frontend)
 	return securityHeaders(telemetry.Route(mux)), cleanup, nil

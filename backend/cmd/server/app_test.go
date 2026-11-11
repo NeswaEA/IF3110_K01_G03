@@ -324,6 +324,17 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 	if w := request("GET", "/databases/"+databaseID+"?table=items", "", nil, ""); w.Header().Get("Location") != "/login?next=%2Fdatabases%2F"+databaseID+"%3Ftable%3Ditems" {
 		t.Fatal("anonymous page was not sent to login", w.Header().Get("Location"))
 	}
+	for _, path := range []string{"/api", "/api/v1/unknown", "/api/v1/databases/" + databaseID + "/unknown"} {
+		for _, who := range []loginState{{}, edit} {
+			w := request("GET", path, "", who.cookie, "")
+			if w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), `"code":"NOT_FOUND"`) || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") {
+				t.Fatal("unknown API path must be a JSON 404 with or without a session", path, w.Code, w.Body.String())
+			}
+		}
+	}
+	if w := request("POST", "/api/v1/unknown", "{}", nil, ""); w.Code != http.StatusNotFound {
+		t.Fatal("an unknown mutation must not be asked for CSRF first", w.Code)
+	}
 	if w := request("GET", "/api/v1/databases/"+databaseID+"/events", "", nil, ""); w.Code != http.StatusUnauthorized || !strings.Contains(w.Body.String(), "UNAUTHENTICATED") {
 		t.Fatal("the event stream must require a session", w.Code, w.Body.String())
 	}
