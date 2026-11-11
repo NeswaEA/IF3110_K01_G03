@@ -1,34 +1,26 @@
-// HTTP client. It returns the response envelope
-// untouched, sends cookies same-origin, adds the CSRF token to mutations, and
-// throws ApiRequestError (the ApiError shape) on failures. It never stores the
-// session token (HttpOnly cookie) and keeps the CSRF token in memory only.
-import type { ApiError, ApiResponse } from "./types";
+// Typed API client. Cookies stay same-origin and HttpOnly; the CSRF token
+// lives in memory only and is added to every mutation. Failures become
+// ApiError; NETWORK_ERROR exists only on the client.
+import createClient, { type Middleware } from "openapi-fetch";
+import type { components, paths } from "./schema";
 
-type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+export type Schemas = components["schemas"];
 
-export type RequestOptions = {
-  method?: Method;
-  body?: unknown;
-  signal?: AbortSignal;
-};
+const baseUrl: string = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
+const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-const API_BASE: string = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
-const MUTATING: ReadonlySet<Method> = new Set(["POST", "PATCH", "PUT", "DELETE"]);
+export class ApiError extends Error {
+  readonly code: string;
+  readonly fields: Record<string, string>;
+  readonly requestId: string;
+  readonly status: number;
 
-export class ApiRequestError extends Error implements ApiError {
-  code: string;
-  fields: Record<string, string>;
-  request_id: string;
-  run_id?: string;
-  status: number;
-
-  constructor(e: ApiError, status: number) {
+  constructor(e: { code: string; message: string; fields?: Record<string, string>; request_id?: string }, status: number) {
     super(e.message);
-    this.name = "ApiRequestError";
+    this.name = "ApiError";
     this.code = e.code;
-    this.fields = e.fields;
-    this.request_id = e.request_id;
-    this.run_id = e.run_id;
+    this.fields = e.fields ?? {};
+    this.requestId = e.request_id ?? "";
     this.status = status;
   }
 }
@@ -37,110 +29,85 @@ let csrfToken: string | null = null;
 let csrfPending: Promise<string> | null = null;
 const unauthorizedListeners = new Set<() => void>();
 
-export function setCsrfToken(token: string | null): void {
-  csrfToken = token;
+/** Forget the CSRF token; the next mutation fetches the token of the current session. */
+export function resetCsrf(): void {
+  csrfToken = null;
 }
 
-/** The app shell subscribes here to drop the user and open the login page on 401. */
+/** The app layout reacts to a 401 (expired or revoked session) here. */
 export function onUnauthorized(listener: () => void): () => void {
   unauthorizedListeners.add(listener);
   return () => unauthorizedListeners.delete(listener);
 }
 
-/** Fetches a fresh CSRF token; call again after login (the secret changes with the session). */
-export async function refreshCsrf(signal?: AbortSignal): Promise<string> {
-  csrfPending ??= request<{ csrf_token: string }>("/auth/csrf", { signal })
-    .then((res) => {
-      const token = res?.data.csrf_token ?? "";
-      csrfToken = token;
-      return token;
-    })
-    .finally(() => {
-      csrfPending = null;
-    });
-  return csrfPending;
-}
-
-/** Name check, not instanceof: fetch may throw a DOMException from another realm (jsdom, workers). */
+/** Name check, not instanceof: fetch may throw a DOMException from another realm. */
 export function isAbortError(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { name?: unknown }).name === "AbortError";
 }
 
-function networkError(): ApiRequestError {
-  return new ApiRequestError(
-    { code: "NETWORK_ERROR", message: "Tidak dapat menghubungi server.", fields: {}, request_id: "" },
-    0,
-  );
+export const api = createClient<paths>({
+  baseUrl,
+  credentials: "same-origin",
+  headers: { Accept: "application/json" },
+  fetch: (request) => globalThis.fetch(request), // looked up per call, so test interceptors installed later apply
+});
+
+function refreshCsrf(): Promise<string> {
+  csrfPending ??= unwrap(api.GET("/auth/csrf"))
+    .then((res) => (csrfToken = res.data.csrf_token))
+    .finally(() => (csrfPending = null));
+  return csrfPending;
 }
 
-async function toError(res: Response): Promise<ApiRequestError> {
-  const requestId = res.headers.get("X-Request-ID") ?? "";
-  try {
-    const body = (await res.json()) as { error?: Partial<ApiError> };
-    const e = body.error;
-    if (e && typeof e.code === "string") {
-      return new ApiRequestError(
-        {
-          code: e.code,
-          message: e.message ?? "",
-          fields: e.fields ?? {},
-          request_id: e.request_id ?? requestId,
-          run_id: e.run_id,
-        },
-        res.status,
-      );
+// Endpoints whose 401 is an answer, not an expired session.
+const AUTH_PROBES = ["/auth/me", "/auth/login"];
+
+const session: Middleware = {
+  async onRequest({ request }) {
+    if (MUTATING.has(request.method)) {
+      request.headers.set("X-CSRF-Token", csrfToken ?? (await refreshCsrf()));
     }
-  } catch {
-    // fall through: non-JSON error body
+    return request;
+  },
+  onResponse({ request, response, schemaPath }) {
+    if (response.status === 401) {
+      csrfToken = null;
+      if (!AUTH_PROBES.includes(schemaPath)) unauthorizedListeners.forEach((l) => l());
+    } else if (response.status === 403 && MUTATING.has(request.method)) {
+      csrfToken = null; // a CSRF_REJECTED token is useless; refetch on the next mutation
+    }
+    return response;
+  },
+};
+api.use(session);
+
+type FetchResult<T> = { data?: T; error?: unknown; response: Response };
+
+function toError(body: unknown, res: Response): ApiError {
+  const e = (body as { error?: { code?: unknown } } | undefined)?.error;
+  if (e && typeof e.code === "string") {
+    return new ApiError(e as ConstructorParameters<typeof ApiError>[0], res.status);
   }
-  return new ApiRequestError(
-    { code: "INTERNAL_ERROR", message: "Respons server tidak dapat dibaca.", fields: {}, request_id: requestId },
+  return new ApiError(
+    { code: "INTERNAL_ERROR", message: "Respons server tidak dapat dibaca.", request_id: res.headers.get("X-Request-ID") ?? "" },
     res.status,
   );
 }
 
-export async function request<T>(
-  path: string,
-  options: RequestOptions = {},
-): Promise<ApiResponse<T> | undefined> {
-  const method = options.method ?? "GET";
-  const headers: Record<string, string> = { Accept: "application/json" };
-
-  if (MUTATING.has(method)) {
-    headers["X-CSRF-Token"] = csrfToken ?? (await refreshCsrf(options.signal));
-  }
-  let body: string | undefined;
-  if (options.body !== undefined) {
-    headers["Content-Type"] = "application/json";
-    body = JSON.stringify(options.body);
-  }
-
-  let res: Response;
+/** Resolves to the response body (the {data} envelope; undefined for 204) or throws ApiError. */
+export async function unwrap<T>(call: Promise<FetchResult<T>>): Promise<T> {
+  let result: FetchResult<T>;
   try {
-    res = await fetch(API_BASE + path, { method, headers, body, signal: options.signal, credentials: "same-origin" });
+    result = await call;
   } catch (err) {
-    if (isAbortError(err)) throw err; // caller cancelled
-    throw networkError();
+    if (isAbortError(err)) throw err;
+    throw new ApiError({ code: "NETWORK_ERROR", message: "Tidak dapat menghubungi server." }, 0);
   }
+  if (!result.response.ok) throw toError(result.error, result.response);
+  return result.data as T;
+}
 
-  if (!res.ok) {
-    const error = await toError(res);
-    if (res.status === 401) {
-      csrfToken = null;
-      unauthorizedListeners.forEach((l) => l());
-    } else if (error.code === "CSRF_REJECTED") {
-      csrfToken = null; // next mutation fetches a new token
-    }
-    throw error;
-  }
-  if (res.status === 204) return undefined;
-
-  try {
-    return (await res.json()) as ApiResponse<T>;
-  } catch {
-    throw new ApiRequestError(
-      { code: "INTERNAL_ERROR", message: "Respons server tidak dapat dibaca.", fields: {}, request_id: res.headers.get("X-Request-ID") ?? "" },
-      res.status,
-    );
-  }
+/** 4xx answers are final: retrying cannot change them. */
+export function isClientError(err: unknown): boolean {
+  return err instanceof ApiError && err.status >= 400 && err.status < 500;
 }

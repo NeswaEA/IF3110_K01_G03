@@ -2,9 +2,9 @@ import { http, HttpResponse, type RequestHandler } from "msw";
 import csrf from "../../../tests/fixtures/api/auth_csrf.json";
 import authenticated from "../../../tests/fixtures/api/auth_me_edit.json";
 import unauthenticated from "../../../tests/fixtures/api/auth_error_unauthenticated.json";
-import type { CurrentUser } from "../api/types";
+import type { Schemas } from "../api/client";
 
-export function createAuthHandlers(user: CurrentUser | null = authenticated.data): RequestHandler[] {
+export function createAuthHandlers(user: Schemas["CurrentUser"] | null = authenticated.data): RequestHandler[] {
   return [
     http.get("*/api/v1/auth/csrf", () =>
       HttpResponse.json(csrf, { headers: { "X-Request-ID": "req-auth-csrf" } }),

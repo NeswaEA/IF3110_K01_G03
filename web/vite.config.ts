@@ -1,23 +1,20 @@
+import { fileURLToPath, URL } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
-// Pages are rendered by the Go server; Vite only bundles one script per page.
-// The manifest lets the server resolve each entry name to its hashed files.
+const api = process.env.VITE_DEV_API ?? "http://localhost:8080";
+
 export default defineConfig({
-  plugins: [react()],
-  build: {
-    manifest: true,
-    rolldownOptions: {
-      input: {
-        layout: "src/pages/layout.ts",
-        login: "src/pages/login.ts",
-        users: "src/pages/users.ts",
-        groups: "src/pages/groups.ts",
-        members: "src/pages/members.ts",
-        grants: "src/pages/grants.ts",
-        connections: "src/pages/connections.tsx",
-        schemadiff: "src/pages/schemadiff.tsx",
-      },
+  // the router plugin must run before React to generate src/routeTree.gen.ts
+  plugins: [tanstackRouter({ target: "react", autoCodeSplitting: true }), react(), tailwindcss()],
+  resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
+  server: {
+    proxy: {
+      // The API checks Origin against APP_ORIGIN on mutations; present the dev
+      // server's requests as coming from the API origin.
+      "/api": { target: api, configure: (proxy) => proxy.on("proxyReq", (req) => req.setHeader("origin", api)) },
     },
   },
   test: {

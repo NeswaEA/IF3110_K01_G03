@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/knip@6.44.2/schema.json",
+  "entry": ["src/routes/**/*.tsx"],
+  "project": ["src/**/*.{ts,tsx,css}"],
+  "ignoreIssues": { "src/components/ui/**": ["exports", "types"] }
+}

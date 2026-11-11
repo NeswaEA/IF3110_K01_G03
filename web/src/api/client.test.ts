@@ -1,174 +1,85 @@
 import { http, HttpResponse } from "msw";
-import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiRequestError, onUnauthorized, request, setCsrfToken } from "./client";
+import { describe, expect, it, vi } from "vitest";
+import csrf from "../../../tests/fixtures/api/auth_csrf.json";
+import { server } from "../test-utils";
+import { api, ApiError, onUnauthorized, unwrap } from "./client";
 
-const B = "http://localhost/api/v1";
-const server = setupServer();
+const API = "*/api/v1";
 
-beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
-beforeEach(() => setCsrfToken(null));
-
-const unauthenticated = () =>
-  HttpResponse.json(
-    { error: { code: "UNAUTHENTICATED", message: "x", fields: {}, request_id: "r" } },
-    { status: 401 },
-  );
-
-describe("request", () => {
-  it("returns the untouched envelope for GET JSON", async () => {
+describe("api client", () => {
+  it("adds the in-memory CSRF token to mutations only", async () => {
+    const seen: Record<string, string | null> = {};
     server.use(
-      http.get(`${B}/databases`, () =>
-        HttpResponse.json({ data: [{ id: "a" }], page: { limit: 50, offset: 0, has_more: false } }),
-      ),
+      http.get(`${API}/databases`, ({ request }) => {
+        seen.get = request.headers.get("X-CSRF-Token");
+        return HttpResponse.json({ data: [], page: { limit: 50, offset: 0, has_more: false } });
+      }),
+      http.post(`${API}/admin/connections/:id/test`, ({ request }) => {
+        seen.post = request.headers.get("X-CSRF-Token");
+        return HttpResponse.json({ data: { reachable: true, latency_ms: 1, capabilities: {} } });
+      }),
     );
-    const res = await request<{ id: string }[]>("/databases");
-    expect(res).toEqual({ data: [{ id: "a" }], page: { limit: 50, offset: 0, has_more: false } });
+    await unwrap(api.GET("/databases"));
+    await unwrap(api.POST("/admin/connections/{id}/test", { params: { path: { id: "x" } } }));
+    expect(seen).toEqual({ get: null, post: csrf.data.csrf_token });
   });
 
   it("returns undefined for 204", async () => {
-    setCsrfToken("t");
-    server.use(http.delete(`${B}/x`, () => new HttpResponse(null, { status: 204 })));
-    expect(await request("/x", { method: "DELETE" })).toBeUndefined();
+    server.use(http.delete(`${API}/admin/connections/:id`, () => new HttpResponse(null, { status: 204 })));
+    await expect(unwrap(api.DELETE("/admin/connections/{id}", { params: { path: { id: "x" } } }))).resolves.toBeUndefined();
   });
 
-  it("throws the ApiError shape, including run_id", async () => {
+  it("turns the error envelope into ApiError", async () => {
     server.use(
-      http.get(`${B}/boom`, () =>
+      http.get(`${API}/databases`, () =>
         HttpResponse.json(
-          {
-            error: {
-              code: "SQL_EXECUTION_FAILED",
-              message: "gagal",
-              fields: { sql: "x" },
-              request_id: "req-1",
-              run_id: "r1",
-            },
-          },
-          { status: 422 },
+          { error: { code: "INVALID_REQUEST", message: "Parameter tidak valid.", fields: { limit: "terlalu besar" }, request_id: "req-1" } },
+          { status: 400 },
         ),
       ),
     );
-    const err = await request("/boom").catch((e) => e);
-    expect(err).toBeInstanceOf(ApiRequestError);
-    expect(err).toMatchObject({
-      code: "SQL_EXECUTION_FAILED",
-      fields: { sql: "x" },
-      request_id: "req-1",
-      run_id: "r1",
-      status: 422,
-    });
+    const err = await unwrap(api.GET("/databases")).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ code: "INVALID_REQUEST", status: 400, fields: { limit: "terlalu besar" }, requestId: "req-1" });
   });
 
-  it("maps a non-JSON error body to INTERNAL_ERROR with the request id header", async () => {
-    server.use(
-      http.get(
-        `${B}/html`,
-        () => new HttpResponse("<html>", { status: 502, headers: { "X-Request-ID": "req-2" } }),
-      ),
-    );
-    await expect(request("/html")).rejects.toMatchObject({
-      code: "INTERNAL_ERROR",
-      request_id: "req-2",
-      status: 502,
-    });
-  });
+  it("reports NETWORK_ERROR when the server cannot be reached, but lets aborts through", async () => {
+    server.use(http.get(`${API}/databases`, () => HttpResponse.error()));
+    await expect(unwrap(api.GET("/databases"))).rejects.toMatchObject({ code: "NETWORK_ERROR", status: 0 });
 
-  it("uses NETWORK_ERROR only for transport failures", async () => {
-    server.use(http.get(`${B}/down`, () => HttpResponse.error()));
-    await expect(request("/down")).rejects.toMatchObject({ code: "NETWORK_ERROR", status: 0 });
-  });
-
-  it("rethrows an aborted request as AbortError", async () => {
-    server.use(
-      http.get(`${B}/slow`, async () => {
-        await new Promise((r) => setTimeout(r, 200));
-        return HttpResponse.json({ data: 1 });
-      }),
-    );
+    server.use(http.get(`${API}/databases`, () => new Promise(() => {})));
     const ctl = new AbortController();
-    const p = request("/slow", { signal: ctl.signal });
+    const pending = unwrap(api.GET("/databases", { signal: ctl.signal }));
     ctl.abort();
-    await expect(p).rejects.toMatchObject({ name: "AbortError" });
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 
-  it("fetches a CSRF token lazily and sends it on mutations", async () => {
-    let seen: Headers | undefined;
-    server.use(
-      http.get(`${B}/auth/csrf`, () => HttpResponse.json({ data: { csrf_token: "tok" } })),
-      http.post(`${B}/databases/1/schema-diff`, ({ request: r }) => {
-        seen = r.headers;
-        return HttpResponse.json({ data: { ok: true } });
-      }),
-    );
-    await request("/databases/1/schema-diff", {
-      method: "POST",
-      body: { schema: "public" },
-    });
-    expect(seen?.get("x-csrf-token")).toBe("tok");
-    expect(seen?.get("content-type")).toBe("application/json");
-  });
-
-  it("does not send a CSRF token on GET", async () => {
-    let token: string | null = "unset";
-    server.use(
-      http.get(`${B}/g`, ({ request: r }) => {
-        token = r.headers.get("x-csrf-token");
-        return HttpResponse.json({ data: 1 });
-      }),
-    );
-    setCsrfToken("tok");
-    await request("/g");
-    expect(token).toBeNull();
-  });
-
-  it("drops the CSRF token and notifies listeners on 401", async () => {
+  it("signals 401 from feature endpoints, not from the session probes", async () => {
     const listener = vi.fn();
     const off = onUnauthorized(listener);
-    setCsrfToken("old");
-    server.use(http.get(`${B}/auth/me`, unauthenticated));
-    await expect(request("/auth/me")).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
-    expect(listener).toHaveBeenCalledTimes(1);
+    const unauthenticated = () =>
+      HttpResponse.json({ error: { code: "UNAUTHENTICATED", message: "Silakan login.", fields: {}, request_id: "r" } }, { status: 401 });
+    server.use(http.get(`${API}/auth/me`, unauthenticated), http.get(`${API}/databases`, unauthenticated));
+    await unwrap(api.GET("/auth/me")).catch(() => {});
+    expect(listener).not.toHaveBeenCalled();
+    await unwrap(api.GET("/databases")).catch(() => {});
+    expect(listener).toHaveBeenCalledOnce();
     off();
-
-    // the token was dropped: the next mutation must fetch a new one
-    let fetched = 0;
-    server.use(
-      http.get(`${B}/auth/csrf`, () => {
-        fetched++;
-        return HttpResponse.json({ data: { csrf_token: "new" } });
-      }),
-      http.post(`${B}/p`, () => HttpResponse.json({ data: 1 })),
-    );
-    await request("/p", { method: "POST", body: {} });
-    expect(fetched).toBe(1);
   });
 
-  it("clears the CSRF token after CSRF_REJECTED so the next call refetches", async () => {
-    setCsrfToken("stale");
+  it("fetches a new CSRF token after a rejected one", async () => {
+    let calls = 0;
     server.use(
-      http.post(`${B}/p`, () =>
-        HttpResponse.json(
-          { error: { code: "CSRF_REJECTED", message: "x", fields: {}, request_id: "r" } },
-          { status: 403 },
-        ),
+      http.get(`${API}/auth/csrf`, () => HttpResponse.json({ data: { csrf_token: `t${++calls}` } })),
+      http.post(`${API}/admin/connections/:id/test`, ({ request }) =>
+        request.headers.get("X-CSRF-Token") === "t1"
+          ? HttpResponse.json({ error: { code: "CSRF_REJECTED", message: "x", fields: {}, request_id: "r" } }, { status: 403 })
+          : HttpResponse.json({ data: { reachable: true, latency_ms: 1, capabilities: {} } }),
       ),
     );
-    await expect(request("/p", { method: "POST", body: {} })).rejects.toMatchObject({
-      code: "CSRF_REJECTED",
-    });
-
-    let fetched = 0;
-    server.use(
-      http.get(`${B}/auth/csrf`, () => {
-        fetched++;
-        return HttpResponse.json({ data: { csrf_token: "fresh" } });
-      }),
-      http.post(`${B}/p`, () => HttpResponse.json({ data: 1 })),
-    );
-    await request("/p", { method: "POST", body: {} });
-    expect(fetched).toBe(1);
+    const test = () => unwrap(api.POST("/admin/connections/{id}/test", { params: { path: { id: "x" } } }));
+    await expect(test()).rejects.toMatchObject({ code: "CSRF_REJECTED" });
+    await expect(test()).resolves.toBeDefined();
+    expect(calls).toBe(2);
   });
 });
