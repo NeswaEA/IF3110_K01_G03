@@ -81,6 +81,7 @@ jobs:
           go mod tidy
           git diff --exit-code -- go.mod go.sum || { echo "go.mod/go.sum are not tidy; run go mod tidy" >&2; exit 1; }
           python3 -m unittest discover -s ../scripts/ci -p 'test_*.py'
+          sh ../scripts/ci/check-removed.sh ..
       - name: Verify PostgreSQL demo fixture initialization and preservation
         if: matrix.suite == 'required'
         env:
