@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build the app image, apply the metadata migrations and start the app at http://localhost:8080.
+# Build the app image, apply the metadata migrations and start the API (http://localhost:8080) and two workers.
 # Needs .env (scripts/init-env.sh) and the databases (scripts/dev-up.sh).
 # Usage: scripts/app-up.sh        build, migrate, start
 #        scripts/app-up.sh seed   also load the demo users, groups, grants and connections,
@@ -30,5 +30,5 @@ if [ "${1:-}" = seed ]; then
     -v "$src/tests/fixtures/sqlite:/fixture:ro" -v "$src/scripts/seed-sqlite.mjs:/seed-sqlite.mjs:ro" \
     "$node_image" node /seed-sqlite.mjs
 fi
-compose up -d --wait backend
-echo "app is running at http://localhost:8080"
+compose up -d --wait backend worker
+echo "app is running at http://localhost:8080 with $(compose ps -q worker | wc -l | tr -d ' ') workers"

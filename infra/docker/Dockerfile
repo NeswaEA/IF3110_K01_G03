@@ -23,6 +23,7 @@ COPY backend/go.mod backend/go.sum* ./
 RUN go mod download
 COPY backend/ ./
 RUN go build -o /out/server ./cmd/server \
+ && go build -o /out/worker ./cmd/worker \
  && go build -o /out/migrate ./cmd/migrate \
  && go build -o /out/seed ./cmd/seed
 
@@ -37,6 +38,7 @@ ENV ATLAS_BIN=/usr/local/bin/atlas
 COPY --from=atlas /out/atlas /usr/local/bin/atlas
 COPY --from=atlas /src/LICENSE /usr/share/doc/atlas/LICENSE
 COPY --from=backend /out/server /app/server
+COPY --from=backend /out/worker /app/worker
 COPY --from=backend /out/migrate /app/migrate
 COPY --from=backend /out/seed /app/seed
 COPY --from=web /repo/web/dist /app/web/dist

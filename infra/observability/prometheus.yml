@@ -1,0 +1,18 @@
+# Scrapes the API and every worker replica on the Compose network (/metrics
+# is not published to the host). k6 and Tempo's metrics generator push here
+# through remote write.
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: api
+    static_configs:
+      - targets: ["backend:9464"]
+  - job_name: worker
+    # one target per replica: the service name resolves to every container
+    dns_sd_configs:
+      - names: ["worker"]
+        type: A
+        port: 9464
+        refresh_interval: 15s

@@ -1,0 +1,441 @@
+{
+  "uid": "migration-queue",
+  "title": "Migration queue",
+  "description": "Antrian job migration, lock, durasi, batch, dan retry. Klik exemplar untuk membuka trace.",
+  "tags": [
+    "dbplatform"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "title": "Jobs aktif per status",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (status) (migration_jobs)",
+          "legendFormat": "{{status}}",
+          "exemplar": false,
+          "refId": "{{status}}"
+        }
+      ],
+      "description": "Dari metadata (diekspos API): queued, held, running, outcome_unknown.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1
+    },
+    {
+      "title": "Job selesai per status",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (status) (rate(migration_jobs_finished_total[5m])) * 60",
+          "legendFormat": "{{status}}",
+          "exemplar": false,
+          "refId": "{{status}}"
+        }
+      ],
+      "description": "Job per menit.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2
+    },
+    {
+      "title": "Queue wait (enqueue sampai claim pertama)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(migration_queue_wait_seconds_bucket[5m])))",
+          "legendFormat": "p50",
+          "exemplar": true,
+          "refId": "p50"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(migration_queue_wait_seconds_bucket[5m])))",
+          "legendFormat": "p95",
+          "exemplar": true,
+          "refId": "p95"
+        }
+      ],
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3
+    },
+    {
+      "title": "Lock wait",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le,driver) (rate(migration_lock_wait_seconds_bucket[5m])))",
+          "legendFormat": "p50 {{driver}}",
+          "exemplar": true,
+          "refId": "p50 {{driver}}"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le,driver) (rate(migration_lock_wait_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{driver}}",
+          "exemplar": true,
+          "refId": "p95 {{driver}}"
+        }
+      ],
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4
+    },
+    {
+      "title": "Durasi migration",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le,action) (rate(migration_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50 {{action}}",
+          "exemplar": true,
+          "refId": "p50 {{action}}"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le,action) (rate(migration_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{action}}",
+          "exemplar": true,
+          "refId": "p95 {{action}}"
+        }
+      ],
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 0,
+        "y": 16
+      },
+      "id": 5
+    },
+    {
+      "title": "Hasil pengiriman pesan",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (reason) (rate(migration_job_deliveries_total[5m]))",
+          "legendFormat": "{{reason}}",
+          "exemplar": false,
+          "refId": "{{reason}}"
+        }
+      ],
+      "description": "done, retry, lock_busy, ordering, held, duplicate.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "w": 12,
+        "h": 8,
+        "x": 12,
+        "y": 16
+      },
+      "id": 6
+    },
+    {
+      "title": "Batch per detik",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (direction, status) (rate(migration_batches_total[5m]))",
+          "legendFormat": "{{direction}} {{status}}",
+          "exemplar": false,
+          "refId": "{{direction}} {{stat"
+        }
+      ],
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "w": 8,
+        "h": 8,
+        "x": 0,
+        "y": 24
+      },
+      "id": 7
+    },
+    {
+      "title": "Row per detik",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (direction) (rate(migration_rows_total[5m]))",
+          "legendFormat": "{{direction}}",
+          "exemplar": false,
+          "refId": "{{direction}}"
+        }
+      ],
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "w": 8,
+        "h": 8,
+        "x": 8,
+        "y": 24
+      },
+      "id": 8
+    },
+    {
+      "title": "Retry terjadwal (5 menit)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (action, mode) (increase(migration_job_retries_total[5m]))",
+          "legendFormat": "{{action}} {{mode}}",
+          "exemplar": false,
+          "refId": "{{action}} {{mode}}"
+        }
+      ],
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "gridPos": {
+        "w": 8,
+        "h": 8,
+        "x": 16,
+        "y": 24
+      },
+      "id": 9
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

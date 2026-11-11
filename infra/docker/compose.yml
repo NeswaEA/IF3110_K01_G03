@@ -1,7 +1,7 @@
 # Run from the repository root:
 #   scripts/init-env.sh     # or copy .env.example to .env and fill the secrets
 #   docker compose --env-file .env -f infra/docker/compose.yml up -d metadata-postgres target-postgres nats
-# The app container (profile "app") is built, migrated and started by scripts/app-up.sh.
+# The app containers (profile "app": API and two workers) are built, migrated and started by scripts/app-up.sh.
 # Metadata and target databases are separate servers with separate credentials.
 name: if3110
 
@@ -39,6 +39,8 @@ services:
       # roles + reserved schema first, then the shared demo fixture (see tests/fixtures/postgres)
       - ../postgres/init/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
       - ../../tests/fixtures/postgres/demo.sql:/docker-entrypoint-initdb.d/10-demo.sql:ro
+      # demo_big (batch dataset) and load_1..load_4 (k6) with the same roles as demo
+      - ../postgres/init/20-extra-dbs.sh:/docker-entrypoint-initdb.d/20-extra-dbs.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U target_admin -d demo"]
       interval: 5s
@@ -59,25 +61,129 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile
+    image: if3110-app:local
     env_file: ../../.env
-    environment:
+    environment: &app-env
       HTTP_ADDR: ":8080"
       SQLITE_TARGET_DIR: /data/sqlite
       WEB_DIST_DIR: /app/web/dist
-      # .env points at the host port; inside the Compose network the metadata server is metadata-postgres:5432
+      # .env points at the host ports; inside the Compose network the services use their names
       METADATA_DATABASE_URL: postgres://metadata_owner:${METADATA_DB_PASSWORD}@metadata-postgres:5432/metadata?sslmode=disable
+      NATS_URL: nats://nats:4222
+      OTEL_SERVICE_NAME: dbplatform-api
+      # console traces by default; scripts/obs-up.sh switches traces and logs to the collector
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-console}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-none}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      # /metrics listens on the Compose network only (no host port)
+      OTEL_EXPORTER_PROMETHEUS_HOST: 0.0.0.0
+      OTEL_EXPORTER_PROMETHEUS_PORT: "9464"
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
       - sqlite-data:/data/sqlite
-    depends_on:
+    depends_on: &app-deps
       metadata-postgres:
         condition: service_healthy
       target-postgres:
         condition: service_healthy
+      nats:
+        condition: service_started
+
+  # Migration workers: same image, two replicas competing for jobs on the queue.
+  worker:
+    profiles: ["app"]
+    image: if3110-app:local
+    entrypoint: ["/app/worker"]
+    env_file: ../../.env
+    environment:
+      <<: *app-env
+      OTEL_SERVICE_NAME: dbplatform-worker
+    deploy:
+      replicas: 2
+    # SIGTERM lets a running batch finish before the worker exits
+    stop_grace_period: 40s
+    volumes:
+      - sqlite-data:/data/sqlite
+    depends_on:
+      <<: *app-deps
+      backend:
+        condition: service_started
+
+  # --- observability (profile "observability", scripts/obs-up.sh) ---
+  otel-collector:
+    profiles: ["observability"]
+    image: otel/opentelemetry-collector-contrib:0.165.0@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    depends_on: [loki, tempo]
+
+  loki:
+    profiles: ["observability"]
+    image: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - loki-data:/loki
+
+  tempo:
+    profiles: ["observability"]
+    image: grafana/tempo:3.1.1@sha256:64e2fbd56d9c2b3412a4b430a58ea59e91a670b1e75f920a0c702213ad145044
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ../observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+
+  prometheus:
+    profiles: ["observability", "load"]
+    image: prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # k6 and Tempo's metrics generator push here; exemplars link metrics to traces
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+  grafana:
+    profiles: ["observability"]
+    image: grafana/grafana:13.2.5@sha256:9f7aa1e1e3246aade5792d35a738049f7f32f89cd51d1956cf426a4e86268a84
+    environment:
+      # local-only port: anonymous viewers may open dashboards and Explore
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_VIEWERS_CAN_EDIT: "true"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/migration-queue.json
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on: [prometheus, loki, tempo]
+
+  # --- stress test (profile "load", scripts/load-test.sh) ---
+  k6:
+    profiles: ["load"]
+    image: grafana/k6:2.3.0@sha256:2dd4756ec6e14e62778916e1eb850108e4b499304c02df56760fa0bdb0fba0b8
+    environment:
+      BASE_URL: http://backend:8080
+      K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+      K6_PROMETHEUS_RW_TREND_STATS: p(50),p(95),max
+    volumes:
+      - ../../tests/load:/scripts:ro
 
 volumes:
   metadata-data:
   target-data:
   sqlite-data:
   nats-data:
+  loki-data:
+  tempo-data:
+  prometheus-data:
+  grafana-data:
