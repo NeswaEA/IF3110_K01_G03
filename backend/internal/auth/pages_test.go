@@ -30,11 +30,6 @@ func TestPageAuthentication(t *testing.T) {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	mux.Handle("GET /protected", h.RequirePage(page))
-	renderer, err := webui.NewRenderer(webui.Assets{"layout": "", "login": ""})
-	if err != nil {
-		t.Fatal(err)
-	}
-	mux.Handle("/", h.OptionalPage(renderer.NotFound(auth.PrincipalFromContext)))
 	request := func(path, token string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("GET", path, nil)
 		if token != "" {
@@ -59,21 +54,11 @@ func TestPageAuthentication(t *testing.T) {
 	if w.Code != 401 || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") {
 		t.Fatal("API no longer returns JSON 401")
 	}
-	w = request("/unknown", "")
-	if w.Code != 404 || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/html") || !strings.Contains(w.Body.String(), `class="login-page"`) {
-		t.Fatal("unknown page must return the anonymous HTML 404")
-	}
 	prelogin := f.create(t, "")
 	if w := request("/protected", prelogin.Token); w.Code != 302 {
 		t.Fatal("anonymous session accessed protected page")
 	}
-	if w := request("/unknown", prelogin.Token); w.Code != 404 || !strings.Contains(w.Body.String(), `class="login-page"`) {
-		t.Fatal("pre-login session got the signed-in 404")
-	}
 	session := f.create(t, sessionUser)
-	if w := request("/unknown", session.Token); w.Code != 404 || !strings.Contains(w.Body.String(), `class="app-shell"`) || !strings.Contains(w.Body.String(), "Kembali ke daftar database") {
-		t.Fatal("signed-in visitor lost the layout on an unknown page")
-	}
 	w = request("/protected", session.Token)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "editor") {
 		t.Fatal("authenticated page unavailable")

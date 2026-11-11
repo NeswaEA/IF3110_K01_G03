@@ -278,8 +278,8 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/grants?database=" + databaseID, "", admin, 200, `data-operation="update"`},
 		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/grants?databases_offset=bad", "", admin, 400, "Permintaan tidak valid"},
 		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000099/grants", "", admin, 404, "Halaman tidak ditemukan"},
-		{"GET", "/unknown", "", loginState{}, 404, "Halaman tidak ditemukan"},
-		{"GET", "/assets/missing.js", "", view, 404, "Halaman tidak ditemukan"},
+		{"GET", "/unknown", "", loginState{}, 200, `id="root"`},
+		{"GET", "/assets/missing.js", "", view, 404, "404 page not found"},
 	} {
 		w := request(tc.method, tc.path, tc.body, tc.who.cookie, tc.who.csrf)
 		if w.Code != tc.status || !strings.Contains(w.Body.String(), tc.contains) {

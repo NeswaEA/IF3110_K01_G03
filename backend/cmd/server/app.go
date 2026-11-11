@@ -88,7 +88,7 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	if err != nil {
 		return nil, nil, err
 	}
-	frontend, closeFrontend, err := newFrontend(runtime.WebDir, authHandler.OptionalPage(renderer.NotFound(auth.PrincipalFromContext)))
+	frontend, closeFrontend, err := newSPA(runtime.WebDir)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -130,5 +130,5 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	mux.Handle("/api", secured)
 	webui.RegisterRoutes(mux, webui.NewPages(renderer, policy, auth.PrincipalFromContext, auth.RedirectToLogin, connectionService, viewService, userService, groupService), authHandler.RequirePage)
 	mux.Handle("/", frontend)
-	return mux, cleanup, nil
+	return securityHeaders(mux), cleanup, nil
 }

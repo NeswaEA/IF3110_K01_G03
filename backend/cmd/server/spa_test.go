@@ -1,7 +1,6 @@
 package main
 
 import (
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -27,7 +26,9 @@ func testWeb(t *testing.T) string {
 		`"src/pages/grants.ts": {"file": "assets/grants.js", "name": "grants", "isEntry": true},` +
 		`"src/pages/connections.ts": {"file": "assets/connections.js", "name": "connections", "isEntry": true},` +
 		`"src/pages/schemadiff.tsx": {"file": "assets/schemadiff.js", "name": "schemadiff", "isEntry": true}}`
-	for name, body := range map[string]string{".vite/manifest.json": manifest, "assets/app.js": "console.log('loaded')", ".secret": "private"} {
+	files := map[string]string{".vite/manifest.json": manifest, "assets/app.js": "console.log('loaded')", ".secret": "private",
+		"index.html": `<!doctype html><div id="root"></div>`, "favicon.svg": "<svg/>"}
+	for name, body := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -35,7 +36,7 @@ func testWeb(t *testing.T) string {
 	return dir
 }
 
-func TestFrontendRoutesAndIsolation(t *testing.T) {
+func TestSPARoutesAndIsolation(t *testing.T) {
 	dir := testWeb(t)
 	secret := filepath.Join(t.TempDir(), "private.txt")
 	if err := os.WriteFile(secret, []byte("private"), 0600); err != nil {
@@ -44,38 +45,55 @@ func TestFrontendRoutesAndIsolation(t *testing.T) {
 	if err := os.Symlink(secret, filepath.Join(dir, "outside.txt")); err != nil {
 		t.Fatal(err)
 	}
-	notFound := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "missing page", http.StatusNotFound) })
-	h, close, err := newFrontend(dir, notFound)
+	spa, close, err := newSPA(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer close()
+	h := securityHeaders(spa)
+	const immutable, revalidate = "public, max-age=31536000, immutable", "no-cache"
 	for _, tc := range []struct {
 		method, path, accept string
 		status               int
-		contains             string
+		contains, cache      string
 	}{
-		{"GET", "/assets/app.js", "", 200, "loaded"}, {"HEAD", "/assets/app.js", "", 200, ""},
-		{"GET", "/", "text/html", 404, "missing page"}, {"GET", "/databases/example", "text/html", 404, "missing page"},
-		{"GET", "/assets/missing.js", "text/html", 404, "missing page"}, {"GET", "/assets/", "text/html", 404, "missing page"},
-		{"GET", "/assets", "text/html", 404, "missing page"}, {"GET", "/.vite/manifest.json", "", 404, "missing page"},
-		{"GET", "/.secret", "", 404, ""}, {"GET", "/outside.txt", "", 404, ""},
-		{"GET", "/../private.txt", "", 404, ""}, {"GET", "/unknown", "application/json", 404, ""},
-		{"POST", "/", "text/html", 405, ""},
+		{"GET", "/assets/app.js", "", 200, "loaded", immutable}, {"HEAD", "/assets/app.js", "", 200, "", immutable},
+		{"GET", "/favicon.svg", "", 200, "<svg/>", revalidate},
+		{"GET", "/", "text/html", 200, `id="root"`, revalidate},
+		{"GET", "/databases/example?tab=data", "text/html,application/xhtml+xml", 200, `id="root"`, revalidate},
+		{"HEAD", "/admin/users", "text/html", 200, "", revalidate},
+		{"GET", "/assets/missing.js", "text/html", 404, "404 page not found", ""}, {"GET", "/assets/", "text/html", 404, "", ""},
+		{"GET", "/assets", "text/html", 404, "", ""}, {"GET", "/healthz", "text/html", 404, "", ""},
+		{"GET", "/.vite/manifest.json", "text/html", 200, `id="root"`, revalidate},
+		{"GET", "/.secret", "", 404, "", ""}, {"GET", "/outside.txt", "", 404, "", ""},
+		{"GET", "/unknown", "application/json", 404, "", ""},
+		{"GET", "/api/v1/unknown", "text/html", 404, `"code":"NOT_FOUND"`, ""},
+		{"POST", "/", "text/html", 405, "", ""},
 	} {
 		r := httptest.NewRequest(tc.method, tc.path, nil)
 		r.Header.Set("Accept", tc.accept)
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
-		if w.Code != tc.status || !strings.Contains(w.Body.String(), tc.contains) || strings.Contains(w.Body.String(), "private") {
-			t.Fatalf("%s %s returned %d", tc.method, tc.path, w.Code)
+		if w.Code != tc.status || !strings.Contains(w.Body.String(), tc.contains) || strings.Contains(w.Body.String(), "private") ||
+			w.Header().Get("Cache-Control") != tc.cache {
+			t.Fatalf("%s %s returned %d %q %q", tc.method, tc.path, w.Code, w.Header().Get("Cache-Control"), w.Body.String())
 		}
 		if tc.method == "HEAD" && w.Body.Len() != 0 {
 			t.Fatal("HEAD returned a body")
 		}
+		if w.Header().Get("Content-Security-Policy") != contentSecurityPolicy || w.Header().Get("X-Content-Type-Options") != "nosniff" ||
+			w.Header().Get("Referrer-Policy") != "same-origin" {
+			t.Fatalf("%s %s lacks the security headers", tc.method, tc.path)
+		}
 	}
-	if _, _, err := newFrontend(filepath.Join(dir, "absent"), notFound); err == nil {
+	if _, _, err := newSPA(filepath.Join(dir, "absent")); err == nil {
 		t.Fatal("missing build accepted")
+	}
+	if err := os.Remove(filepath.Join(dir, "index.html")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := newSPA(dir); err == nil {
+		t.Fatal("build without index.html accepted")
 	}
 }
 
