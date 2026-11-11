@@ -12,11 +12,10 @@ import (
 func TestGroupLeaderAssignment(t *testing.T) {
 	f := newUserFixture(t)
 	svc := groupService(f)
-	group, err := svc.Get(t.Context(), adminPrincipal, viewGroup)
-	if err != nil || group.Leader != nil {
-		t.Fatal("group without a leader must report none", group, err)
+	if group := groupByID(t, svc, viewGroup); group.Leader != nil {
+		t.Fatal("group without a leader must report none", group)
 	}
-	group, err = svc.SetLeader(t.Context(), adminPrincipal, viewGroup, testkit.UserView)
+	group, err := svc.SetLeader(t.Context(), adminPrincipal, viewGroup, testkit.UserView)
 	if err != nil || group.Leader == nil || group.Leader.ID != testkit.UserView || group.Leader.Username != "viewer" {
 		t.Fatal("leader was not assigned", group, err)
 	}
@@ -44,9 +43,8 @@ func TestGroupLeaderMustBeActiveMember(t *testing.T) {
 	requireCode(t, err, "NOT_FOUND")
 	_, err = svc.SetLeader(t.Context(), contracts.Principal{UserID: testkit.UserEdit}, viewGroup, testkit.UserEdit)
 	requireCode(t, err, "FORBIDDEN")
-	group, err := svc.Get(t.Context(), adminPrincipal, viewGroup)
-	if err != nil || group.Leader != nil {
-		t.Fatal("rejected assignment stored a leader", err)
+	if group := groupByID(t, svc, viewGroup); group.Leader != nil {
+		t.Fatal("rejected assignment stored a leader")
 	}
 }
 

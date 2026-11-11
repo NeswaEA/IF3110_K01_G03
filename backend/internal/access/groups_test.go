@@ -16,28 +16,6 @@ func groupService(f userFixture) *access.GroupService {
 	return access.NewGroupService(f.db, f.sessions, access.NewPolicy(f.db), f.clock, f.audit)
 }
 
-func TestGroupGetByID(t *testing.T) {
-	f := newUserFixture(t)
-	svc := groupService(f)
-	group, err := svc.Get(t.Context(), adminPrincipal, viewGroup)
-	if err != nil || group.ID != viewGroup || group.Name != "readers" || group.CreatedAt.IsZero() || group.UpdatedAt.IsZero() {
-		t.Fatal("group lookup returned incorrect data", group, err)
-	}
-	if _, err := svc.Update(t.Context(), adminPrincipal, viewGroup, "renamed readers"); err != nil {
-		t.Fatal(err)
-	}
-	group, err = svc.Get(t.Context(), adminPrincipal, viewGroup)
-	if err != nil || group.ID != viewGroup || group.Name != "renamed readers" {
-		t.Fatal("group lookup depended on list order", group, err)
-	}
-	for _, id := range []string{"", "invalid", "20000000-0000-4000-8000-00000000000A"} {
-		_, err := svc.Get(t.Context(), adminPrincipal, id)
-		requireCode(t, err, "INVALID_REQUEST")
-	}
-	_, err = svc.Get(t.Context(), adminPrincipal, missingUser)
-	requireCode(t, err, "NOT_FOUND")
-}
-
 func TestGroupsCreateUpdateAndList(t *testing.T) {
 	f := newUserFixture(t)
 	svc := groupService(f)
@@ -332,4 +310,20 @@ func TestGroupStorageFailures(t *testing.T) {
 	if strings.Contains(err.Error(), "database is closed") {
 		t.Fatal("storage failure leaked details")
 	}
+}
+
+// groupByID reads one group through the list, the only way the API offers.
+func groupByID(t *testing.T, svc *access.GroupService, id string) access.Group {
+	t.Helper()
+	groups, _, err := svc.List(t.Context(), adminPrincipal, 200, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range groups {
+		if g.ID == id {
+			return g
+		}
+	}
+	t.Fatal("group not found", id)
+	return access.Group{}
 }

@@ -221,36 +221,38 @@ Setiap job backend memakai PostgreSQL 17.11 metadata dan target yang terpisah, d
 
 ## Arsitektur proyek
 
-- **Satu backend.** Go menyajikan halaman HTML (`backend/internal/webui`), API JSON di `/api/v1`, dan asset hasil build Vite.
-- **Multipage.**
-  - Setiap URL dirender di server dan dapat dibuka langsung atau di-refresh.
-  - Perpindahan halaman memakai link biasa.
-  - JavaScript hanya dipakai untuk bagian interaktif (form koneksi, admin akses, perbandingan schema), yang dipasang pada elemen `data-widget`.
-  - URL yang tidak dikenal menjawab 404.
+- **Satu backend.** Go menyajikan API JSON di `/api/v1` dan hasil build SPA (`backend/cmd/server/spa.go`). Server tidak merender HTML.
+- **SPA.**
+  - Seluruh halaman, termasuk login dan admin, adalah aplikasi React (TanStack Router dan Query, Tailwind, shadcn/ui) yang berbicara dengan API.
+  - Route halaman apa pun yang dibuka langsung atau di-refresh mendapat `index.html`; router SPA menampilkan halamannya atau 404.
+  - `/assets/*` di-cache permanen, path `/api` yang tidak dikenal menjawab JSON 404, dan setiap respons membawa header CSP.
 - **Terdiri dari dua jenis database.**
   - Database *metadata* menyimpan pengguna, session, hak akses, registry, migration beserta revisi, request, approval, eksekusi, mirror riwayat, dan outbox.
   - Database *target* adalah database yang dikelola pengguna.
   - Metadata tidak dapat didaftarkan sebagai target.
-- **Akses dicek di backend** pada setiap request, baik halaman maupun API; tombol di UI hanya kenyamanan.
+- **Akses dicek di backend** pada setiap request API; tombol dan guard di SPA hanya kenyamanan.
 - **Pembacaan target dibatasi.** Pada PostgreSQL, pembacaan data oleh viewer dan EXPLAIN berjalan sebagai role `platform_editor` di dalam transaksi read-only. Namespace internal `_platform` disembunyikan dari pengguna.
 
 ## Struktur repository
 
 ```text
 backend/
-  cmd/server, cmd/migrate, cmd/seed   aplikasi, migrasi metadata, bootstrap admin/data demo
-  internal/auth, access               session, login, CSRF, kebijakan akses
+  cmd/server, cmd/worker              API + SPA, worker migration
+  cmd/migrate, cmd/seed               migrasi metadata, bootstrap admin/data demo
+  internal/auth, access               session, login, CSRF, kebijakan akses, leader grup
+  internal/review, audit              approval multi-grup, log audit
   internal/contracts, testkit         interface lintas modul dan fake untuk test
   internal/connections                registry koneksi dan enkripsi kredensial
   internal/database                   kontrak target, adapter postgres/ dan sqlite/
   internal/viewer, explain            pembacaan schema/data dan rencana eksekusi
   internal/migrations                 inisialisasi riwayat target dan model migration
-  internal/webui                      halaman HTML dan template
+  internal/jobs, telemetry            outbox, relay, queue, SSE, OpenTelemetry
   migrations/                         migrasi schema metadata
 web/src/
-  api/                                client HTTP dan tipe DTO
-  app/, pages/                        layout, logout, pemasangan widget, entry per halaman
-  features/                           widget per fitur (connections, migrations, explain)
+  routes/                             halaman per URL (file-based, routeTree.gen.ts di-generate)
+  api/                                client openapi-fetch, schema.d.ts hasil generate, query per fitur
+  components/                         komponen bersama dan shadcn/ui
+  features/                           komponen per fitur (access, connections, reviews, viewer, explain)
 infra/docker/, infra/postgres/        Dockerfile, Compose, role target
 tests/fixtures/                       payload API, fixture PostgreSQL dan SQLite bersama
 scripts/                              setup, menjalankan aplikasi, dan test

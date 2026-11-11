@@ -12,23 +12,11 @@ import (
 func testWeb(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	for _, sub := range []string{"assets", ".vite"} {
-		if err := os.Mkdir(filepath.Join(dir, sub), 0700); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.Mkdir(filepath.Join(dir, "assets"), 0700); err != nil {
+		t.Fatal(err)
 	}
-	manifest := `{` +
-		`"src/pages/layout.ts": {"file": "assets/layout.js", "name": "layout", "isEntry": true},` +
-		`"src/pages/login.ts": {"file": "assets/login.js", "name": "login", "isEntry": true},` +
-		`"src/pages/users.ts": {"file": "assets/users.js", "name": "users", "isEntry": true},` +
-		`"src/pages/groups.ts": {"file": "assets/groups.js", "name": "groups", "isEntry": true},` +
-		`"src/pages/members.ts": {"file": "assets/members.js", "name": "members", "isEntry": true},` +
-		`"src/pages/grants.ts": {"file": "assets/grants.js", "name": "grants", "isEntry": true},` +
-		`"src/pages/connections.ts": {"file": "assets/connections.js", "name": "connections", "isEntry": true},` +
-		`"src/pages/schemadiff.tsx": {"file": "assets/schemadiff.js", "name": "schemadiff", "isEntry": true}}`
-	files := map[string]string{".vite/manifest.json": manifest, "assets/app.js": "console.log('loaded')", ".secret": "private",
-		"index.html": `<!doctype html><div id="root"></div>`, "favicon.svg": "<svg/>"}
-	for name, body := range files {
+	for name, body := range map[string]string{"assets/app.js": "console.log('loaded')", ".secret": "private",
+		"index.html": `<!doctype html><div id="root"></div>`, "favicon.svg": "<svg/>"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -64,7 +52,6 @@ func TestSPARoutesAndIsolation(t *testing.T) {
 		{"HEAD", "/admin/users", "text/html", 200, "", revalidate},
 		{"GET", "/assets/missing.js", "text/html", 404, "404 page not found", ""}, {"GET", "/assets/", "text/html", 404, "", ""},
 		{"GET", "/assets", "text/html", 404, "", ""}, {"GET", "/healthz", "text/html", 404, "", ""},
-		{"GET", "/.vite/manifest.json", "text/html", 200, `id="root"`, revalidate},
 		{"GET", "/.secret", "", 404, "", ""}, {"GET", "/outside.txt", "", 404, "", ""},
 		{"GET", "/unknown", "application/json", 404, "", ""},
 		{"GET", "/api/v1/unknown", "text/html", 404, `"code":"NOT_FOUND"`, ""},

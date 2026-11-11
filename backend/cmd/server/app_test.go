@@ -180,9 +180,9 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		t.Fatal("unprotected API")
 	}
 	if w := request("GET", "/login?next=%2Fdatabases", "", nil, ""); w.Code != 200 ||
-		!strings.Contains(w.Body.String(), `data-next="/databases"`) || len(w.Result().Cookies()) != 0 ||
-		w.Header().Get("Cache-Control") != "no-store" {
-		t.Fatal("public login page unavailable or created a session", w.Code)
+		!strings.Contains(w.Body.String(), `id="root"`) || len(w.Result().Cookies()) != 0 ||
+		w.Header().Get("Cache-Control") != "no-cache" {
+		t.Fatal("the SPA login page is unavailable or created a session", w.Code)
 	}
 	var anonymousSessions int
 	if err := db.QueryRow("SELECT count(*) FROM sessions").Scan(&anonymousSessions); err != nil || anonymousSessions != 0 {
@@ -223,9 +223,6 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		{"POST", base + "/explain", `{"sql":"SELECT * FROM items","mode":"estimate"}`, view, 403, "FORBIDDEN"},
 		{"POST", base + "/explain", `{"sql":"SELECT * FROM items","mode":"estimate"}`, edit, 200, "nodes"},
 		{"POST", base + "/explain", `{}`, loginState{edit.cookie, ""}, 403, "CSRF_REJECTED"},
-		{"GET", "/databases/" + databaseID + "/schema-diff", "", loginState{}, 302, "/login?next="},
-		{"GET", "/databases/" + databaseID + "/schema-diff", "", view, 403, "Akses ditolak"},
-		{"GET", "/databases/" + databaseID + "/schema-diff", "", admin, 404, "Halaman tidak ditemukan"},
 		{"GET", "/api/v1/admin/connections", "", view, 403, "FORBIDDEN"},
 		{"GET", "/api/v1/admin/connections", "", admin, 200, "demo"},
 		{"GET", "/api/v1/admin/users", "", loginState{}, 401, "UNAUTHENTICATED"},
@@ -240,46 +237,10 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		{"GET", "/api/v1/admin/groups", "", admin, 200, `"name":"viewer"`},
 		{"POST", "/api/v1/admin/groups", `{"name":"api-group"}`, admin, 201, `"name":"api-group"`},
 		{"POST", "/api/v1/admin/connections/" + databaseID + "/test", `{}`, admin, 200, `"reachable":true`},
-		{"GET", "/databases/" + databaseID + "/schema-diff?desired_database_id=" + desiredID + "&schema=main", "", edit, 200, `data-widget="schema-diff"`},
-		{"GET", "/databases/" + databaseID + "/schema-diff?desired_database_id=" + desiredID + "&schema=main", "", edit, 200, `name="desired_database_id"`},
 		{"GET", "/api/v1/missing", "", edit, 404, "NOT_FOUND"},
-		{"GET", "/databases", "", loginState{}, 302, ""},
-		{"GET", "/", "", view, 302, ""},
-		{"GET", "/databases", "", view, 200, `<a class="database-name" href="/databases/` + databaseID + `">demo</a>`},
-		{"GET", "/databases", "", view, 200, `data-name="demo" data-engine="sqlite" data-access="view"`},
-		{"GET", "/databases", "", view, 200, `<span class="access-tag" data-level="view">Hanya lihat</span>`},
-		{"GET", "/databases/" + databaseID + "?schema=main&table=items", "", view, 200, "<td>sample</td>"},
-		{"GET", "/databases/" + databaseID + "?schema=main&table=missing", "", view, 404, "Halaman tidak ditemukan"},
-		{"GET", "/databases/" + databaseID, "", admin, 404, "Halaman tidak ditemukan"},
-		{"GET", "/admin/connections", "", view, 403, "Akses ditolak"},
-		{"GET", "/admin/connections", "", admin, 200, `data-widget="connections"`},
-		{"GET", "/admin", "", loginState{}, 302, ""},
-		{"GET", "/admin", "", view, 403, "Akses ditolak"},
-		{"GET", "/admin", "", admin, 302, ""},
-		{"GET", "/admin/users", "", loginState{}, 302, ""},
-		{"GET", "/admin/users", "", view, 403, "Akses ditolak"},
-		{"GET", "/admin/users", "", admin, 200, `<th scope="row">api-user</th>`},
-		{"GET", "/admin/users?user=10000000-0000-4000-8000-000000000001", "", admin, 200, `data-operation="update"`},
-		{"GET", "/admin/users?offset=bad", "", admin, 400, "Permintaan tidak valid"},
-		{"GET", "/admin/users?user=10000000-0000-4000-8000-000000000099", "", admin, 404, "Halaman tidak ditemukan"},
-		{"GET", "/admin/groups", "", loginState{}, 302, ""},
-		{"GET", "/admin/groups", "", view, 403, "Akses ditolak"},
-		{"GET", "/admin/groups", "", admin, 200, `<th scope="row">api-group</th>`},
-		{"GET", "/admin/groups?group=20000000-0000-4000-8000-000000000002", "", admin, 200, `data-operation="delete"`},
-		{"GET", "/admin/groups?offset=bad", "", admin, 400, "Permintaan tidak valid"},
-		{"GET", "/admin/groups?group=20000000-0000-4000-8000-000000000099", "", admin, 404, "Halaman tidak ditemukan"},
-		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/members", "", loginState{}, 302, ""},
-		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/members", "", view, 403, "Akses ditolak"},
-		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/members", "", admin, 200, `<th scope="row">viewer</th>`},
-		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/members?member=10000000-0000-4000-8000-000000000002", "", admin, 200, `data-operation="remove"`},
-		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/members?users_offset=bad", "", admin, 400, "Permintaan tidak valid"},
-		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000099/members", "", admin, 404, "Halaman tidak ditemukan"},
-		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/grants", "", loginState{}, 302, ""},
-		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/grants", "", view, 403, "Akses ditolak"},
-		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/grants", "", admin, 200, `<caption>Grant pada halaman ini</caption>`},
-		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/grants?database=" + databaseID, "", admin, 200, `data-operation="update"`},
-		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002/grants?databases_offset=bad", "", admin, 400, "Permintaan tidak valid"},
-		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000099/grants", "", admin, 404, "Halaman tidak ditemukan"},
+		{"GET", "/databases/" + databaseID + "/schema-diff", "", loginState{}, 200, `id="root"`},
+		{"GET", "/admin/users", "", view, 200, `id="root"`},
+		{"GET", "/admin/groups/20000000-0000-4000-8000-000000000002?tab=grants", "", admin, 200, `id="root"`},
 		{"GET", "/unknown", "", loginState{}, 200, `id="root"`},
 		{"GET", "/assets/missing.js", "", view, 404, "404 page not found"},
 	} {
@@ -321,8 +282,9 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 			t.Fatalf("%s %s: expected %d, got %d %s", tc.method, tc.path, tc.status, w.Code, w.Body.String())
 		}
 	}
-	if w := request("GET", "/databases/"+databaseID+"?table=items", "", nil, ""); w.Header().Get("Location") != "/login?next=%2Fdatabases%2F"+databaseID+"%3Ftable%3Ditems" {
-		t.Fatal("anonymous page was not sent to login", w.Header().Get("Location"))
+	// The SPA's own guard sends anonymous visitors to /login?next=; the server only hands out the shell.
+	if w := request("GET", "/databases/"+databaseID+"?table=items", "", nil, ""); w.Code != 200 || w.Header().Get("Location") != "" || !strings.Contains(w.Body.String(), `id="root"`) {
+		t.Fatal("a deep link must load the SPA shell", w.Code, w.Header().Get("Location"))
 	}
 	for _, path := range []string{"/api", "/api/v1/unknown", "/api/v1/databases/" + databaseID + "/unknown"} {
 		for _, who := range []loginState{{}, edit} {

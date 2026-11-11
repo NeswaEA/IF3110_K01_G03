@@ -25,7 +25,6 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/schemadiff"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/telemetry"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/viewer"
-	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/webui"
 )
 
 type runtimeConfig struct {
@@ -90,14 +89,6 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	if err != nil {
 		return nil, nil, err
 	}
-	assets, err := webui.LoadAssets(runtime.WebDir)
-	if err != nil {
-		return nil, nil, err
-	}
-	renderer, err := webui.NewRenderer(assets)
-	if err != nil {
-		return nil, nil, err
-	}
 	frontend, closeFrontend, err := newSPA(runtime.WebDir)
 	if err != nil {
 		return nil, nil, err
@@ -152,7 +143,6 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	})
 	mux.Handle("/api/", api)
 	mux.Handle("/api", api)
-	webui.RegisterRoutes(mux, webui.NewPages(renderer, policy, auth.PrincipalFromContext, auth.RedirectToLogin, connectionService, viewService, userService, groupService), authHandler.RequirePage)
 	mux.Handle("/", frontend)
 	return securityHeaders(telemetry.Route(mux)), cleanup, nil
 }

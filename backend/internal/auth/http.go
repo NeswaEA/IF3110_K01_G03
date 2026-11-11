@@ -60,29 +60,6 @@ func (h *HTTPHandler) RequireSession(next http.Handler) http.Handler {
 	})
 }
 
-// RequirePage guards HTML pages: a visitor without a signed-in session is sent
-// to the login page instead of receiving the JSON 401 used by the API.
-func (h *HTTPHandler) RequirePage(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r, err := h.withSession(w, r)
-		if isUnauthenticated(err) {
-			RedirectToLogin(w, r)
-			return
-		}
-		if err != nil {
-			http.Error(w, "Terjadi kesalahan internal.", http.StatusInternalServerError)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-// RedirectToLogin sends the browser to the login page with the current local
-// path as the return target.
-func RedirectToLogin(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/login?next="+url.QueryEscape(SafeNext(r.URL.RequestURI())), http.StatusFound)
-}
-
 func (h *HTTPHandler) withSession(w http.ResponseWriter, r *http.Request) (*http.Request, error) {
 	w.Header().Set("Cache-Control", "no-store")
 	session, err := h.resolve(r)
