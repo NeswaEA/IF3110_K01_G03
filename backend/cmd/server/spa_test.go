@@ -104,6 +104,13 @@ func TestRuntimeConfig(t *testing.T) {
 	t.Setenv("TARGET_QUERY_TIMEOUT", "")
 	t.Setenv("DIFF_TIMEOUT", "")
 	t.Setenv("ATLAS_BIN", "/custom/atlas")
+	t.Setenv("NATS_URL", "")
+	t.Setenv("OUTBOX_POLL_INTERVAL", "")
+	t.Setenv("SSE_HEARTBEAT_INTERVAL", "")
+	if _, err := loadRuntimeConfig(); err == nil {
+		t.Fatal("missing NATS_URL accepted")
+	}
+	t.Setenv("NATS_URL", "nats://localhost:4222")
 	cfg, err := loadRuntimeConfig()
 	if err != nil || cfg.WebDir != "web/dist" || cfg.DiffTimeout != 30*time.Second || cfg.AtlasBin != "/custom/atlas" {
 		t.Fatal("invalid defaults")
@@ -115,6 +122,11 @@ func TestRuntimeConfig(t *testing.T) {
 	t.Setenv("DIFF_TIMEOUT", "4s")
 	if cfg, err := loadRuntimeConfig(); err != nil || cfg.DiffTimeout != 4*time.Second {
 		t.Fatal("diff timeout not applied", err)
+	}
+	t.Setenv("OUTBOX_POLL_INTERVAL", "250ms")
+	t.Setenv("SSE_HEARTBEAT_INTERVAL", "5s")
+	if cfg, err := loadRuntimeConfig(); err != nil || cfg.OutboxPollInterval != 250*time.Millisecond || cfg.SSEHeartbeat != 5*time.Second || cfg.NATSURL != "nats://localhost:4222" {
+		t.Fatal("relay and SSE settings not applied", err)
 	}
 	t.Setenv("TARGET_QUERY_TIMEOUT", "-1s")
 	if _, err := loadRuntimeConfig(); err == nil {

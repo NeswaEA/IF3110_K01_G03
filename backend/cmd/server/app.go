@@ -19,9 +19,11 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database/postgres"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database/sqlite"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/explain"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/jobs"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/migrations"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/schemadiff"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/telemetry"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/viewer"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/webui"
 )
@@ -34,10 +36,14 @@ type runtimeConfig struct {
 	QueryTimeout   time.Duration
 	DiffTimeout    time.Duration
 	AtlasBin       string
+	NATSURL        string
+	// OutboxPollInterval and SSEHeartbeat stay zero when unset; the relay and SSE handler apply their defaults.
+	OutboxPollInterval time.Duration
+	SSEHeartbeat       time.Duration
 }
 
 func loadRuntimeConfig() (runtimeConfig, error) {
-	cfg := runtimeConfig{EncryptionKey: os.Getenv("CONNECTION_ENCRYPTION_KEY"), SQLiteDir: os.Getenv("SQLITE_TARGET_DIR"), WebDir: os.Getenv("WEB_DIST_DIR"), AtlasBin: os.Getenv("ATLAS_BIN"), ConnectTimeout: 5 * time.Second, QueryTimeout: 10 * time.Second, DiffTimeout: 30 * time.Second}
+	cfg := runtimeConfig{EncryptionKey: os.Getenv("CONNECTION_ENCRYPTION_KEY"), SQLiteDir: os.Getenv("SQLITE_TARGET_DIR"), WebDir: os.Getenv("WEB_DIST_DIR"), AtlasBin: os.Getenv("ATLAS_BIN"), NATSURL: os.Getenv("NATS_URL"), ConnectTimeout: 5 * time.Second, QueryTimeout: 10 * time.Second, DiffTimeout: 30 * time.Second}
 	if !filepath.IsAbs(cfg.SQLiteDir) {
 		return runtimeConfig{}, errors.New("SQLITE_TARGET_DIR must be an absolute directory")
 	}
@@ -48,10 +54,14 @@ func loadRuntimeConfig() (runtimeConfig, error) {
 	if cfg.WebDir == "" {
 		cfg.WebDir = "web/dist"
 	}
+	if cfg.NATSURL == "" {
+		return runtimeConfig{}, errors.New("NATS_URL is required")
+	}
 	for _, setting := range []struct {
 		name  string
 		value *time.Duration
-	}{{"TARGET_CONNECT_TIMEOUT", &cfg.ConnectTimeout}, {"TARGET_QUERY_TIMEOUT", &cfg.QueryTimeout}, {"DIFF_TIMEOUT", &cfg.DiffTimeout}} {
+	}{{"TARGET_CONNECT_TIMEOUT", &cfg.ConnectTimeout}, {"TARGET_QUERY_TIMEOUT", &cfg.QueryTimeout}, {"DIFF_TIMEOUT", &cfg.DiffTimeout},
+		{"OUTBOX_POLL_INTERVAL", &cfg.OutboxPollInterval}, {"SSE_HEARTBEAT_INTERVAL", &cfg.SSEHeartbeat}} {
 		if raw := os.Getenv(setting.name); raw != "" {
 			value, err := time.ParseDuration(raw)
 			if err != nil || value <= 0 {
@@ -63,7 +73,7 @@ func loadRuntimeConfig() (runtimeConfig, error) {
 	return cfg, nil
 }
 
-func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtimeConfig) (http.Handler, func(), error) {
+func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtimeConfig, events *jobs.EventBus) (http.Handler, func(), error) {
 	cipher, err := connections.NewCipher(runtime.EncryptionKey)
 	if err != nil {
 		return nil, nil, errors.New("CONNECTION_ENCRYPTION_KEY must encode 32 bytes in base64")
@@ -119,16 +129,21 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	viewer.RegisterRoutes(protected, viewer.NewHandler(viewService, policy, auth.PrincipalFromContext))
 	explain.RegisterRoutes(protected, explain.NewHandler(explainService, policy, auth.PrincipalFromContext))
 	schemadiff.RegisterRoutes(protected, schemadiff.NewHandler(diffService, auth.PrincipalFromContext))
+	sse := jobs.NewEventsHandler(events, policy, auth.PrincipalFromContext)
+	if runtime.SSEHeartbeat > 0 {
+		sse.Heartbeat = runtime.SSEHeartbeat
+	}
+	jobs.RegisterRoutes(protected, sse)
 	protected.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, &contracts.DomainError{Code: "NOT_FOUND", Message: "Endpoint tidak ditemukan."})
 	})
 	mux := http.NewServeMux()
 	platform.RegisterHealthRoutes(mux, db)
 	authHandler.RegisterRoutes(mux)
-	secured := authHandler.RequireSession(authHandler.RequireCSRF(platform.Route(protected)))
+	secured := authHandler.RequireSession(authHandler.RequireCSRF(platform.Route(telemetry.Route(protected))))
 	mux.Handle("/api/", secured)
 	mux.Handle("/api", secured)
 	webui.RegisterRoutes(mux, webui.NewPages(renderer, policy, auth.PrincipalFromContext, auth.RedirectToLogin, connectionService, viewService, userService, groupService), authHandler.RequirePage)
 	mux.Handle("/", frontend)
-	return securityHeaders(mux), cleanup, nil
+	return securityHeaders(telemetry.Route(mux)), cleanup, nil
 }

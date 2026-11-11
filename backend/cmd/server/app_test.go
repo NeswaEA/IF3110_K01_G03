@@ -15,6 +15,8 @@ import (
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/auth"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/connections"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/jobs"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/jobs/jobstest"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/schemadiff"
 	metadata "github.com/NeswaEA/IF3110_K01_G03/backend/migrations"
@@ -128,7 +130,7 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		}
 	}
 	cfg := platform.Config{AppEnv: "test", AppOrigin: "http://localhost:8080", MetadataDatabaseURL: dsn, SessionIdleTimeout: 30 * time.Minute, SessionAbsoluteTimeout: 8 * time.Hour, SessionRotationInterval: 15 * time.Minute, SessionGracePeriod: 30 * time.Second}
-	h, close, err := newApp(t.Context(), db, cfg, runtimeConfig{EncryptionKey: key, SQLiteDir: dir, WebDir: testWeb(t), AtlasBin: filepath.Join(dir, "absent-atlas"), ConnectTimeout: time.Second, QueryTimeout: time.Second})
+	h, close, err := newApp(t.Context(), db, cfg, runtimeConfig{EncryptionKey: key, SQLiteDir: dir, WebDir: testWeb(t), AtlasBin: filepath.Join(dir, "absent-atlas"), ConnectTimeout: time.Second, QueryTimeout: time.Second}, testEvents(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,6 +324,9 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 	if w := request("GET", "/databases/"+databaseID+"?table=items", "", nil, ""); w.Header().Get("Location") != "/login?next=%2Fdatabases%2F"+databaseID+"%3Ftable%3Ditems" {
 		t.Fatal("anonymous page was not sent to login", w.Header().Get("Location"))
 	}
+	if w := request("GET", "/api/v1/databases/"+databaseID+"/events", "", nil, ""); w.Code != http.StatusUnauthorized || !strings.Contains(w.Body.String(), "UNAUTHENTICATED") {
+		t.Fatal("the event stream must require a session", w.Code, w.Body.String())
+	}
 	w := request("GET", "/api/v1/databases", "", edit.cookie, "")
 	if !strings.Contains(w.Body.String(), `"transactional_migrations":true`) || !strings.Contains(w.Body.String(), `"schema_diff":true`) {
 		t.Fatal("unavailable capabilities advertised")
@@ -377,4 +382,10 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 	if w := request("GET", "/api/v1/auth/me", "", admin.cookie, ""); w.Code != 200 {
 		t.Fatal("unrelated admin revoked")
 	}
+}
+
+// testEvents is the realtime event bus on an in-process NATS server.
+func testEvents(t *testing.T) *jobs.EventBus {
+	nc, _ := jobstest.Start(t).Connect()
+	return jobs.NewEventBus(nc)
 }

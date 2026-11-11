@@ -104,7 +104,7 @@ func TestPostgresSchemaDiffHTTP(t *testing.T) {
 			if !available {
 				bin = filepath.Join(t.TempDir(), "absent")
 			}
-			h, cleanup, err := newApp(t.Context(), db, cfg, runtimeConfig{EncryptionKey: key, SQLiteDir: t.TempDir(), WebDir: testWeb(t), AtlasBin: bin, DiffTimeout: 30 * time.Second})
+			h, cleanup, err := newApp(t.Context(), db, cfg, runtimeConfig{EncryptionKey: key, SQLiteDir: t.TempDir(), WebDir: testWeb(t), AtlasBin: bin, DiffTimeout: 30 * time.Second}, testEvents(t))
 			if err != nil {
 				t.Fatal(err)
 			}
