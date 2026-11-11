@@ -77,7 +77,9 @@ jobs:
         run: |
           test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
           go vet ./...
-          go build -o "$RUNNER_TEMP/bin/" ./cmd/server ./cmd/migrate ./cmd/seed
+          go build -o "$RUNNER_TEMP/bin/" ./cmd/server ./cmd/worker ./cmd/migrate ./cmd/seed
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum || { echo "go.mod/go.sum are not tidy; run go mod tidy" >&2; exit 1; }
           python3 -m unittest discover -s ../scripts/ci -p 'test_*.py'
       - name: Verify PostgreSQL demo fixture initialization and preservation
         if: matrix.suite == 'required'
@@ -157,10 +159,15 @@ jobs:
         working-directory: web
         run: |
           npm ci
+          npm run gen:api
+          npm run build
           npm run lint
           npm test
-          npm run build
+          npx knip
           node --test ../scripts/seed-sqlite.test.mjs
+      - name: Reject stale generated files
+        # build regenerates the route tree and gen:api the API types; both are committed
+        run: git diff --exit-code -- web/src/api/schema.d.ts web/src/routeTree.gen.ts || { echo "regenerate with npm run gen:api / npm run build and commit the result" >&2; exit 1; }
 
   browser:
     name: Browser workflows
