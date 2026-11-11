@@ -3,6 +3,7 @@ package platform
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -11,7 +12,8 @@ import (
 func NewHTTPServer(addr string, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              addr,
-		Handler:           RequestID(LogRequests(handler)),
+		Handler:           RequestID(LogRequests(Recover(handler))),
+		ErrorLog:          slog.NewLogLogger(slog.Default().Handler(), slog.LevelWarn), // net/http's own errors as JSON too
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      40 * time.Second,
