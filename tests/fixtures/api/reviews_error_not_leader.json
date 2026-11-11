@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "NOT_LEADER",
+    "message": "Anda bukan leader grup yang approval-nya masih dibutuhkan.",
+    "fields": {},
+    "request_id": "req-reviews-not-leader"
+  }
+}

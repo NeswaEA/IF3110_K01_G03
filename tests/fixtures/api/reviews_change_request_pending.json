@@ -1,0 +1,51 @@
+{
+  "data": {
+    "id": "60000000-0000-4000-8000-000000000001",
+    "database_id": "30000000-0000-4000-8000-000000000001",
+    "migration_id": "40000000-0000-4000-8000-000000000001",
+    "migration_title": "Tambah kolom status pada orders",
+    "action": "apply",
+    "migration_revision": 2,
+    "content_hash": "sha256:fe1ae017718633f24a49b996e39147cb61bba383aeae1048f4274e8bf42261af",
+    "head_at_request": 3,
+    "target_execution_id": null,
+    "batch_size": null,
+    "note": "",
+    "status": "pending_review",
+    "requested_by": {
+      "id": "10000000-0000-4000-8000-000000000003",
+      "username": "editor"
+    },
+    "approvals": [
+      {
+        "group": {
+          "id": "20000000-0000-4000-8000-000000000001",
+          "name": "fixture-view"
+        },
+        "leader": {
+          "id": "10000000-0000-4000-8000-000000000002",
+          "username": "viewer"
+        },
+        "decision": "approved",
+        "comment": null,
+        "decided_at": "2026-11-11T09:00:00Z"
+      },
+      {
+        "group": {
+          "id": "20000000-0000-4000-8000-000000000002",
+          "name": "fixture-edit"
+        },
+        "leader": {
+          "id": "10000000-0000-4000-8000-000000000005",
+          "username": "lead"
+        },
+        "decision": "pending",
+        "comment": null,
+        "decided_at": null
+      }
+    ],
+    "execution_id": null,
+    "created_at": "2026-11-11T08:30:00Z",
+    "updated_at": "2026-11-11T09:00:00Z"
+  }
+}

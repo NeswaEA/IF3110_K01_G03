@@ -8,6 +8,7 @@
     "viewer_*": "Schema, table data, and viewer error responses.",
     "explain_*": "Execution plans and unsupported statement errors.",
     "users_*": "User administration list and validation errors.",
-    "groups_*": "Groups with leaders, members, grants and leader errors."
+    "groups_*": "Groups with leaders, members, grants and leader errors.",
+    "reviews_*": "Change requests with live approvals and approval errors."
   }
 }
