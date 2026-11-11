@@ -88,6 +88,14 @@ func seedDB(t *testing.T) *sql.DB {
 		}
 		entries = append(entries, entry)
 	}
+	for _, id := range append([]string{bigDatabase}, loadDatabases...) {
+		var entry fixtureConnection
+		entry.ID = id
+		entry.Name = "target-" + id[len(id)-2:]
+		entry.Driver = "postgres"
+		entry.Config = json.RawMessage(`{"host":"localhost","port":5432,"database":"big","username":"runner","password":"target secret","sslmode":"disable","editor_role":"editor"}`)
+		entries = append(entries, entry)
+	}
 	body, err := json.Marshal(entries)
 	if err != nil {
 		t.Fatal(err)
@@ -188,6 +196,7 @@ func TestFixturesAccessEncryptionAndReseed(t *testing.T) {
 			{contracts.AccessView, contracts.AccessView, contracts.AccessView, contracts.AccessView},
 			{contracts.AccessEdit, contracts.AccessEdit, contracts.AccessView, contracts.AccessView},
 			{contracts.AccessNone, contracts.AccessNone, contracts.AccessNone, contracts.AccessNone},
+			{contracts.AccessEdit, contracts.AccessEdit, contracts.AccessView, contracts.AccessView},
 		} {
 			for databaseIndex, want := range wants {
 				got, err := policy.Effective(t.Context(), userPrefix+string(rune('1'+userIndex)), databasePrefix+string(rune('1'+databaseIndex)))
@@ -198,8 +207,20 @@ func TestFixturesAccessEncryptionAndReseed(t *testing.T) {
 		}
 	}
 	var users, groups, grants int
-	if err := db.QueryRow(`SELECT (SELECT count(*) FROM users),(SELECT count(*) FROM groups),(SELECT count(*) FROM group_database_access)`).Scan(&users, &groups, &grants); err != nil || users != 4 || groups != 2 || grants != 8 {
+	if err := db.QueryRow(`SELECT (SELECT count(*) FROM users),(SELECT count(*) FROM groups),(SELECT count(*) FROM group_database_access)`).Scan(&users, &groups, &grants); err != nil || users != 5 || groups != 3 || grants != 13 {
 		t.Fatal("fixture counts changed on rerun")
+	}
+	for _, database := range append([]string{bigDatabase}, loadDatabases...) {
+		for user, want := range map[string]contracts.AccessLevel{userPrefix + "5": contracts.AccessEdit, userPrefix + "3": contracts.AccessNone, userPrefix + "2": contracts.AccessNone} {
+			if got, err := access.NewPolicy(db).Effective(t.Context(), user, database); err != nil || got != want {
+				t.Fatal("incorrect ops access", user, database, got, err)
+			}
+		}
+	}
+	var leaders string
+	if err := db.QueryRow(`SELECT string_agg(leader_user_id::text, ',' ORDER BY id) FROM groups`).Scan(&leaders); err != nil ||
+		leaders != userPrefix+"2,"+userPrefix+"5,"+userPrefix+"5" {
+		t.Fatal("incorrect fixture leaders", leaders, err)
 	}
 	var encrypted []byte
 	var ready bool
@@ -266,5 +287,35 @@ func TestFixturesRollbackAndTargetProtection(t *testing.T) {
 	cancel()
 	if err := run(ctx, []string{"fixtures"}, nil); err == nil {
 		t.Fatal("canceled seed succeeded")
+	}
+}
+
+func TestFixturesRequireAllNineConnections(t *testing.T) {
+	db := seedDB(t)
+	body, err := os.ReadFile(os.Getenv("FIXTURE_CONNECTIONS_FILE"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entries []fixtureConnection
+	if err := json.Unmarshal(body, &entries); err != nil {
+		t.Fatal(err)
+	}
+	for name, list := range map[string][]fixtureConnection{"demo only": entries[:4], "no big dataset": entries[:8]} {
+		out, err := json.Marshal(list)
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(t.TempDir(), "connections.json")
+		if err := os.WriteFile(path, out, 0600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("FIXTURE_CONNECTIONS_FILE", path)
+		if run(t.Context(), []string{"fixtures"}, nil) == nil {
+			t.Fatal(name + ": an incomplete connections file was accepted")
+		}
+	}
+	var groups int
+	if err := db.QueryRow(`SELECT count(*) FROM groups`).Scan(&groups); err != nil || groups != 0 {
+		t.Fatal("rejected seed left fixtures behind", groups, err)
 	}
 }

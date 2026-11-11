@@ -128,6 +128,9 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) error {
 	if errors.As(err, &domain) && domain != nil {
 		if mapped, ok := errorStatuses[domain.Code]; ok && mapped != http.StatusInternalServerError {
 			status = mapped
+			if domain.Status != 0 {
+				status = domain.Status
+			}
 			response.Code = domain.Code
 			response.Message = domain.Message
 			if domain.Fields != nil {

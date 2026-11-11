@@ -100,7 +100,7 @@ func TestGroupHTTPSetLeader(t *testing.T) {
 	assertUserHTTPError(t, f.request("PUT", path, body, nil, false), 401, "UNAUTHENTICATED")
 	assertUserHTTPError(t, f.request("PUT", path, body, &f.viewer, true), 403, "FORBIDDEN")
 	assertUserHTTPError(t, f.request("PUT", path, body, &f.admin, false), 403, "CSRF_REJECTED")
-	assertUserHTTPError(t, f.request("PUT", path, `{"user_id":"`+testkit.UserNone+`"}`, &f.admin, true), 400, "INVALID_REQUEST")
+	assertUserHTTPError(t, f.request("PUT", path, `{"user_id":"`+testkit.UserNone+`"}`, &f.admin, true), 422, "INVALID_REQUEST")
 	w := f.request("PUT", path, body, &f.admin, true)
 	var result struct {
 		Data access.Group `json:"data"`

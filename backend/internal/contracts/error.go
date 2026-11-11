@@ -4,7 +4,9 @@ type DomainError struct {
 	Code    string
 	Message string
 	Fields  map[string]string
-	Cause   error `json:"-"`
+	// Status overrides the HTTP status of Code when a well-formed request is rejected by the domain.
+	Status int   `json:"-"`
+	Cause  error `json:"-"`
 }
 
 func (e *DomainError) Error() string { return e.Message }

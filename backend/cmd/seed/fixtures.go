@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"slices"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/auth"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/connections"
@@ -18,6 +19,9 @@ import (
 const userPrefix = "10000000-0000-4000-8000-00000000000"
 const groupPrefix = "20000000-0000-4000-8000-00000000000"
 const databasePrefix = "30000000-0000-4000-8000-00000000000"
+
+// The big-dataset target; with the load targets it is the only database the ops group may edit.
+const bigDatabase = "30000000-0000-4000-8000-000000000005"
 
 type fixtureConnection struct {
 	ID     string          `json:"id"`
@@ -44,7 +48,7 @@ func seedFixtures(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	for i, name := range []string{"fixture-admin", "viewer", "editor", "outsider"} {
+	for i, name := range []string{"fixture-admin", "viewer", "editor", "outsider", "lead"} {
 		hash, err := (auth.PasswordHasher{}).Hash(ctx, password)
 		if err != nil {
 			return errors.New("fixture password hashing failed")
@@ -60,7 +64,7 @@ func seedFixtures(ctx context.Context, tx *sql.Tx) error {
 			return errors.New("fixture user ID is already in use")
 		}
 	}
-	for i, name := range []string{"fixture-view", "fixture-edit"} {
+	for i, name := range []string{"fixture-view", "fixture-edit", "fixture-ops"} {
 		id := groupPrefix + string(rune('1'+i))
 		result, err := tx.ExecContext(ctx, `INSERT INTO groups(id,name) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET name=excluded.name WHERE groups.name=excluded.name`, id, name)
 		if err != nil {
@@ -71,22 +75,32 @@ func seedFixtures(ctx context.Context, tx *sql.Tx) error {
 			return errors.New("fixture group ID is already in use")
 		}
 	}
-	// Reset only fixture-owned memberships and grants, then invalidate affected sessions.
+	// Reset only fixture-owned leaders, memberships and grants, then invalidate affected sessions.
 	_, err = tx.ExecContext(ctx, `UPDATE sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE user_id IN
-  (SELECT user_id FROM group_memberships WHERE group_id IN ($1,$2)) OR user_id IN ($3,$4,$5,$6)`,
-		groupPrefix+"1", groupPrefix+"2", userPrefix+"1", userPrefix+"2", userPrefix+"3", userPrefix+"4")
+  (SELECT user_id FROM group_memberships WHERE group_id IN ($1,$2,$3)) OR user_id IN ($4,$5,$6,$7,$8)`,
+		groupPrefix+"1", groupPrefix+"2", groupPrefix+"3", userPrefix+"1", userPrefix+"2", userPrefix+"3", userPrefix+"4", userPrefix+"5")
 	if err != nil {
 		return errors.New("could not revoke fixture sessions")
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM group_memberships WHERE group_id IN ($1,$2) OR user_id IN ($3,$4,$5,$6)`, groupPrefix+"1", groupPrefix+"2", userPrefix+"1", userPrefix+"2", userPrefix+"3", userPrefix+"4"); err != nil {
+	// A leader's membership is held by a key, so the leaders go first.
+	if _, err = tx.ExecContext(ctx, `UPDATE groups SET leader_user_id=NULL WHERE id IN ($1,$2,$3)`, groupPrefix+"1", groupPrefix+"2", groupPrefix+"3"); err != nil {
+		return errors.New("could not reset fixture leaders")
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM group_memberships WHERE group_id IN ($1,$2,$3) OR user_id IN ($4,$5,$6,$7,$8)`,
+		groupPrefix+"1", groupPrefix+"2", groupPrefix+"3", userPrefix+"1", userPrefix+"2", userPrefix+"3", userPrefix+"4", userPrefix+"5"); err != nil {
 		return errors.New("could not reset fixture memberships")
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM group_database_access WHERE group_id IN ($1,$2)`, groupPrefix+"1", groupPrefix+"2"); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM group_database_access WHERE group_id IN ($1,$2,$3)`, groupPrefix+"1", groupPrefix+"2", groupPrefix+"3"); err != nil {
 		return errors.New("could not reset fixture grants")
 	}
-	for _, pair := range [][2]string{{"1", "2"}, {"1", "3"}, {"2", "3"}} {
+	for _, pair := range [][2]string{{"1", "2"}, {"1", "3"}, {"2", "3"}, {"2", "5"}, {"3", "5"}} {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO group_memberships(group_id,user_id) VALUES($1,$2)`, groupPrefix+pair[0], userPrefix+pair[1]); err != nil {
 			return errors.New("could not seed memberships")
+		}
+	}
+	for _, leader := range [][2]string{{"1", "2"}, {"2", "5"}, {"3", "5"}} {
+		if _, err = tx.ExecContext(ctx, `UPDATE groups SET leader_user_id=$2 WHERE id=$1`, groupPrefix+leader[0], userPrefix+leader[1]); err != nil {
+			return errors.New("could not seed leaders")
 		}
 	}
 	for _, group := range []string{"1", "2"} {
@@ -98,6 +112,11 @@ func seedFixtures(ctx context.Context, tx *sql.Tx) error {
 			if _, err = tx.ExecContext(ctx, `INSERT INTO group_database_access(group_id,database_id,level) VALUES($1,$2,$3)`, groupPrefix+group, databasePrefix+string(rune('0'+i)), level); err != nil {
 				return errors.New("could not seed grants")
 			}
+		}
+	}
+	for _, id := range append([]string{bigDatabase}, loadDatabases...) {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO group_database_access(group_id,database_id,level) VALUES($1,$2,'edit')`, groupPrefix+"3", id); err != nil {
+			return errors.New("could not seed grants")
 		}
 	}
 	return nil
@@ -116,8 +135,8 @@ func readFixtureConnections(path string) ([]fixtureConnection, error) {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	var entries []fixtureConnection
-	if decoder.Decode(&entries) != nil || decoder.Decode(new(any)) != io.EOF || len(entries) != 4 {
-		return nil, errors.New("fixture connections file must contain an array of four connection objects")
+	if decoder.Decode(&entries) != nil || decoder.Decode(new(any)) != io.EOF || len(entries) != 9 {
+		return nil, errors.New("fixture connections file must contain an array of nine connection objects")
 	}
 	seen := map[string]bool{}
 	for _, entry := range entries {
@@ -125,7 +144,7 @@ func readFixtureConnections(path string) ([]fixtureConnection, error) {
 		if entry.ID == databasePrefix+"2" || entry.ID == databasePrefix+"4" {
 			expected = database.SQLite
 		}
-		validID := false
+		validID := entry.ID == bigDatabase || slices.Contains(loadDatabases, entry.ID)
 		for _, suffix := range []string{"1", "2", "3", "4"} {
 			validID = validID || entry.ID == databasePrefix+suffix
 		}

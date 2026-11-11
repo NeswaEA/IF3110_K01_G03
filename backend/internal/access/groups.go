@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"net/http"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -283,7 +284,9 @@ func (s *GroupService) SetLeader(ctx context.Context, actor contracts.Principal,
 	err = tx.QueryRowContext(ctx, `SELECT u.active FROM group_memberships m JOIN users u ON u.id=m.user_id
 		WHERE m.group_id=$1 AND m.user_id=$2 FOR KEY SHARE OF u`, groupID, userID).Scan(&active)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && !active) {
-		return Group{}, invalidGroupField("user_id", "Pilih anggota aktif dari grup ini.")
+		err := invalidGroupField("user_id", "Pilih anggota aktif dari grup ini.")
+		err.(*contracts.DomainError).Status = http.StatusUnprocessableEntity
+		return Group{}, err
 	}
 	if err != nil {
 		return Group{}, failure(err)

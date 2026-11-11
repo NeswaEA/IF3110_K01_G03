@@ -81,7 +81,7 @@ Buka http://localhost:8080.
 
 ### Akun dan data demo
 
-`app-up.sh seed` membuat akun `fixture-admin` (admin platform), `editor`, `viewer`, dan `outsider`, beserta group, hak akses, dan empat koneksi demo. Password semua akun demo adalah nilai `FIXTURE_PASSWORD` di `.env` Anda.
+`app-up.sh seed` membuat akun `fixture-admin` (admin platform), `editor`, `viewer`, `outsider`, dan `lead`, beserta tiga group dengan leader (`viewer` memimpin readers; `lead` memimpin writers dan ops), hak akses, dan sembilan koneksi. Daftar koneksi harus berisi empat koneksi demo, `demo_big`, dan `load_1..4`; group ops mendapat akses edit ke lima yang terakhir. Bila `tmp/connections.local.json` Anda masih berisi empat entri, hapus file itu lalu jalankan `scripts/init-env.sh`. Password semua akun demo adalah nilai `FIXTURE_PASSWORD` di `.env` Anda.
 
 `seed` mengisi file SQLite `demo.sqlite` serta pembanding `demo_desired.sqlite`, dan membuat/mengisi PostgreSQL `demo_desired`. Target yang sudah memiliki objek, termasuk riwayat migrasi, dilewati. File SQLite yang sudah ada tetapi masih kosong dapat diisi dalam satu transaksi. Data dan riwayat migrasi tetap tersimpan saat `seed` dijalankan ulang.
 
