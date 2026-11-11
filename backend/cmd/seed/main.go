@@ -26,17 +26,20 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, stdin io.Reader) error {
-	if len(args) == 0 || (args[0] != "admin" && args[0] != "fixtures") || len(args) > 2 || (len(args) == 2 && (args[0] != "admin" || args[1] != "--password-stdin")) {
-		return errors.New("usage: seed admin [--password-stdin] | seed fixtures")
+	if len(args) == 0 || (args[0] != "admin" && args[0] != "fixtures" && args[0] != "load") || len(args) > 2 || (len(args) == 2 && (args[0] != "admin" || args[1] != "--password-stdin")) {
+		return errors.New("usage: seed admin [--password-stdin] | seed fixtures | seed load")
 	}
-	if args[0] == "fixtures" && os.Getenv("APP_ENV") != "development" && os.Getenv("APP_ENV") != "test" {
-		return errors.New("fixtures require APP_ENV=development or test")
+	if args[0] != "admin" && os.Getenv("APP_ENV") != "development" && os.Getenv("APP_ENV") != "test" {
+		return errors.New(args[0] + " requires APP_ENV=development or test")
 	}
 	db, err := platform.OpenMetadataDB(ctx, os.Getenv("METADATA_DATABASE_URL"))
 	if err != nil {
 		return err
 	}
 	defer db.Close()
+	if args[0] == "load" {
+		return seedLoad(ctx, db)
+	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.New("could not begin seed transaction")

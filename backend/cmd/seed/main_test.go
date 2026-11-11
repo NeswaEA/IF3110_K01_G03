@@ -108,8 +108,10 @@ func TestSeedArgumentsAndEnvironment(t *testing.T) {
 	}
 	for _, env := range []string{"", "production", "typo"} {
 		t.Setenv("APP_ENV", env)
-		if run(t.Context(), []string{"fixtures"}, nil) == nil {
-			t.Fatal("unsafe fixture environment accepted")
+		for _, cmd := range []string{"fixtures", "load"} {
+			if run(t.Context(), []string{cmd}, nil) == nil {
+				t.Fatalf("unsafe %s environment accepted", cmd)
+			}
 		}
 	}
 }
