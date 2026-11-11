@@ -25,6 +25,7 @@ type userFixture struct {
 	clock    *testkit.Clock
 	sessions *auth.SessionStore
 	users    *access.UserService
+	audit    *testkit.AuditRecorder
 }
 
 func newUserFixture(t *testing.T) userFixture {
@@ -38,15 +39,16 @@ func newUserFixture(t *testing.T) userFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return userFixture{db: db, clock: clock, sessions: sessions,
-		users: access.NewUserService(db, sessions, access.NewPolicy(db), clock, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)}
+	audit := &testkit.AuditRecorder{}
+	return userFixture{db: db, clock: clock, sessions: sessions, audit: audit,
+		users: access.NewUserService(db, sessions, access.NewPolicy(db), clock, audit, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)}
 }
 
 func flag(value bool) *bool { return &value }
 
 func TestUsersCreateStopsOnNormalizationError(t *testing.T) {
 	want := &contracts.DomainError{Code: "INVALID_REQUEST", Fields: map[string]string{"username": "Invalid username."}}
-	users := access.NewUserService(nil, nil, testkit.NewFixtureAccessChecker(), nil, func(username string) (string, error) {
+	users := access.NewUserService(nil, nil, testkit.NewFixtureAccessChecker(), nil, &testkit.AuditRecorder{}, func(username string) (string, error) {
 		if username != "invalid username" {
 			t.Fatal("normalizer did not receive the original username")
 		}
@@ -66,7 +68,7 @@ func TestUsersPasswordHashErrorsStopBeforeStorage(t *testing.T) {
 		t.Run(operation, func(t *testing.T) {
 			ctx := t.Context()
 			want := &contracts.DomainError{Code: "RATE_LIMITED", Message: "Password hashing is busy."}
-			users := access.NewUserService(nil, nil, testkit.NewFixtureAccessChecker(), nil, auth.NormalizeUsername, func(got context.Context, password string) (string, error) {
+			users := access.NewUserService(nil, nil, testkit.NewFixtureAccessChecker(), nil, &testkit.AuditRecorder{}, auth.NormalizeUsername, func(got context.Context, password string) (string, error) {
 				if got != ctx || password != userPassword {
 					t.Fatal("hasher did not receive the request context and original password")
 				}
@@ -308,7 +310,7 @@ func (f failingUserSessions) RequireRotation(ctx context.Context, tx *sql.Tx, id
 
 func TestUsersSessionFailureRollsBackMetadata(t *testing.T) {
 	f := newUserFixture(t)
-	broken := access.NewUserService(f.db, failingUserSessions{f.sessions}, access.NewPolicy(f.db), f.clock, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)
+	broken := access.NewUserService(f.db, failingUserSessions{f.sessions}, access.NewPolicy(f.db), f.clock, &testkit.AuditRecorder{}, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)
 	session := createSession(t, f.db, f.sessions, testkit.UserView)
 	for _, input := range []access.UpdateUserInput{{Active: flag(false)}, {IsPlatformAdmin: flag(true)}} {
 		_, err := broken.Update(t.Context(), adminPrincipal, testkit.UserView, input)

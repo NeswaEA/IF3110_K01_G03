@@ -35,6 +35,7 @@ type UserService struct {
 	sessions          contracts.SessionInvalidator
 	policy            contracts.AccessChecker
 	clock             contracts.Clock
+	audit             contracts.AuditRecorder
 	normalizeUsername func(string) (string, error)
 	hashPassword      func(context.Context, string) (string, error)
 }
@@ -44,11 +45,12 @@ func NewUserService(
 	sessions contracts.SessionInvalidator,
 	policy contracts.AccessChecker,
 	clock contracts.Clock,
+	audit contracts.AuditRecorder,
 	normalizeUsername func(string) (string, error),
 	hashPassword func(context.Context, string) (string, error),
 ) *UserService {
 	return &UserService{
-		db: db, sessions: sessions, policy: policy, clock: clock,
+		db: db, sessions: sessions, policy: policy, clock: clock, audit: audit,
 		normalizeUsername: normalizeUsername, hashPassword: hashPassword,
 	}
 }
@@ -124,6 +126,8 @@ func (s *UserService) Create(ctx context.Context, actor contracts.Principal, inp
 		}
 		return User{}, failure(err)
 	}
+	s.audit.Record(ctx, auditEvent(actor, "user.changed", "user", user.ID, nil,
+		map[string]any{"change": "created", "username": user.Username, "is_platform_admin": user.IsPlatformAdmin}))
 	return user, nil
 }
 
@@ -195,6 +199,8 @@ func (s *UserService) Update(ctx context.Context, actor contracts.Principal, id 
 	if err := tx.Commit(); err != nil {
 		return User{}, failure(err)
 	}
+	s.audit.Record(ctx, auditEvent(actor, "user.changed", "user", id, nil,
+		map[string]any{"change": "updated", "active": updated.Active, "is_platform_admin": updated.IsPlatformAdmin}))
 	return updated, nil
 }
 
@@ -226,6 +232,7 @@ func (s *UserService) ResetPassword(ctx context.Context, actor contracts.Princip
 	if err := tx.Commit(); err != nil {
 		return failure(err)
 	}
+	s.audit.Record(ctx, auditEvent(actor, "user.changed", "user", id, nil, map[string]any{"change": "password_reset"}))
 	return nil
 }
 

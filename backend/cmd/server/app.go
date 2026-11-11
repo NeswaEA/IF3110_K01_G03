@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/access"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/audit"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/auth"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/connections"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
@@ -108,8 +110,9 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	viewService := viewer.NewService(registry, inspector, map[database.Driver]viewer.TableReader{database.Postgres: postgres.Reader{}, database.SQLite: sqlite.Reader{}}, runtime.QueryTimeout)
 	explainService := explain.NewService(registry, registry, map[database.Driver]explain.Planner{database.Postgres: postgres.Planner{}, database.SQLite: sqlite.Planner{}}, runtime.QueryTimeout)
 	protected := http.NewServeMux()
-	userService := access.NewUserService(db, sessions, policy, platform.SystemClock{}, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)
-	groupService := access.NewGroupService(db, sessions, policy, platform.SystemClock{})
+	auditRecorder := audit.NewRecorder(slog.Default())
+	userService := access.NewUserService(db, sessions, policy, platform.SystemClock{}, auditRecorder, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)
+	groupService := access.NewGroupService(db, sessions, policy, platform.SystemClock{}, auditRecorder)
 	access.RegisterUserRoutes(protected, access.NewUserHandler(userService, auth.PrincipalFromContext))
 	access.RegisterGroupRoutes(protected, access.NewGroupHandler(groupService, auth.PrincipalFromContext))
 	connections.RegisterRoutes(protected, connections.NewHandler(connectionService, policy, auth.PrincipalFromContext))

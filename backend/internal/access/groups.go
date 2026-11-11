@@ -31,10 +31,11 @@ type GroupService struct {
 	sessions contracts.SessionInvalidator
 	policy   contracts.AccessChecker
 	clock    contracts.Clock
+	audit    contracts.AuditRecorder
 }
 
-func NewGroupService(db *sql.DB, sessions contracts.SessionInvalidator, policy contracts.AccessChecker, clock contracts.Clock) *GroupService {
-	return &GroupService{db: db, sessions: sessions, policy: policy, clock: clock}
+func NewGroupService(db *sql.DB, sessions contracts.SessionInvalidator, policy contracts.AccessChecker, clock contracts.Clock, audit contracts.AuditRecorder) *GroupService {
+	return &GroupService{db: db, sessions: sessions, policy: policy, clock: clock, audit: audit}
 }
 
 const groupColumns = "id, name, leader_user_id, (SELECT username FROM users WHERE id=groups.leader_user_id), created_at, updated_at"
@@ -291,6 +292,10 @@ func (s *GroupService) SetLeader(ctx context.Context, actor contracts.Principal,
 	if err != nil {
 		return Group{}, failure(err)
 	}
+	var previous sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT leader_user_id FROM groups WHERE id=$1`, groupID).Scan(&previous); err != nil {
+		return Group{}, failure(err)
+	}
 	group, err := scanGroup(tx.QueryRowContext(ctx, `UPDATE groups
 		SET leader_user_id=$2, updated_at=CASE WHEN leader_user_id=$2 THEN updated_at ELSE $3 END
 		WHERE id=$1 RETURNING `+groupColumns, groupID, userID, s.clock.Now().UTC().Truncate(time.Microsecond)))
@@ -299,6 +304,10 @@ func (s *GroupService) SetLeader(ctx context.Context, actor contracts.Principal,
 	}
 	if err := tx.Commit(); err != nil {
 		return Group{}, failure(err)
+	}
+	if previous.String != userID {
+		s.audit.Record(ctx, auditEvent(actor, "group.leader_changed", "group", groupID, nil,
+			map[string]any{"previous_leader_id": previous.String, "leader_id": userID}))
 	}
 	return group, nil
 }
@@ -349,6 +358,11 @@ func validGroupID(id string) error {
 
 func invalidGroupField(field, message string) error {
 	return &contracts.DomainError{Code: "INVALID_REQUEST", Message: "Data grup tidak valid.", Fields: map[string]string{field: message}}
+}
+
+func auditEvent(actor contracts.Principal, action, resourceType, resourceID string, databaseID *string, details map[string]any) contracts.AuditEvent {
+	return contracts.AuditEvent{Action: action, ActorID: &actor.UserID, ActorName: &actor.Username, DatabaseID: databaseID,
+		ResourceType: resourceType, ResourceID: resourceID, Details: details}
 }
 
 func leaderRequired(message string) error {

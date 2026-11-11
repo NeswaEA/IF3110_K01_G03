@@ -13,7 +13,7 @@ import (
 )
 
 func groupService(f userFixture) *access.GroupService {
-	return access.NewGroupService(f.db, f.sessions, access.NewPolicy(f.db), f.clock)
+	return access.NewGroupService(f.db, f.sessions, access.NewPolicy(f.db), f.clock, f.audit)
 }
 
 func TestGroupGetByID(t *testing.T) {
@@ -252,7 +252,7 @@ func TestDeleteGroupRevokesMembersAndCascades(t *testing.T) {
 
 func TestGroupSessionFailuresRollBackChanges(t *testing.T) {
 	f := newUserFixture(t)
-	broken := access.NewGroupService(f.db, failingUserSessions{f.sessions}, access.NewPolicy(f.db), f.clock)
+	broken := access.NewGroupService(f.db, failingUserSessions{f.sessions}, access.NewPolicy(f.db), f.clock, &testkit.AuditRecorder{})
 	outsider := createSession(t, f.db, f.sessions, testkit.UserNone)
 	reader := createSession(t, f.db, f.sessions, testkit.UserView)
 	writer := createSession(t, f.db, f.sessions, testkit.UserEdit)

@@ -59,7 +59,7 @@ func (s *GroupService) SetGrant(ctx context.Context, actor contracts.Principal, 
 	if level != contracts.AccessView && level != contracts.AccessEdit {
 		return Grant{}, invalidGrantField("level", "Gunakan view atau edit.")
 	}
-	if err := s.changeGrant(ctx, groupID, databaseID, level); err != nil {
+	if err := s.changeGrant(ctx, actor, groupID, databaseID, level); err != nil {
 		return Grant{}, err
 	}
 	return Grant{DatabaseID: databaseID, Level: level}, nil
@@ -69,10 +69,10 @@ func (s *GroupService) RemoveGrant(ctx context.Context, actor contracts.Principa
 	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
 		return err
 	}
-	return s.changeGrant(ctx, groupID, databaseID, contracts.AccessNone)
+	return s.changeGrant(ctx, actor, groupID, databaseID, contracts.AccessNone)
 }
 
-func (s *GroupService) changeGrant(ctx context.Context, groupID, databaseID string, level contracts.AccessLevel) error {
+func (s *GroupService) changeGrant(ctx context.Context, actor contracts.Principal, groupID, databaseID string, level contracts.AccessLevel) error {
 	if err := validGroupID(groupID); err != nil {
 		return err
 	}
@@ -141,6 +141,8 @@ func (s *GroupService) changeGrant(ctx context.Context, groupID, databaseID stri
 	if err := tx.Commit(); err != nil {
 		return failure(err)
 	}
+	s.audit.Record(ctx, auditEvent(actor, "grant.changed", "group", groupID, &databaseID,
+		map[string]any{"previous_level": string(previous), "level": string(level)}))
 	return nil
 }
 

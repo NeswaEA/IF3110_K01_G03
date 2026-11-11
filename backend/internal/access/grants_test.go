@@ -178,7 +178,7 @@ func TestGrantDowngradeAndRemovalRevokeMembers(t *testing.T) {
 func TestGrantSessionFailuresRollBackChanges(t *testing.T) {
 	f := newUserFixture(t)
 	leadGroups(t, f.db)
-	broken := access.NewGroupService(f.db, failingUserSessions{f.sessions}, access.NewPolicy(f.db), f.clock)
+	broken := access.NewGroupService(f.db, failingUserSessions{f.sessions}, access.NewPolicy(f.db), f.clock, &testkit.AuditRecorder{})
 	reader := createSession(t, f.db, f.sessions, testkit.UserView)
 	writer := createSession(t, f.db, f.sessions, testkit.UserEdit)
 	for _, change := range []struct {
