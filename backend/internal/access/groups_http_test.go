@@ -98,7 +98,7 @@ func TestGroupHTTPCRUDAndMembers(t *testing.T) {
 	var raw struct {
 		Data map[string]any `json:"data"`
 	}
-	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil || len(raw.Data) != 4 || w.Header().Get("Cache-Control") != "no-store" ||
+	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil || len(raw.Data) != 5 || raw.Data["leader"] != nil || w.Header().Get("Cache-Control") != "no-store" ||
 		!strings.HasSuffix(raw.Data["created_at"].(string), "Z") || !strings.HasSuffix(raw.Data["updated_at"].(string), "Z") {
 		t.Fatal("incorrect group DTO", err)
 	}

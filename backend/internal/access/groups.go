@@ -12,9 +12,15 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+type Leader struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+}
+
 type Group struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
+	Leader    *Leader   `json:"leader"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -30,11 +36,15 @@ func NewGroupService(db *sql.DB, sessions contracts.SessionInvalidator, policy c
 	return &GroupService{db: db, sessions: sessions, policy: policy, clock: clock}
 }
 
-const groupColumns = "id, name, created_at, updated_at"
+const groupColumns = "id, name, leader_user_id, (SELECT username FROM users WHERE id=groups.leader_user_id), created_at, updated_at"
 
 func scanGroup(row interface{ Scan(...any) error }) (Group, error) {
 	var group Group
-	err := row.Scan(&group.ID, &group.Name, &group.CreatedAt, &group.UpdatedAt)
+	var leaderID, leaderName sql.NullString
+	err := row.Scan(&group.ID, &group.Name, &leaderID, &leaderName, &group.CreatedAt, &group.UpdatedAt)
+	if leaderID.Valid {
+		group.Leader = &Leader{ID: leaderID.String, Username: leaderName.String}
+	}
 	group.CreatedAt, group.UpdatedAt = group.CreatedAt.UTC(), group.UpdatedAt.UTC()
 	return group, err
 }
@@ -227,7 +237,7 @@ func (s *GroupService) changeMember(ctx context.Context, groupID, userID string,
 		result, err = tx.ExecContext(ctx, `DELETE FROM group_memberships WHERE group_id=$1 AND user_id=$2`, groupID, userID)
 	}
 	if err != nil {
-		return failure(err)
+		return leaderError(err)
 	}
 	changed, err := result.RowsAffected()
 	if err != nil {
@@ -247,6 +257,47 @@ func (s *GroupService) changeMember(ctx context.Context, groupID, userID string,
 		return failure(err)
 	}
 	return nil
+}
+
+// SetLeader makes an active member the group's single leader.
+func (s *GroupService) SetLeader(ctx context.Context, actor contracts.Principal, groupID, userID string) (Group, error) {
+	if err := s.policy.Require(ctx, actor, contracts.ManagePlatform, ""); err != nil {
+		return Group{}, err
+	}
+	if err := validGroupID(groupID); err != nil {
+		return Group{}, err
+	}
+	if !contracts.ValidID(userID) {
+		return Group{}, invalidGroupField("user_id", "Gunakan UUID huruf kecil.")
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return Group{}, failure(err)
+	}
+	defer tx.Rollback()
+	if err := lockGroup(ctx, tx, groupID); err != nil {
+		return Group{}, err
+	}
+	// The user row lock keeps a concurrent deactivation from slipping past this check.
+	var active bool
+	err = tx.QueryRowContext(ctx, `SELECT u.active FROM group_memberships m JOIN users u ON u.id=m.user_id
+		WHERE m.group_id=$1 AND m.user_id=$2 FOR KEY SHARE OF u`, groupID, userID).Scan(&active)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !active) {
+		return Group{}, invalidGroupField("user_id", "Pilih anggota aktif dari grup ini.")
+	}
+	if err != nil {
+		return Group{}, failure(err)
+	}
+	group, err := scanGroup(tx.QueryRowContext(ctx, `UPDATE groups
+		SET leader_user_id=$2, updated_at=CASE WHEN leader_user_id=$2 THEN updated_at ELSE $3 END
+		WHERE id=$1 RETURNING `+groupColumns, groupID, userID, s.clock.Now().UTC().Truncate(time.Microsecond)))
+	if err != nil {
+		return Group{}, failure(err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Group{}, failure(err)
+	}
+	return group, nil
 }
 
 func lockGroup(ctx context.Context, tx *sql.Tx, id string) error {
@@ -295,6 +346,19 @@ func validGroupID(id string) error {
 
 func invalidGroupField(field, message string) error {
 	return &contracts.DomainError{Code: "INVALID_REQUEST", Message: "Data grup tidak valid.", Fields: map[string]string{field: message}}
+}
+
+func leaderRequired(message string) error {
+	return &contracts.DomainError{Code: "LEADER_REQUIRED", Message: message}
+}
+
+// leaderError maps the leader membership key violation raised when removing the leader.
+func leaderError(err error) error {
+	var pg *pgconn.PgError
+	if errors.As(err, &pg) && pg.Code == "23503" && pg.ConstraintName == "groups_leader_membership_fkey" {
+		return leaderRequired("Ganti leader grup sebelum mengeluarkan leader dari grup.")
+	}
+	return failure(err)
 }
 
 func groupError(err error) error {

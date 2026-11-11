@@ -38,6 +38,7 @@ func TestGrantHTTPAuthorizationAndCSRF(t *testing.T) {
 
 func TestGrantHTTPLifecycleAndDTO(t *testing.T) {
 	f := newUserHTTPFixture(t)
+	leadGroups(t, f.db)
 	base := groupsPath + "/" + viewGroup + "/grants"
 	w := f.request("GET", base, "", &f.admin, false)
 	var list struct {

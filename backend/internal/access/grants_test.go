@@ -14,6 +14,7 @@ import (
 
 func TestGrantsListAndValidation(t *testing.T) {
 	f := newUserFixture(t)
+	leadGroups(t, f.db)
 	svc := groupService(f)
 	grant, err := svc.SetGrant(t.Context(), adminPrincipal, viewGroup, testkit.DBSQLite, contracts.AccessEdit)
 	if err != nil || grant.DatabaseID != testkit.DBSQLite || grant.Level != contracts.AccessEdit {
@@ -176,6 +177,7 @@ func TestGrantDowngradeAndRemovalRevokeMembers(t *testing.T) {
 
 func TestGrantSessionFailuresRollBackChanges(t *testing.T) {
 	f := newUserFixture(t)
+	leadGroups(t, f.db)
 	broken := access.NewGroupService(f.db, failingUserSessions{f.sessions}, access.NewPolicy(f.db), f.clock)
 	reader := createSession(t, f.db, f.sessions, testkit.UserView)
 	writer := createSession(t, f.db, f.sessions, testkit.UserEdit)
@@ -213,6 +215,7 @@ func TestGrantSessionFailuresRollBackChanges(t *testing.T) {
 
 func TestGrantsOnInactiveConnections(t *testing.T) {
 	f := newUserFixture(t)
+	leadGroups(t, f.db)
 	if _, err := f.db.Exec(`UPDATE database_connections SET active=false WHERE id=$1`, testkit.DBSQLite); err != nil {
 		t.Fatal(err)
 	}
@@ -242,10 +245,15 @@ func TestGrantConcurrentChanges(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if mode != "add member" {
-				if err := svc.AddMember(t.Context(), adminPrincipal, group.ID, testkit.UserNone); err != nil {
-					t.Fatal(err)
-				}
+			leader := testkit.UserNone
+			if mode == "add member" {
+				leader = testkit.UserView
+			}
+			if err := svc.AddMember(t.Context(), adminPrincipal, group.ID, leader); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := svc.SetLeader(t.Context(), adminPrincipal, group.ID, leader); err != nil {
+				t.Fatal(err)
 			}
 			session := createSession(t, f.db, f.sessions, testkit.UserNone)
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)

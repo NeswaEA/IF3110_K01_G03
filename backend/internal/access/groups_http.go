@@ -25,6 +25,7 @@ func RegisterGroupRoutes(mux *http.ServeMux, h *GroupHandler) {
 	mux.HandleFunc("GET /api/v1/admin/groups/{groupId}/members", h.members)
 	mux.HandleFunc("PUT /api/v1/admin/groups/{groupId}/members/{userId}", h.addMember)
 	mux.HandleFunc("DELETE /api/v1/admin/groups/{groupId}/members/{userId}", h.removeMember)
+	mux.HandleFunc("PUT /api/v1/admin/groups/{groupId}/leader", h.setLeader)
 	mux.HandleFunc("GET /api/v1/admin/groups/{groupId}/grants", h.grants)
 	mux.HandleFunc("PUT /api/v1/admin/groups/{groupId}/grants/{databaseId}", h.setGrant)
 	mux.HandleFunc("DELETE /api/v1/admin/groups/{groupId}/grants/{databaseId}", h.removeGrant)
@@ -153,4 +154,24 @@ func (h *GroupHandler) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = platform.WriteJSON(w, r, http.StatusNoContent, nil, nil)
+}
+
+func (h *GroupHandler) setLeader(w http.ResponseWriter, r *http.Request) {
+	principal, ok := requestPrincipal(w, r, h.principal)
+	if !ok {
+		return
+	}
+	var body struct {
+		UserID string `json:"user_id"`
+	}
+	if err := platform.DecodeJSON(w, r, &body, 0); err != nil {
+		_ = platform.WriteError(w, r, err)
+		return
+	}
+	group, err := h.groups.SetLeader(r.Context(), principal, r.PathValue("groupId"), body.UserID)
+	if err != nil {
+		_ = platform.WriteError(w, r, err)
+		return
+	}
+	_ = platform.WriteJSON(w, r, http.StatusOK, group, nil)
 }

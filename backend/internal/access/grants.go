@@ -104,6 +104,18 @@ func (s *GroupService) changeGrant(ctx context.Context, groupID, databaseID stri
 	if previous == level {
 		return nil
 	}
+	if previous == contracts.AccessNone {
+		// Lock the leader row so deactivation cannot race a new grant.
+		var active bool
+		err = tx.QueryRowContext(ctx, `SELECT u.active FROM groups g JOIN users u ON u.id=g.leader_user_id
+			WHERE g.id=$1 FOR KEY SHARE OF u`, groupID).Scan(&active)
+		if (err == nil && !active) || errors.Is(err, sql.ErrNoRows) {
+			return leaderRequired("Tetapkan leader aktif untuk grup ini sebelum memberi hak akses.")
+		}
+		if err != nil {
+			return failure(err)
+		}
+	}
 	if level == contracts.AccessNone {
 		_, err = tx.ExecContext(ctx, `DELETE FROM group_database_access WHERE group_id=$1 AND database_id=$2`, groupID, databaseID)
 	} else {

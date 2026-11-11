@@ -169,6 +169,16 @@ func (s *UserService) Update(ctx context.Context, actor contracts.Principal, id 
 			return User{}, &contracts.DomainError{Code: "LAST_ADMIN", Message: "Admin aktif terakhir harus tetap aktif dan memiliki hak admin."}
 		}
 	}
+	if current.Active && !updated.Active {
+		var leads bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM groups g WHERE g.leader_user_id=$1
+			AND EXISTS(SELECT 1 FROM group_database_access a WHERE a.group_id=g.id))`, id).Scan(&leads); err != nil {
+			return User{}, failure(err)
+		}
+		if leads {
+			return User{}, leaderRequired("Ganti leader grup yang dipimpin pengguna ini sebelum menonaktifkannya.")
+		}
+	}
 	updated, err = scanUser(tx.QueryRowContext(ctx, `UPDATE users SET active=$2, is_platform_admin=$3, updated_at=$4
 		WHERE id=$1 RETURNING `+userColumns, id, updated.Active, updated.IsPlatformAdmin, s.clock.Now().UTC().Truncate(time.Microsecond)))
 	if err != nil {

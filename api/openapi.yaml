@@ -369,6 +369,44 @@ paths:
         '502': { $ref: '#/components/responses/TargetFailure' }
         '503': { $ref: '#/components/responses/TargetFailure' }
         '504': { $ref: '#/components/responses/TargetFailure' }
+  # --- admin: groups ------------------------------------------------------
+  /admin/groups/{groupId}/leader:
+    put:
+      operationId: setGroupLeader
+      summary: Set the group leader to an active member.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              additionalProperties: false
+              properties:
+                user_id: { $ref: '#/components/schemas/UUID' }
+      responses:
+        '200':
+          description: The updated group.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Group' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 components:
   securitySchemes:
     sessionCookie:

@@ -86,6 +86,14 @@ func accessDB(t *testing.T) *sql.DB {
 	return db
 }
 
+// leadGroups makes the editor lead every fixture group so grants are allowed.
+func leadGroups(t *testing.T, db *sql.DB) {
+	t.Helper()
+	if _, err := db.Exec(`UPDATE groups SET leader_user_id=$1`, testkit.UserEdit); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func requireCode(t *testing.T, err error, code string) {
 	t.Helper()
 	if code == "" {

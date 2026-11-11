@@ -304,12 +304,14 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		{"PUT", groupPath + "/members/" + memberID, `{}`, 204, ""},
 		{"GET", groupPath + "/members", "", 200, `"username":"api-user"`},
 		{"GET", groupPath + "/grants", "", 200, `"data":[]`},
+		{"PUT", groupPath + "/grants/" + databaseID, `{"level":"view"}`, 409, "LEADER_REQUIRED"},
+		{"PUT", groupPath + "/leader", `{"user_id":"` + memberID + `"}`, 200, `"leader":{"id":"` + memberID + `"`},
 		{"PUT", groupPath + "/grants/" + databaseID, `{"level":"view"}`, 200, `"level":"view"`},
 		{"GET", groupPath + "/grants", "", 200, `"database_id":"` + databaseID + `"`},
 		{"PUT", groupPath + "/grants/" + databaseID, `{"level":"edit"}`, 200, `"level":"edit"`},
 		{"DELETE", groupPath + "/grants/" + databaseID, "", 204, ""},
 		{"GET", groupPath + "/grants", "", 200, `"data":[]`},
-		{"DELETE", groupPath + "/members/" + memberID, "", 204, ""},
+		{"DELETE", groupPath + "/members/" + memberID, "", 409, "LEADER_REQUIRED"},
 		{"DELETE", groupPath, "", 204, ""},
 	} {
 		w := request(tc.method, tc.path, tc.body, admin.cookie, admin.csrf)
