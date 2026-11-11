@@ -408,6 +408,84 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/Unprocessable' }
         '500': { $ref: '#/components/responses/InternalError' }
+  # --- review -------------------------------------------------------------
+  /databases/{id}/change-requests/{rid}/approve:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - name: rid
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/UUID' }
+    post:
+      operationId: approveChangeRequest
+      summary: Approve for every pending required group the caller leads.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                comment: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200':
+          description: The change request with its live approvals.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ChangeRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/change-requests/{rid}/reject:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - name: rid
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/UUID' }
+    post:
+      operationId: rejectChangeRequest
+      summary: Reject for every pending required group the caller leads; a comment is required.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [comment]
+              additionalProperties: false
+              properties:
+                comment: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200':
+          description: The change request with its live approvals.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ChangeRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
 components:
   securitySchemes:
     sessionCookie:
