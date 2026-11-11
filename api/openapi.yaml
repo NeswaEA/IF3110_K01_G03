@@ -10,7 +10,365 @@ servers:
   - url: /api/v1
 security:
   - sessionCookie: []
-paths: {}
+paths:
+  # --- auth (session, CSRF) ----------------------------------------------
+  /auth/csrf:
+    get:
+      operationId: getCsrfToken
+      summary: CSRF token of the current session; starts an anonymous session when there is none.
+      security: []
+      responses:
+        '200':
+          description: Token for the X-CSRF-Token header; keep it in memory only.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [csrf_token]
+                    properties:
+                      csrf_token: { type: string }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /auth/login:
+    post:
+      operationId: login
+      security: [{ csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              additionalProperties: false
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Signed in; the session cookie is rotated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [user]
+                    properties:
+                      user: { $ref: '#/components/schemas/CurrentUser' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      responses:
+        '200':
+          description: The signed-in user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/CurrentUser' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /auth/logout:
+    post:
+      operationId: logout
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyObject' }
+      responses:
+        '204': { description: Signed out; the session is revoked. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # --- databases, viewer, explain, events -------------------------------
+  /databases:
+    get:
+      operationId: listDatabases
+      summary: Active databases the caller may view or edit, by name.
+      parameters:
+        - $ref: '#/components/parameters/WideLimit'
+        - $ref: '#/components/parameters/WideOffset'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/DatabaseSummary' } }
+                  page: { $ref: '#/components/schemas/Page' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}:
+    parameters: [{ $ref: '#/components/parameters/DatabaseId' }]
+    get:
+      operationId: getDatabase
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DatabaseSummary' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/schema:
+    parameters: [{ $ref: '#/components/parameters/DatabaseId' }]
+    get:
+      operationId: getSchema
+      summary: Schema snapshot read live from the target (view access).
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/SchemaSnapshot' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '502': { $ref: '#/components/responses/TargetFailure' }
+        '504': { $ref: '#/components/responses/TargetFailure' }
+  /databases/{id}/data:
+    parameters: [{ $ref: '#/components/parameters/DatabaseId' }]
+    get:
+      operationId: getTableData
+      summary: One page of rows of a table (view access). Order is stable only with a primary key.
+      parameters:
+        - { name: schema, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - { name: table, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - $ref: '#/components/parameters/WideLimit'
+        - $ref: '#/components/parameters/WideOffset'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data: { $ref: '#/components/schemas/TableData' }
+                  page: { $ref: '#/components/schemas/Page' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '502': { $ref: '#/components/responses/TargetFailure' }
+        '504': { $ref: '#/components/responses/TargetFailure' }
+  /databases/{id}/explain:
+    parameters: [{ $ref: '#/components/parameters/DatabaseId' }]
+    post:
+      operationId: explainQuery
+      summary: Estimated plan of one statement (edit access); the statement is never executed.
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sql, mode]
+              additionalProperties: false
+              properties:
+                sql: { type: string }
+                mode: { type: string, enum: [estimate] }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/PlanResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '502': { $ref: '#/components/responses/TargetFailure' }
+        '504': { $ref: '#/components/responses/TargetFailure' }
+  /databases/{id}/events:
+    parameters: [{ $ref: '#/components/parameters/DatabaseId' }]
+    get:
+      operationId: streamDatabaseEvents
+      summary: >-
+        Server-Sent Events for one database (view access). Each event is named by a
+        DatabaseEventType and its data line is a DatabaseEvent: a signal to refetch only.
+        "retry: 3000" comes first and ": ping" comments keep the stream alive.
+        Last-Event-ID is not replayed.
+      responses:
+        '200':
+          description: Event stream; closed when the session or the grant is no longer valid.
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  # --- admin: connections -------------------------------------------------
+  /admin/connections:
+    get:
+      operationId: listConnections
+      parameters:
+        - $ref: '#/components/parameters/WideLimit'
+        - $ref: '#/components/parameters/WideOffset'
+      responses:
+        '200':
+          description: Every registration, active or not. Never contains a password or DSN.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/AdminConnection' } }
+                  page: { $ref: '#/components/schemas/Page' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      operationId: createConnection
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConnectionCreate' }
+      responses:
+        '201':
+          description: Registered and initialised.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AdminConnection' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '502': { $ref: '#/components/responses/TargetFailure' }
+        '503': { $ref: '#/components/responses/TargetFailure' }
+        '504': { $ref: '#/components/responses/TargetFailure' }
+  /admin/connections/{id}:
+    parameters: [{ $ref: '#/components/parameters/DatabaseId' }]
+    get:
+      operationId: getConnection
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AdminConnection' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      operationId: updateConnection
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConnectionUpdate' }
+      responses:
+        '200':
+          description: Updated; a new revision opens a new pool.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/AdminConnection' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '502': { $ref: '#/components/responses/TargetFailure' }
+        '503': { $ref: '#/components/responses/TargetFailure' }
+        '504': { $ref: '#/components/responses/TargetFailure' }
+    delete:
+      operationId: deactivateConnection
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        '204': { description: Deactivated; its grants are removed. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /admin/connections/{id}/test:
+    parameters: [{ $ref: '#/components/parameters/DatabaseId' }]
+    post:
+      operationId: testConnection
+      security: [{ sessionCookie: [], csrfToken: [] }]
+      responses:
+        '200':
+          description: The target answered.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ConnectionTestResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '502': { $ref: '#/components/responses/TargetFailure' }
+        '503': { $ref: '#/components/responses/TargetFailure' }
+        '504': { $ref: '#/components/responses/TargetFailure' }
 components:
   securitySchemes:
     sessionCookie:
@@ -56,6 +414,15 @@ components:
         type: integer
         minimum: 0
         default: 0
+
+    WideLimit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    WideOffset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, maximum: 100000, default: 0 }
 
   responses:
     BadRequest:
@@ -111,6 +478,66 @@ components:
       type: string
       pattern: '^sha256:[0-9a-f]{64}$'
     JSONValue: {}
+
+    EmptyObject:
+      type: object
+      additionalProperties: false
+    PostgresConfigInput:
+      type: object
+      required: [host, port, database, username, password, sslmode, editor_role]
+      additionalProperties: false
+      properties:
+        host: { type: string }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        database: { type: string }
+        username: { type: string }
+        password: { type: string }
+        sslmode: { type: string, enum: [disable, require, verify-ca, verify-full] }
+        editor_role: { type: string }
+    SQLiteConfigInput:
+      type: object
+      required: [file]
+      additionalProperties: false
+      properties:
+        file: { type: string, description: File name inside SQLITE_TARGET_DIR. }
+    ConnectionCreate:
+      type: object
+      required: [name, driver, config]
+      additionalProperties: false
+      properties:
+        name: { type: string }
+        driver: { $ref: '#/components/schemas/Driver' }
+        config:
+          oneOf:
+            - $ref: '#/components/schemas/PostgresConfigInput'
+            - $ref: '#/components/schemas/SQLiteConfigInput'
+    ConnectionUpdate:
+      description: Only the changed fields; an omitted password keeps the stored one.
+      type: object
+      required: [revision]
+      additionalProperties: false
+      properties:
+        revision: { type: integer }
+        name: { type: string }
+        config:
+          type: [object, 'null']
+          additionalProperties: false
+          properties:
+            host: { type: string }
+            port: { type: integer, minimum: 1, maximum: 65535 }
+            database: { type: string }
+            username: { type: string }
+            password: { type: string }
+            sslmode: { type: string, enum: [disable, require, verify-ca, verify-full] }
+            editor_role: { type: string }
+            file: { type: string }
+    ConnectionTestResult:
+      type: object
+      required: [reachable, latency_ms, capabilities]
+      properties:
+        reachable: { type: boolean }
+        latency_ms: { type: integer }
+        capabilities: { $ref: '#/components/schemas/Capabilities' }
 
     # --- envelope ---------------------------------------------------------
     Page:
