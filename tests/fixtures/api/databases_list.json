@@ -10,7 +10,9 @@
         "transactional_migrations": true,
         "schema_diff": true,
         "explain": true,
-        "explain_analyze": false
+        "explain_analyze": false,
+        "batch_migrations": true,
+        "dry_run": true
       }
     },
     {
@@ -23,7 +25,9 @@
         "transactional_migrations": true,
         "schema_diff": true,
         "explain": true,
-        "explain_analyze": false
+        "explain_analyze": false,
+        "batch_migrations": false,
+        "dry_run": true
       }
     }
   ],

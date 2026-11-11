@@ -77,6 +77,8 @@ type Capabilities struct {
 	SchemaDiff              bool `json:"schema_diff"`
 	Explain                 bool `json:"explain"`
 	ExplainAnalyze          bool `json:"explain_analyze"`
+	BatchMigrations         bool `json:"batch_migrations"`
+	DryRun                  bool `json:"dry_run"`
 }
 
 type AdminConnection struct {
@@ -115,11 +117,14 @@ type UpdateInput struct {
 // not a promise that the target is reachable or that every statement works.
 func (s *Service) Capabilities(d database.Driver, migrationReady bool) Capabilities {
 	f := s.opts.Features
+	runner := f.Runner[d] && migrationReady
 	return Capabilities{
-		TransactionalMigrations: f.Runner[d] && migrationReady,
+		TransactionalMigrations: runner,
 		SchemaDiff:              f.Diff[d],
 		Explain:                 f.Explain[d],
 		ExplainAnalyze:          false,
+		BatchMigrations:         runner && d == database.Postgres, // batches need PostgreSQL row locks and RETURNING
+		DryRun:                  runner,
 	}
 }
 
