@@ -50,7 +50,7 @@ Aturan tambahan:
 | Bagian | Teknologi |
 |---|---|
 | Backend | Go 1.27.2, `net/http` standard library, `html/template` untuk halaman |
-| Frontend | Halaman multipage dirender server; TypeScript, Vite, dan widget React untuk bagian interaktif; editor SQL textarea dengan seleksi dan indentasi buatan sendiri |
+| Frontend | SPA React 19 + Vite, TanStack Router (file-based) dan TanStack Query, Tailwind CSS v4 + shadcn/ui (Radix), client `openapi-fetch` dengan tipe hasil generate dari `api/openapi.yaml` |
 | Database | PostgreSQL 17.11 (metadata aplikasi dan target), SQLite (target tambahan) |
 | Driver | pgx v5, go-sqlite3 (butuh CGO), pg_query_go untuk mem-parse SQL PostgreSQL |
 | Queue | NATS 2.15.2 dengan JetStream (file storage), port host `127.0.0.1:14222` |
@@ -147,11 +147,48 @@ set -a; . ./.env; set +a
 ./backend/bin/seed fixtures   # opsional: data demo
 ./backend/bin/server
 
-# frontend: di terminal lain, build ulang otomatis setiap kali file berubah
+# frontend: di terminal lain, Vite dev server (http://localhost:5173) mem-proxy /api ke backend :8080
 cd web && npm ci && npm run dev
+# setelah api/openapi.yaml berubah: npm run gen:api (tipe src/api/schema.d.ts di-commit)
 ```
 
 Server membaca daftar asset hasil build saat start. Restart server setelah build frontend pertama kali dan setelah menambah entry halaman baru.
+
+## Pemulihan lock migration
+
+Setiap database target menjalankan paling banyak satu migration. Worker mengambil *session advisory lock* di database target itu sendiri, pada satu koneksi yang juga menjalankan semua transaksi eksekusinya; database berbeda berjalan paralel. Unique index `running` per database di metadata menjadi pengaman kedua.
+
+| Kegagalan | Pemulihan |
+|---|---|
+| Proses worker crash atau di-kill | OS menutup socket, backend PostgreSQL berakhir seketika, advisory lock lepas, dan transaksi batch yang terbuka di-rollback |
+| Host atau jaringan worker putus | Target PostgreSQL di Compose memakai `tcp_keepalives_idle=10`, `interval=5`, `count=3`, sehingga sesi mati berakhir dalam ±25 detik. Worker itu mendeteksi koneksi lock gagal (ping 5 detik) lalu berhenti; ia tidak mungkin commit karena transaksinya ada di koneksi yang sama |
+| Pesan tidak di-ack | Selama handler hidup, worker mengirim `InProgress` setiap `JOB_ACK_WAIT/3`. Bila berhenti, JetStream mengirim ulang pesan setelah `JOB_ACK_WAIT` ke worker lain |
+| Pengambilalihan | Worker yang berhasil mengambil lock tahu pemegang lama pasti sudah berakhir, lalu memeriksa bukti commit di target (history/checkpoint) sebelum melanjutkan dari checkpoint |
+| Pesan hilang (stream dipurge) | Sweeper di worker menerbitkan ulang execution yang basi dari metadata setiap 30 detik |
+
+SQLite memakai advisory lock pada koneksi metadata yang dipin (lepas bila worker mati) dan `BEGIN IMMEDIATE`.
+
+## Observability (bonus)
+
+```sh
+sh scripts/obs-up.sh        # collector, Loki, Tempo, Prometheus, Grafana; API dan worker mengirim trace + log via OTLP
+sh scripts/obs-up.sh down   # matikan stack; aplikasi kembali ke trace console
+```
+
+- Grafana `http://localhost:3000` (anonim, hanya localhost): dashboard *Migration queue*, *Database pools*, *API HTTP*, *Load test (k6)* dan datasource terprovision otomatis.
+- Prometheus `http://localhost:9090` men-scrape `/metrics` API dan setiap replika worker di jaringan Compose (port 9464 tidak dibuka ke host).
+- Korelasi: exemplar `trace_id` pada histogram → trace di Tempo → log di Loki dengan `trace_id` yang sama (`{service_name="dbplatform-worker"} | trace_id="<id>"`), dan sebaliknya dari log ke trace.
+- Tanpa stack ini, log JSON tetap ke stdout dan trace dicetak exporter console.
+
+## Stress test k6 (bonus)
+
+```sh
+EDITOR_PASSWORD=<FIXTURE_PASSWORD> sh scripts/load-test.sh -e PROFILE=smoke   # 1 menit, beban rendah
+EDITOR_PASSWORD=<FIXTURE_PASSWORD> sh scripts/load-test.sh                    # 14 menit, job tersebar di load_1..load_4
+EDITOR_PASSWORD=<FIXTURE_PASSWORD> sh scripts/load-test.sh -e TARGETS=same    # semua job di load_1
+```
+
+Beban normal: 20 request baca/detik + 1 job/detik (`READ_RPS`, `JOB_RPS`). Tahapan: naik ke normal 2 menit, tahan 2 menit, naik ke 2×, 4×, 8× masing-masing 2 menit, turun ke normal 2 menit, tahan 2 menit. `setup()` menyiapkan migration dan change request yang sudah di-approve; skenario `job_submit` hanya menekan execute lalu menunggu status akhir (202 bukan berarti sukses). Threshold: p95 baca < 300 ms, p95 execute < 500 ms, request gagal < 1%, checks > 99%. Hasil dikirim ke Prometheus (dashboard *Load test (k6)*). Tabel hasil per tahap ditulis setelah run nyata.
 
 ## Test
 
