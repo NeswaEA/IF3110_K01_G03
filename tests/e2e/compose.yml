@@ -22,6 +22,7 @@ services:
     volumes:
       - target:/var/lib/postgresql/data
       - ../../infra/postgres/init/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+      - ../../infra/postgres/init/20-extra-dbs.sh:/docker-entrypoint-initdb.d/20-extra-dbs.sh:ro
       - ../fixtures/postgres/demo.sql:/docker-entrypoint-initdb.d/10-demo.sql:ro
       - ../fixtures/postgres:/fixtures:ro
     healthcheck:
@@ -36,6 +37,9 @@ services:
       - sqlite:/data
       - ../fixtures/sqlite:/fixture:ro
       - ../../scripts/seed-sqlite.mjs:/seed-sqlite.mjs:ro
+  nats:
+    image: nats:2.15.2@sha256:b6c40dcfe5ae9174dcafa9c43f800afb93b8b0ffcde02ac00efc6b66031d9a50
+    command: ["-js"]
   app:
     build:
       context: ../..
@@ -48,6 +52,7 @@ services:
       CONNECTION_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       SQLITE_TARGET_DIR: /data/sqlite
       WEB_DIST_DIR: /app/web/dist
+      NATS_URL: nats://nats:4222
       FIXTURE_PASSWORD: e2e fixture password 123
       FIXTURE_CONNECTIONS_FILE: /fixtures/connections.json
     volumes:
@@ -58,6 +63,8 @@ services:
         condition: service_healthy
       target:
         condition: service_healthy
+      nats:
+        condition: service_started
   browser:
     build:
       context: ../..

@@ -42,5 +42,75 @@
     "config": {
       "file": "demo_desired.sqlite"
     }
+  },
+  {
+    "id": "30000000-0000-4000-8000-000000000005",
+    "name": "PostgreSQL big dataset",
+    "driver": "postgres",
+    "config": {
+      "host": "target",
+      "port": 5432,
+      "database": "demo_big",
+      "username": "platform_runner",
+      "password": "e2e_runner",
+      "sslmode": "disable",
+      "editor_role": "platform_editor"
+    }
+  },
+  {
+    "id": "30000000-0000-4000-8000-000000000011",
+    "name": "PostgreSQL load 1",
+    "driver": "postgres",
+    "config": {
+      "host": "target",
+      "port": 5432,
+      "database": "load_1",
+      "username": "platform_runner",
+      "password": "e2e_runner",
+      "sslmode": "disable",
+      "editor_role": "platform_editor"
+    }
+  },
+  {
+    "id": "30000000-0000-4000-8000-000000000012",
+    "name": "PostgreSQL load 2",
+    "driver": "postgres",
+    "config": {
+      "host": "target",
+      "port": 5432,
+      "database": "load_2",
+      "username": "platform_runner",
+      "password": "e2e_runner",
+      "sslmode": "disable",
+      "editor_role": "platform_editor"
+    }
+  },
+  {
+    "id": "30000000-0000-4000-8000-000000000013",
+    "name": "PostgreSQL load 3",
+    "driver": "postgres",
+    "config": {
+      "host": "target",
+      "port": 5432,
+      "database": "load_3",
+      "username": "platform_runner",
+      "password": "e2e_runner",
+      "sslmode": "disable",
+      "editor_role": "platform_editor"
+    }
+  },
+  {
+    "id": "30000000-0000-4000-8000-000000000014",
+    "name": "PostgreSQL load 4",
+    "driver": "postgres",
+    "config": {
+      "host": "target",
+      "port": 5432,
+      "database": "load_4",
+      "username": "platform_runner",
+      "password": "e2e_runner",
+      "sslmode": "disable",
+      "editor_role": "platform_editor"
+    }
   }
 ]

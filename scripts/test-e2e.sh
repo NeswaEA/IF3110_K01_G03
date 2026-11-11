@@ -23,7 +23,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 compose build app browser
-compose up -d --wait metadata target
+compose up -d --wait metadata target nats
 compose run --rm sqlite
 compose exec -T target psql -U target_admin -d postgres -v ON_ERROR_STOP=1 < infra/postgres/seed-desired.sql
 compose run --rm --entrypoint /app/migrate app up
