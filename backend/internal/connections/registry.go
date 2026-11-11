@@ -13,10 +13,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // registers "pgx"
-	_ "github.com/mattn/go-sqlite3"    // registers "sqlite3" (CGO)
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/mattn/go-sqlite3" // registers "sqlite3" (CGO)
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/telemetry"
 )
 
 type RegistryOptions struct {
@@ -47,6 +49,7 @@ type poolEntry struct {
 	closed   bool
 	verified atomic.Bool
 	editor   string // PostgreSQL editor_role of this revision
+	untrack  func() // removes the pool from the db_pool_* metrics
 }
 
 var (
@@ -76,10 +79,13 @@ func (r *Registry) openDB(row Row) (*sql.DB, string, error) {
 	}
 	switch row.Driver {
 	case database.Postgres:
-		db, err := sql.Open("pgx", cfg.Postgres.DSN(int(r.opts.ConnectTimeout/time.Second)))
+		pc, err := pgx.ParseConfig(cfg.Postgres.DSN(int(r.opts.ConnectTimeout / time.Second)))
 		if err != nil {
 			return nil, "", err
 		}
+		// every statement on the target (viewer, explain, migrations) is traced and logged
+		pc.Tracer = telemetry.PgxTracer("target", row.ID)
+		db := stdlib.OpenDB(*pc)
 		db.SetMaxOpenConns(5)
 		db.SetMaxIdleConns(2)
 		db.SetConnMaxLifetime(30 * time.Minute)
@@ -186,7 +192,7 @@ func (r *Registry) lease(row Row) (*poolEntry, error) {
 		// undecryptable config or a SQLite path that no longer validates: report as unavailable, no detail
 		return nil, database.ErrTargetUnavailable
 	}
-	e := &poolEntry{id: row.ID, rev: row.Revision, db: db, leases: 1, editor: editor}
+	e := &poolEntry{id: row.ID, rev: row.Revision, db: db, leases: 1, editor: editor, untrack: telemetry.RegisterPool("target", db)}
 	r.pools[row.ID] = e
 	return e, nil
 }
@@ -200,6 +206,7 @@ func (r *Registry) unlease(e *poolEntry) {
 	}
 	r.mu.Unlock()
 	if closeNow {
+		e.untrack()
 		_ = e.db.Close()
 	}
 }
@@ -209,6 +216,7 @@ func (r *Registry) retireLocked(e *poolEntry) {
 	e.retired = true
 	if e.leases == 0 && !e.closed {
 		e.closed = true
+		e.untrack()
 		go e.db.Close() // Close can block on in-flight connections; do not hold r.mu
 	}
 }
