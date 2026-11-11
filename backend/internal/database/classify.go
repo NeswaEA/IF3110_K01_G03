@@ -21,20 +21,11 @@ func ClassifyTargetError(ctx context.Context, err error) error {
 	case errors.Is(err, context.Canceled):
 		return err
 	}
-	switch sqlState(err) {
+	switch SQLState(err) {
 	case "42501": // insufficient_privilege
 		return ErrTargetPermission
 	case "57014": // query_canceled: statement_timeout fired just before the request deadline
 		return ErrTargetTimeout
 	}
 	return ErrTargetUnavailable
-}
-
-// sqlState returns the SQLSTATE of a driver error that carries one (pgconn.PgError), else "".
-func sqlState(err error) string {
-	var s interface{ SQLState() string }
-	if errors.As(err, &s) {
-		return s.SQLState()
-	}
-	return ""
 }
