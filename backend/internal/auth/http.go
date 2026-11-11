@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -175,9 +176,17 @@ func (h *HTTPHandler) login(w http.ResponseWriter, r *http.Request) {
 	prelogin, _ := r.Context().Value(sessionContextKey{}).(Session)
 	session, err := h.sessions.login(r.Context(), prelogin, input.Username, input.Password)
 	if err != nil {
+		// The typed username is left out: people paste passwords into it by mistake.
+		code := "INTERNAL_ERROR"
+		var domain *contracts.DomainError
+		if errors.As(err, &domain) {
+			code = domain.Code
+		}
+		slog.WarnContext(r.Context(), "login rejected", "event", "auth.login", "status", "failed", "error_code", code)
 		_ = platform.WriteError(w, r, err)
 		return
 	}
+	slog.InfoContext(platform.WithActorID(r.Context(), session.Principal.UserID), "login succeeded", "event", "auth.login", "status", "ok")
 	h.setCookie(w, session)
 	_ = platform.WriteJSON(w, r, http.StatusOK, struct {
 		User userResponse `json:"user"`
