@@ -1084,6 +1084,189 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '500': { $ref: '#/components/responses/InternalError' }
+  # --- execution and history --------------------------------------------
+  /databases/{id}/change-requests/{rid}/execute:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - { $ref: '#/components/parameters/ChangeRequestId' }
+    post:
+      operationId: executeChangeRequest
+      summary: Queue an approved normal migration action.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '200':
+          description: The existing execution.
+          headers: { Location: { $ref: '#/components/headers/Location' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Execution' }
+        '202':
+          description: The accepted execution.
+          headers: { Location: { $ref: '#/components/headers/Location' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Execution' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/executions:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+    get:
+      operationId: listExecutions
+      summary: List executions by descending job number.
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ExecutionStatus' }
+        - name: action
+          in: query
+          schema: { $ref: '#/components/schemas/ExecutionAction' }
+        - name: migration_id
+          in: query
+          schema: { $ref: '#/components/schemas/UUID' }
+        - { $ref: '#/components/parameters/WideLimit' }
+        - { $ref: '#/components/parameters/WideOffset' }
+      responses:
+        '200':
+          description: The result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Execution' } }
+                  page: { $ref: '#/components/schemas/Page' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/executions/{eid}:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - { $ref: '#/components/parameters/ExecutionId' }
+    get:
+      operationId: getExecution
+      summary: Get the current status of an execution.
+      responses:
+        '200':
+          description: The result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Execution' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/executions/{eid}/reconcile:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - { $ref: '#/components/parameters/ExecutionId' }
+    post:
+      operationId: reconcileExecution
+      summary: Queue verification of a previously uncertain commit.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '202':
+          description: The accepted execution.
+          headers: { Location: { $ref: '#/components/headers/Location' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Execution' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/head:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+    get:
+      operationId: getDatabaseHead
+      summary: Get the committed migration head and its blocking execution.
+      responses:
+        '200':
+          description: The result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DatabaseHead' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/history:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+    get:
+      operationId: listMigrationHistory
+      summary: List migration executions and committed records.
+      parameters:
+        - name: hide_rollback
+          in: query
+          schema: { type: boolean, default: false }
+        - { $ref: '#/components/parameters/WideLimit' }
+        - { $ref: '#/components/parameters/WideOffset' }
+      responses:
+        '200':
+          description: The result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/TimelineEntry' } }
+                  page: { $ref: '#/components/schemas/Page' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
 components:
   securitySchemes:
     sessionCookie:
@@ -1121,6 +1304,11 @@ components:
       schema: { $ref: '#/components/schemas/UUID' }
     ChangeRequestId:
       name: rid
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/UUID' }
+    ExecutionId:
+      name: eid
       in: path
       required: true
       schema: { $ref: '#/components/schemas/UUID' }

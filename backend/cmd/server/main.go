@@ -74,6 +74,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 	relay := jobs.NewRelay(db, js, jobs.RelayOptions{PollInterval: runtime.OutboxPollInterval})
+	runtime.NotifyJobs = relay.Notify
 	handler, cleanup, err := newApp(ctx, db, cfg, runtime, jobs.NewEventBus(nc))
 	if err != nil {
 		return err

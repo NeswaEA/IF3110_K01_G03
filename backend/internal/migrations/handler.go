@@ -34,6 +34,12 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	mux.HandleFunc("GET "+db+"/change-requests", h.authorize(contracts.ViewDatabase, h.listRequests))
 	mux.HandleFunc("GET "+db+"/change-requests/{rid}", h.authorize(contracts.ViewDatabase, h.getRequest))
 	mux.HandleFunc("POST "+db+"/change-requests/{rid}/cancel", h.authorize(contracts.EditDatabase, h.cancelRequest))
+	mux.HandleFunc("POST "+db+"/change-requests/{rid}/execute", h.authorize(contracts.EditDatabase, h.executeRequest))
+	mux.HandleFunc("GET "+db+"/executions", h.authorize(contracts.ViewDatabase, h.listExecutions))
+	mux.HandleFunc("GET "+db+"/executions/{eid}", h.authorize(contracts.ViewDatabase, h.getExecution))
+	mux.HandleFunc("POST "+db+"/executions/{eid}/reconcile", h.authorize(contracts.EditDatabase, h.reconcileExecution))
+	mux.HandleFunc("GET "+db+"/head", h.authorize(contracts.ViewDatabase, h.getHead))
+	mux.HandleFunc("GET "+db+"/history", h.authorize(contracts.ViewDatabase, h.listHistory))
 }
 
 type authorizedHandler func(http.ResponseWriter, *http.Request, contracts.Principal, string)
@@ -56,6 +62,10 @@ func (h *Handler) authorize(action contracts.Action, next authorizedHandler) htt
 		}
 		if rid := r.PathValue("rid"); rid != "" && !contracts.ValidID(rid) {
 			_ = platform.WriteError(w, r, requestNotFound())
+			return
+		}
+		if eid := r.PathValue("eid"); eid != "" && !contracts.ValidID(eid) {
+			_ = platform.WriteError(w, r, problem("NOT_FOUND", "Eksekusi tidak ditemukan."))
 			return
 		}
 		next(w, r, actor, databaseID)
