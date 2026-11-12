@@ -49,7 +49,7 @@ type fixture struct {
 func newFixture(t *testing.T, databaseID string) fixture {
 	db := reviewDB(t)
 	f := fixture{db: db, subjects: &subjects{subject: newRequest(t, db, databaseID, 1)}, audit: &testkit.AuditRecorder{}}
-	f.svc = review.NewService(db, f.subjects, f.audit, testkit.NewClock(time.Now()))
+	f.svc = review.NewService(db, f.subjects, f.audit, nil, testkit.NewClock(time.Now()))
 	return f
 }
 

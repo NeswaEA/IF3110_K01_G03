@@ -52,6 +52,10 @@ func (h *Handler) handle(w http.ResponseWriter, r *http.Request, body any, decid
 		return
 	}
 	databaseID, requestID := r.PathValue("id"), r.PathValue("rid")
+	if !contracts.ValidID(databaseID) || !contracts.ValidID(requestID) {
+		_ = platform.WriteError(w, r, notFound())
+		return
+	}
 	// Without view access the database stays hidden; leading a granted group implies view access.
 	if err := h.access.Require(r.Context(), actor, contracts.ViewDatabase, databaseID); err != nil {
 		_ = platform.WriteError(w, r, err)

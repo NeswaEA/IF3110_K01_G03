@@ -414,13 +414,153 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/databases/{id}/migrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+            };
+            cookie?: never;
+        };
+        /** List migration definitions for the database. */
+        get: operations["listMigrations"];
+        put?: never;
+        /** Create a migration with its first revision and lint report. */
+        post: operations["createMigration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/databases/{id}/migrations/{mid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                mid: components["parameters"]["MigrationId"];
+            };
+            cookie?: never;
+        };
+        /** Get a migration and its current revision. */
+        get: operations["getMigration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update metadata or append a revision using the expected revision number. */
+        patch: operations["updateMigration"];
+        trace?: never;
+    };
+    "/databases/{id}/migrations/{mid}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                mid: components["parameters"]["MigrationId"];
+            };
+            cookie?: never;
+        };
+        /** List immutable revisions, newest first. */
+        get: operations["listMigrationRevisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/databases/{id}/migrations/{mid}/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                mid: components["parameters"]["MigrationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit a validated migration action for leader review. */
+        post: operations["submitChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/databases/{id}/change-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+            };
+            cookie?: never;
+        };
+        /** List change requests and their current required approvals. */
+        get: operations["listChangeRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/databases/{id}/change-requests/{rid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                rid: components["parameters"]["ChangeRequestId"];
+            };
+            cookie?: never;
+        };
+        /** Get a change request and its current required approvals. */
+        get: operations["getChangeRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/databases/{id}/change-requests/{rid}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                rid: components["parameters"]["ChangeRequestId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel an open change request. */
+        post: operations["cancelChangeRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/databases/{id}/change-requests/{rid}/approve": {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 id: components["parameters"]["DatabaseId"];
-                rid: components["schemas"]["UUID"];
+                rid: components["parameters"]["ChangeRequestId"];
             };
             cookie?: never;
         };
@@ -440,7 +580,7 @@ export interface paths {
             header?: never;
             path: {
                 id: components["parameters"]["DatabaseId"];
-                rid: components["schemas"]["UUID"];
+                rid: components["parameters"]["ChangeRequestId"];
             };
             cookie?: never;
         };
@@ -732,6 +872,47 @@ export interface components {
             batch_size: number;
             pause_ms: number;
         };
+        CreateMigrationInput: {
+            title: string;
+            description?: string;
+            /** @description SQL limited to 256 KiB after decoding. */
+            up_sql: string;
+            /** @description SQL limited to 256 KiB after decoding. */
+            down_sql?: string | null;
+            irreversible_reason?: string | null;
+            mode: components["schemas"]["MigrationMode"];
+            /** @description Required for batch mode. */
+            batch?: components["schemas"]["BatchConfig"] | null;
+            source_fingerprint?: components["schemas"]["Fingerprint"] | null;
+        } & ({
+            down_sql: string;
+            irreversible_reason?: null;
+        } | {
+            down_sql?: null;
+            irreversible_reason: string;
+        });
+        PatchMigrationInput: {
+            revision: number;
+            title?: string;
+            description?: string;
+            /** @description SQL limited to 256 KiB after decoding. */
+            up_sql?: string;
+            /** @description Set null to clear the existing down SQL. */
+            down_sql?: string | null;
+            /** @description Set null to clear the existing reason. */
+            irreversible_reason?: string | null;
+            mode?: components["schemas"]["MigrationMode"];
+            /** @description Set null to clear batch configuration when switching to normal mode. */
+            batch?: components["schemas"]["BatchConfig"] | null;
+        };
+        SubmitChangeRequestInput: {
+            action: components["schemas"]["RequestAction"];
+            /** @description Required when rolling back a partial migration. */
+            target_execution_id?: components["schemas"]["UUID"] | null;
+            /** @description Optional override for batch mode, bounded by the server batch-size limit. */
+            batch_size?: number | null;
+            note?: string;
+        };
         LintFinding: {
             rule: string;
             severity: components["schemas"]["LintSeverity"];
@@ -954,6 +1135,16 @@ export interface components {
                 "application/json": components["schemas"]["ErrorEnvelope"];
             };
         };
+        /** @description The body or a SQL field exceeds its byte limit. */
+        PayloadTooLarge: {
+            headers: {
+                "X-Request-ID": components["headers"]["XRequestID"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorEnvelope"];
+            };
+        };
         /** @description Well-formed request the domain rejects; the code says why. */
         Unprocessable: {
             headers: {
@@ -997,6 +1188,8 @@ export interface components {
     };
     parameters: {
         DatabaseId: components["schemas"]["UUID"];
+        MigrationId: components["schemas"]["UUID"];
+        ChangeRequestId: components["schemas"]["UUID"];
         Limit: number;
         Offset: number;
         WideLimit: number;
@@ -1983,13 +2176,317 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    listMigrations: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["MigrationStatus"];
+                limit?: components["parameters"]["WideLimit"];
+                offset?: components["parameters"]["WideOffset"];
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The requested page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Migration"][];
+                        page: components["schemas"]["Page"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMigrationInput"];
+            };
+        };
+        responses: {
+            /** @description The result. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Migration"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["Unprocessable"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                mid: components["parameters"]["MigrationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Migration"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                mid: components["parameters"]["MigrationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchMigrationInput"];
+            };
+        };
+        responses: {
+            /** @description The result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Migration"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["Unprocessable"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listMigrationRevisions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                mid: components["parameters"]["MigrationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["MigrationRevision"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    submitChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                mid: components["parameters"]["MigrationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitChangeRequestInput"];
+            };
+        };
+        responses: {
+            /** @description The result. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ChangeRequest"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["Unprocessable"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listChangeRequests: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["RequestStatus"];
+                migration_id?: components["schemas"]["UUID"];
+                limit?: components["parameters"]["WideLimit"];
+                offset?: components["parameters"]["WideOffset"];
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The requested page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ChangeRequest"][];
+                        page: components["schemas"]["Page"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                rid: components["parameters"]["ChangeRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ChangeRequest"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    cancelChangeRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                rid: components["parameters"]["ChangeRequestId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description The result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ChangeRequest"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     approveChangeRequest: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 id: components["parameters"]["DatabaseId"];
-                rid: components["schemas"]["UUID"];
+                rid: components["parameters"]["ChangeRequestId"];
             };
             cookie?: never;
         };
@@ -2017,6 +2514,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -2026,7 +2524,7 @@ export interface operations {
             header?: never;
             path: {
                 id: components["parameters"]["DatabaseId"];
-                rid: components["schemas"]["UUID"];
+                rid: components["parameters"]["ChangeRequestId"];
             };
             cookie?: never;
         };
@@ -2054,6 +2552,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
             500: components["responses"]["InternalError"];
         };
     };

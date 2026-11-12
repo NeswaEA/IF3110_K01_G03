@@ -124,7 +124,7 @@ func decide(t *testing.T, db *sql.DB, group, approver, decision string, revision
 }
 
 func service(db *sql.DB) *review.Service {
-	return review.NewService(db, nil, &testkit.AuditRecorder{}, testkit.NewClock(time.Now()))
+	return review.NewService(db, nil, &testkit.AuditRecorder{}, nil, testkit.NewClock(time.Now()))
 }
 
 func evaluate(t *testing.T, db *sql.DB, subject contracts.ReviewSubject) contracts.ReviewState {

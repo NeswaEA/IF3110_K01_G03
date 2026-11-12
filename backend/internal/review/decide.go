@@ -104,11 +104,16 @@ func (s *Service) decide(ctx context.Context, actor contracts.Principal, databas
 		Details: map[string]any{"migration_id": subject.MigrationID, "action": subject.Action, "revision": subject.Revision,
 			"content_hash": hex.EncodeToString(subject.ContentHash), "group_ids": groups, "status": state.Status},
 	})
+	if s.events != nil {
+		s.events.Publish(ctx, contracts.DatabaseEvent{
+			DatabaseID: databaseID, Type: "request.updated", ResourceID: requestID, Status: state.Status, At: now,
+		})
+	}
 	return nil
 }
 
 func validComment(comment string) error {
-	if n := utf8.RuneCountInString(comment); !utf8.ValidString(comment) || n < 1 || n > 2000 {
+	if n := utf8.RuneCountInString(comment); !utf8.ValidString(comment) || strings.ContainsRune(comment, 0) || n < 1 || n > 2000 {
 		return &contracts.DomainError{Code: "INVALID_REQUEST", Message: "Komentar tidak valid.",
 			Fields: map[string]string{"comment": "Isi komentar 1-2000 karakter."}}
 	}

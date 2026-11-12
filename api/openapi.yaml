@@ -762,14 +762,259 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/Unprocessable' }
         '500': { $ref: '#/components/responses/InternalError' }
+  # --- migrations and change requests ----------------------------------
+  /databases/{id}/migrations:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+    get:
+      operationId: listMigrations
+      summary: List migration definitions for the database.
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/MigrationStatus' }
+        - { $ref: '#/components/parameters/WideLimit' }
+        - { $ref: '#/components/parameters/WideOffset' }
+      responses:
+        '200':
+          description: The requested page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Migration' } }
+                  page: { $ref: '#/components/schemas/Page' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      operationId: createMigration
+      summary: Create a migration with its first revision and lint report.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMigrationInput' }
+      responses:
+        '201':
+          description: The result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Migration' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/migrations/{mid}:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - { $ref: '#/components/parameters/MigrationId' }
+    get:
+      operationId: getMigration
+      summary: Get a migration and its current revision.
+      responses:
+        '200':
+          description: The result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Migration' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      operationId: updateMigration
+      summary: Update metadata or append a revision using the expected revision number.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchMigrationInput' }
+      responses:
+        '200':
+          description: The result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Migration' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/migrations/{mid}/revisions:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - { $ref: '#/components/parameters/MigrationId' }
+    get:
+      operationId: listMigrationRevisions
+      summary: List immutable revisions, newest first.
+      responses:
+        '200':
+          description: The result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/MigrationRevision' } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/migrations/{mid}/requests:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - { $ref: '#/components/parameters/MigrationId' }
+    post:
+      operationId: submitChangeRequest
+      summary: Submit a validated migration action for leader review.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubmitChangeRequestInput' }
+      responses:
+        '201':
+          description: The result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ChangeRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/change-requests:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+    get:
+      operationId: listChangeRequests
+      summary: List change requests and their current required approvals.
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/RequestStatus' }
+        - name: migration_id
+          in: query
+          schema: { $ref: '#/components/schemas/UUID' }
+        - { $ref: '#/components/parameters/WideLimit' }
+        - { $ref: '#/components/parameters/WideOffset' }
+      responses:
+        '200':
+          description: The requested page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/ChangeRequest' } }
+                  page: { $ref: '#/components/schemas/Page' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/change-requests/{rid}:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - { $ref: '#/components/parameters/ChangeRequestId' }
+    get:
+      operationId: getChangeRequest
+      summary: Get a change request and its current required approvals.
+      responses:
+        '200':
+          description: The result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ChangeRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/change-requests/{rid}/cancel:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - { $ref: '#/components/parameters/ChangeRequestId' }
+    post:
+      operationId: cancelChangeRequest
+      summary: Cancel an open change request.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '200':
+          description: The result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/ChangeRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '500': { $ref: '#/components/responses/InternalError' }
   # --- review -------------------------------------------------------------
   /databases/{id}/change-requests/{rid}/approve:
     parameters:
       - { $ref: '#/components/parameters/DatabaseId' }
-      - name: rid
-        in: path
-        required: true
-        schema: { $ref: '#/components/schemas/UUID' }
+      - { $ref: '#/components/parameters/ChangeRequestId' }
     post:
       operationId: approveChangeRequest
       summary: Approve for every pending required group the caller leads.
@@ -800,14 +1045,12 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '500': { $ref: '#/components/responses/InternalError' }
   /databases/{id}/change-requests/{rid}/reject:
     parameters:
       - { $ref: '#/components/parameters/DatabaseId' }
-      - name: rid
-        in: path
-        required: true
-        schema: { $ref: '#/components/schemas/UUID' }
+      - { $ref: '#/components/parameters/ChangeRequestId' }
     post:
       operationId: rejectChangeRequest
       summary: Reject for every pending required group the caller leads; a comment is required.
@@ -839,6 +1082,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '500': { $ref: '#/components/responses/InternalError' }
 components:
   securitySchemes:
@@ -870,6 +1114,16 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/UUID'
+    MigrationId:
+      name: mid
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/UUID' }
+    ChangeRequestId:
+      name: rid
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/UUID' }
     Limit:
       name: limit
       in: query
@@ -914,6 +1168,10 @@ components:
       content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
     Conflict:
       description: State conflict; the code says which.
+      headers: { X-Request-ID: { $ref: '#/components/headers/XRequestID' } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    PayloadTooLarge:
+      description: The body or a SQL field exceeds its byte limit.
       headers: { X-Request-ID: { $ref: '#/components/headers/XRequestID' } }
       content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
     Unprocessable:
@@ -1310,6 +1568,68 @@ components:
         key_column: { type: string, minLength: 1 }
         batch_size: { type: integer, minimum: 1 }
         pause_ms: { type: integer, minimum: 0, maximum: 60000 }
+    CreateMigrationInput:
+      type: object
+      additionalProperties: false
+      required: [title, up_sql, mode]
+      oneOf:
+        - required: [down_sql]
+          properties:
+            down_sql: { type: string }
+            irreversible_reason: { type: 'null' }
+        - required: [irreversible_reason]
+          properties:
+            down_sql: { type: 'null' }
+            irreversible_reason: { type: string }
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        up_sql: { type: string, minLength: 1, description: SQL limited to 256 KiB after decoding. }
+        down_sql: { type: [string, 'null'], minLength: 1, description: SQL limited to 256 KiB after decoding. }
+        irreversible_reason: { type: [string, 'null'], minLength: 1, maxLength: 500 }
+        mode: { $ref: '#/components/schemas/MigrationMode' }
+        batch:
+          description: Required for batch mode.
+          oneOf:
+            - $ref: '#/components/schemas/BatchConfig'
+            - type: 'null'
+        source_fingerprint:
+          oneOf:
+            - $ref: '#/components/schemas/Fingerprint'
+            - type: 'null'
+    PatchMigrationInput:
+      type: object
+      additionalProperties: false
+      required: [revision]
+      properties:
+        revision: { type: integer, minimum: 1, maximum: 9007199254740991 }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        up_sql: { type: string, minLength: 1, description: SQL limited to 256 KiB after decoding. }
+        down_sql: { type: [string, 'null'], minLength: 1, description: Set null to clear the existing down SQL. }
+        irreversible_reason: { type: [string, 'null'], minLength: 1, maxLength: 500, description: Set null to clear the existing reason. }
+        mode: { $ref: '#/components/schemas/MigrationMode' }
+        batch:
+          description: Set null to clear batch configuration when switching to normal mode.
+          oneOf:
+            - $ref: '#/components/schemas/BatchConfig'
+            - type: 'null'
+    SubmitChangeRequestInput:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { $ref: '#/components/schemas/RequestAction' }
+        target_execution_id:
+          description: Required when rolling back a partial migration.
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        batch_size:
+          type: [integer, 'null']
+          minimum: 1
+          description: Optional override for batch mode, bounded by the server batch-size limit.
+        note: { type: string, maxLength: 2000 }
     LintFinding:
       type: object
       required: [rule, severity, category, message, direction, statement_index]

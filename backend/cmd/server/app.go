@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/access"
@@ -22,6 +23,7 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/jobs"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/migrations"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/review"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/schemadiff"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/telemetry"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/viewer"
@@ -36,6 +38,7 @@ type runtimeConfig struct {
 	DiffTimeout    time.Duration
 	AtlasBin       string
 	NATSURL        string
+	BatchSizeMax   int
 	// OutboxPollInterval and SSEHeartbeat stay zero when unset; the relay and SSE handler apply their defaults.
 	OutboxPollInterval time.Duration
 	SSEHeartbeat       time.Duration
@@ -68,6 +71,13 @@ func loadRuntimeConfig() (runtimeConfig, error) {
 			}
 			*setting.value = value
 		}
+	}
+	if raw := os.Getenv("BATCH_SIZE_MAX"); raw != "" {
+		value, err := strconv.ParseInt(raw, 10, 32)
+		if err != nil || value < 1 {
+			return runtimeConfig{}, errors.New("BATCH_SIZE_MAX must be a positive 32-bit integer")
+		}
+		cfg.BatchSizeMax = int(value)
 	}
 	return cfg, nil
 }
@@ -113,6 +123,13 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	explainService := explain.NewService(registry, registry, map[database.Driver]explain.Planner{database.Postgres: postgres.Planner{}, database.SQLite: sqlite.Planner{}}, runtime.QueryTimeout)
 	protected := http.NewServeMux()
 	auditRecorder := audit.NewRecorder(slog.Default())
+	reviewService := review.NewService(db, migrationStore, auditRecorder, events, clock)
+	migrationService := migrations.NewService(migrationStore, registry, policy, reviewService, auditRecorder, events, runtime.BatchSizeMax)
+	migrations.RegisterRoutes(protected, migrations.NewHandler(migrationService, auth.PrincipalFromContext))
+	review.RegisterRoutes(protected, review.NewHandler(reviewService, policy, auth.PrincipalFromContext,
+		func(ctx context.Context, actor contracts.Principal, databaseID, requestID string) (any, error) {
+			return migrationService.GetChangeRequest(ctx, actor, databaseID, requestID)
+		}))
 	userService := access.NewUserService(db, sessions, policy, platform.SystemClock{}, auditRecorder, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)
 	groupService := access.NewGroupService(db, sessions, policy, platform.SystemClock{}, auditRecorder)
 	access.RegisterUserRoutes(protected, access.NewUserHandler(userService, auth.PrincipalFromContext))

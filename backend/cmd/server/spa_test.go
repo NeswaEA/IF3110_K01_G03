@@ -94,6 +94,7 @@ func TestRuntimeConfig(t *testing.T) {
 	t.Setenv("NATS_URL", "")
 	t.Setenv("OUTBOX_POLL_INTERVAL", "")
 	t.Setenv("SSE_HEARTBEAT_INTERVAL", "")
+	t.Setenv("BATCH_SIZE_MAX", "")
 	if _, err := loadRuntimeConfig(); err == nil {
 		t.Fatal("missing NATS_URL accepted")
 	}
@@ -114,6 +115,14 @@ func TestRuntimeConfig(t *testing.T) {
 	t.Setenv("SSE_HEARTBEAT_INTERVAL", "5s")
 	if cfg, err := loadRuntimeConfig(); err != nil || cfg.OutboxPollInterval != 250*time.Millisecond || cfg.SSEHeartbeat != 5*time.Second || cfg.NATSURL != "nats://localhost:4222" {
 		t.Fatal("relay and SSE settings not applied", err)
+	}
+	t.Setenv("BATCH_SIZE_MAX", "0")
+	if _, err := loadRuntimeConfig(); err == nil {
+		t.Fatal("invalid maximum batch size accepted")
+	}
+	t.Setenv("BATCH_SIZE_MAX", "2500")
+	if cfg, err := loadRuntimeConfig(); err != nil || cfg.BatchSizeMax != 2500 {
+		t.Fatal("maximum batch size not applied", err)
 	}
 	t.Setenv("TARGET_QUERY_TIMEOUT", "-1s")
 	if _, err := loadRuntimeConfig(); err == nil {

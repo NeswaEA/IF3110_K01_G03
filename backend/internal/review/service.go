@@ -13,13 +13,14 @@ type Service struct {
 	db       *sql.DB
 	subjects contracts.ReviewSubjects
 	audit    contracts.AuditRecorder
+	events   contracts.EventPublisher
 	clock    contracts.Clock
 }
 
 var _ contracts.ReviewEvaluator = (*Service)(nil)
 
-func NewService(db *sql.DB, subjects contracts.ReviewSubjects, audit contracts.AuditRecorder, clock contracts.Clock) *Service {
-	return &Service{db: db, subjects: subjects, audit: audit, clock: clock}
+func NewService(db *sql.DB, subjects contracts.ReviewSubjects, audit contracts.AuditRecorder, events contracts.EventPublisher, clock contracts.Clock) *Service {
+	return &Service{db: db, subjects: subjects, audit: audit, events: events, clock: clock}
 }
 
 // Evaluate recomputes the required groups from the live grants. A decision counts only when it was made
