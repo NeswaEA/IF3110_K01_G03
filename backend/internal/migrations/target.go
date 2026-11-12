@@ -13,8 +13,6 @@ import (
 	sqlite3 "github.com/mattn/go-sqlite3"
 )
 
-const targetLockKey int64 = 0x504c41544d4947
-
 type executor interface {
 	database.SQLExecutor
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
@@ -42,7 +40,7 @@ func beginTarget(ctx context.Context, h database.TargetHandle) (*targetTransacti
 				_, err = t.ExecContext(ctx, `SELECT set_config('statement_timeout', $1, true)`, strconv.FormatInt(max(1, time.Until(deadline).Milliseconds()), 10))
 			}
 			if err == nil {
-				_, err = t.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, targetLockKey)
+				_, err = t.ExecContext(ctx, `SELECT pg_advisory_xact_lock(`+postgres.MigrationLockKey+`)`)
 			}
 		}
 	} else if h.Driver == database.SQLite {
@@ -125,26 +123,6 @@ func targetError(ctx context.Context, err error) error {
 		return database.ErrTargetTimeout
 	}
 	return database.ClassifyTargetError(ctx, err)
-}
-
-func userError(ctx context.Context, err error) error {
-	if ctx.Err() != nil {
-		return targetError(ctx, ctx.Err())
-	}
-	var pg interface{ SQLState() string }
-	if errors.As(err, &pg) {
-		if pg.SQLState() == "57014" || pg.SQLState() == "55P03" {
-			return database.ErrTargetTimeout
-		}
-		if len(pg.SQLState()) >= 2 && pg.SQLState()[:2] != "08" {
-			return problem("SQL_EXECUTION_FAILED", "SQL ditolak database; perubahan dibatalkan.")
-		}
-	}
-	var se sqlite3.Error
-	if errors.As(err, &se) && se.Code != sqlite3.ErrBusy && se.Code != sqlite3.ErrLocked && se.Code != sqlite3.ErrInterrupt {
-		return problem("SQL_EXECUTION_FAILED", "SQL ditolak database; perubahan dibatalkan.")
-	}
-	return targetError(ctx, err)
 }
 
 func (t *targetTransaction) asEditor(ctx context.Context, role string) error {

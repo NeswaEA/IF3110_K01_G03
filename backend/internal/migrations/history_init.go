@@ -91,6 +91,11 @@ func ensurePostgresHistory(ctx context.Context, q executor, role string) error {
 		 cursor_from bigint NOT NULL, cursor_to bigint NOT NULL, rows integer NOT NULL,
 		 committed_at timestamptz NOT NULL, PRIMARY KEY (execution_id, batch_no))`,
 		`REVOKE ALL ON TABLE _platform.migration_history, _platform.migration_checkpoints FROM PUBLIC, ` + editor,
+		`CREATE OR REPLACE FUNCTION _platform.protect_migration_history() RETURNS trigger LANGUAGE plpgsql AS $$
+		  BEGIN RAISE EXCEPTION 'migration history is append-only' USING ERRCODE = '23514'; END $$`,
+		`CREATE OR REPLACE TRIGGER migration_history_append_only
+		  BEFORE UPDATE OR DELETE OR TRUNCATE ON _platform.migration_history
+		  FOR EACH STATEMENT EXECUTE FUNCTION _platform.protect_migration_history()`,
 	} {
 		if _, err := q.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("%w: history setup: %w", database.ErrLedgerIncompatible, err)
@@ -195,6 +200,16 @@ func ensureSQLiteHistory(ctx context.Context, q executor) error {
 	 actor_name TEXT NOT NULL, committed_at TEXT NOT NULL)`)
 	if err != nil {
 		return database.ErrLedgerIncompatible
+	}
+	for _, trigger := range []string{
+		`CREATE TRIGGER IF NOT EXISTS _platform_migration_history_no_update BEFORE UPDATE ON _platform_migration_history
+		  BEGIN SELECT RAISE(ABORT, 'migration history is append-only'); END`,
+		`CREATE TRIGGER IF NOT EXISTS _platform_migration_history_no_delete BEFORE DELETE ON _platform_migration_history
+		  BEGIN SELECT RAISE(ABORT, 'migration history is append-only'); END`,
+	} {
+		if _, err := q.ExecContext(ctx, trigger); err != nil {
+			return database.ErrLedgerIncompatible
+		}
 	}
 	rows, err := q.QueryContext(ctx, `SELECT name, type, "notnull", pk, hidden FROM pragma_table_xinfo('_platform_migration_history')`)
 	if err != nil {

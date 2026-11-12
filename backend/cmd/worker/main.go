@@ -15,13 +15,16 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/access"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/audit"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/connections"
-	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database/postgres"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database/sqlite"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/jobs"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/migrations"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/review"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/telemetry"
 )
 
@@ -85,34 +88,32 @@ func run(ctx context.Context) error {
 		return err
 	}
 	events := jobs.NewEventBus(nc)
-	handler, stale := newExecutor(registry, lockers, events, cfg)
+	clock := platform.SystemClock{}
+	store := migrations.NewStore(db, clock)
+	recorder := audit.NewRecorder(slog.Default())
+	reviews := review.NewService(db, store, recorder, events, clock)
+	outbox := jobs.NewOutbox(db)
+	svc := migrations.NewService(store, registry, access.NewPolicy(db), reviews, recorder, events,
+		migrations.ServiceOptions{MaxAttempts: cfg.MaxAttempts, Enqueuer: outbox})
+	inspector := database.DispatchInspector{ByDriver: map[database.Driver]database.Inspector{
+		database.Postgres: postgres.Inspector{}, database.SQLite: sqlite.Inspector{},
+	}}
+	handler := migrations.NewExecutor(svc, registry, inspector, lockers, migrations.ExecutorOptions{
+		WorkerID: cfg.WorkerID, HeartbeatInterval: cfg.HeartbeatInterval, StaleAfter: 2 * cfg.AckWait,
+		LockRetryMaxDelay: cfg.LockRetryMaxDelay, OrderingDelay: cfg.OrderingDelay,
+		RetryBaseDelay: cfg.RetryBaseDelay, RetryMaxDelay: cfg.RetryMaxDelay,
+		StatementTimeout: cfg.StatementTimeout, LockTimeout: cfg.LockTimeout,
+	})
 
 	slog.InfoContext(ctx, "worker started", "event", "worker.started", "worker_id", cfg.WorkerID, "concurrency", cfg.Concurrency)
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		return jobs.NewConsumer(js, handler, jobs.ConsumerOptions{Concurrency: cfg.Concurrency, AckWait: cfg.AckWait}).Run(gctx)
 	})
-	if stale != nil {
-		g.Go(func() error {
-			return jobs.NewSweeper(stale, jobs.NewOutbox(db), db, jobs.SweeperOptions{OlderThan: 2 * cfg.AckWait}).Run(gctx)
-		})
-	}
+	g.Go(func() error {
+		return jobs.NewSweeper(handler, outbox, db, jobs.SweeperOptions{OlderThan: 2 * cfg.AckWait}).Run(gctx)
+	})
 	err = g.Wait()
 	slog.Info("worker stopped", "event", "worker.stopped", "worker_id", cfg.WorkerID)
 	return err
-}
-
-// newExecutor builds the job handler and the stale-job source.
-// shortcut: until the migrations executor exists every job is left in the
-// queue (Nak, retried later) so no job is lost or run; replace the body with
-// migrations.NewExecutor wired to these dependencies once it lands.
-func newExecutor(_ database.TargetProvider, _ map[database.Driver]database.MigrationLocker, _ contracts.EventPublisher, cfg config) (contracts.JobHandler, contracts.StaleJobSource) {
-	return waitingHandler{delay: cfg.LockRetryMaxDelay}, nil
-}
-
-type waitingHandler struct{ delay time.Duration }
-
-func (h waitingHandler) Handle(ctx context.Context, m contracts.JobMessage) contracts.JobResult {
-	slog.WarnContext(ctx, "no executor wired; job left in the queue", "event", "job.deferred", "execution_id", m.ExecutionID)
-	return contracts.JobResult{Delay: h.delay, Reason: "retry"}
 }

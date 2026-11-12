@@ -12,6 +12,13 @@ type DriverLookup interface {
 	Driver(ctx context.Context, id string) (database.Driver, error)
 }
 
+type ServiceOptions struct {
+	BatchSizeMax int
+	MaxAttempts  int
+	Enqueuer     contracts.JobEnqueuer
+	NotifyJobs   func()
+}
+
 type Service struct {
 	store        *Store
 	drivers      DriverLookup
@@ -20,16 +27,23 @@ type Service struct {
 	audit        contracts.AuditRecorder
 	events       contracts.EventPublisher
 	batchSizeMax int
+	maxAttempts  int
+	enqueuer     contracts.JobEnqueuer
+	notifyJobs   func()
 }
 
 var _ contracts.ReviewSubjects = (*Service)(nil)
 
 func NewService(store *Store, drivers DriverLookup, access contracts.AccessChecker, review contracts.ReviewEvaluator,
-	audit contracts.AuditRecorder, events contracts.EventPublisher, batchSizeMax int) *Service {
-	if batchSizeMax == 0 {
-		batchSizeMax = DefaultBatchSizeMax
+	audit contracts.AuditRecorder, events contracts.EventPublisher, options ServiceOptions) *Service {
+	if options.BatchSizeMax == 0 {
+		options.BatchSizeMax = DefaultBatchSizeMax
 	}
-	return &Service{store: store, drivers: drivers, access: access, review: review, audit: audit, events: events, batchSizeMax: batchSizeMax}
+	if options.MaxAttempts == 0 {
+		options.MaxAttempts = 3
+	}
+	return &Service{store: store, drivers: drivers, access: access, review: review, audit: audit, events: events,
+		batchSizeMax: options.BatchSizeMax, maxAttempts: options.MaxAttempts, enqueuer: options.Enqueuer, notifyJobs: options.NotifyJobs}
 }
 
 func (s *Service) LoadSubject(ctx context.Context, q contracts.Querier, requestID string) (contracts.ReviewSubject, error) {

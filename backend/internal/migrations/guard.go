@@ -182,10 +182,7 @@ func sqliteUserSQL(ctx context.Context, conn *sql.Conn, query string) error {
 	if execErr == nil && !action {
 		return problem("INVALID_REQUEST", "SQL tidak memuat statement.")
 	}
-	if execErr != nil {
-		return userError(ctx, execErr)
-	}
-	return nil
+	return execErr
 }
 
 func migrationAuthorizer(op int, a1, a2, _ string) int {

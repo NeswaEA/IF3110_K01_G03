@@ -88,27 +88,39 @@ func sqliteReservedTokens(tokens []sqliteToken) bool {
 	return false
 }
 
-func (l *lintReport) sqlite(conn *sql.Conn, query string) error {
+type sqliteStatement struct {
+	query  string
+	tokens []sqliteToken
+}
+
+func sqliteStatements(query string) []sqliteStatement {
 	tokens := sqliteTokens(query)
-	count := 0
+	var statements []sqliteStatement
 	for start := 0; start < len(tokens); {
 		end := start
 		for end < len(tokens) && tokens[end].kind != ';' {
 			end++
 		}
 		if end > start {
-			count++
-			index := count
-			l.statement = &index
-			statement := query[tokens[start].start:tokens[end-1].end]
-			if err := l.sqliteStatement(conn, statement, tokens[start:end]); err != nil {
-				return err
-			}
+			statements = append(statements, sqliteStatement{
+				query: query[tokens[start].start:tokens[end-1].end], tokens: tokens[start:end],
+			})
 		}
 		start = end + 1
 	}
-	if count == 0 {
+	return statements
+}
+
+func (l *lintReport) sqlite(conn *sql.Conn, query string) error {
+	statements := sqliteStatements(query)
+	if len(statements) == 0 {
 		l.parseError("SQLite")
+	}
+	for i, statement := range statements {
+		l.statement = new(i + 1)
+		if err := l.sqliteStatement(conn, statement.query, statement.tokens); err != nil {
+			return err
+		}
 	}
 	return nil
 }

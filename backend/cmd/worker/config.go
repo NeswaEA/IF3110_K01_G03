@@ -24,6 +24,8 @@ type config struct {
 	OrderingDelay       time.Duration
 	RetryBaseDelay      time.Duration
 	RetryMaxDelay       time.Duration
+	StatementTimeout    time.Duration
+	LockTimeout         time.Duration
 }
 
 func loadConfig() (config, error) {
@@ -75,6 +77,8 @@ func loadConfig() (config, error) {
 		{"ORDERING_DELAY", &cfg.OrderingDelay, time.Second},
 		{"MIGRATION_RETRY_BASE_DELAY", &cfg.RetryBaseDelay, 2 * time.Second},
 		{"MIGRATION_RETRY_MAX_DELAY", &cfg.RetryMaxDelay, 30 * time.Second},
+		{"MIGRATION_STATEMENT_TIMEOUT", &cfg.StatementTimeout, 30 * time.Minute},
+		{"MIGRATION_LOCK_TIMEOUT", &cfg.LockTimeout, 5 * time.Second},
 	} {
 		*s.value = s.fallback
 		if raw := os.Getenv(s.name); raw != "" {

@@ -13,9 +13,9 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
 )
 
-// lockKey is the same on every target database; advisory locks are scoped to
+// MigrationLockKey is the same on every target database; advisory locks are scoped to
 // one database, so targets on a shared server do not block each other.
-const lockKey = `hashtextextended('if3110.migration', 0)`
+const MigrationLockKey = `hashtextextended('if3110.migration', 0)`
 
 // Locker takes a session advisory lock on the target itself, held by a pinned
 // connection that also runs every migration transaction. If the worker dies,
@@ -33,7 +33,7 @@ func (l Locker) Acquire(ctx context.Context, h database.TargetHandle) (database.
 		return database.MigrationLock{}, database.ClassifyTargetError(ctx, err)
 	}
 	var got bool
-	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(`+lockKey+`)`).Scan(&got); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(`+MigrationLockKey+`)`).Scan(&got); err != nil {
 		discard(conn)
 		return database.MigrationLock{}, database.ClassifyTargetError(ctx, err)
 	}
@@ -75,7 +75,7 @@ func (l Locker) Acquire(ctx context.Context, h database.TargetHandle) (database.
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			var unlocked bool
-			if err := conn.QueryRowContext(ctx, `SELECT pg_advisory_unlock(`+lockKey+`)`).Scan(&unlocked); err != nil || !unlocked {
+			if err := conn.QueryRowContext(ctx, `SELECT pg_advisory_unlock(`+MigrationLockKey+`)`).Scan(&unlocked); err != nil || !unlocked {
 				// Session state unknown (aborted transaction, broken socket): end
 				// the session so the server drops the lock and any open transaction.
 				discard(conn)

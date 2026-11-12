@@ -39,6 +39,8 @@ type runtimeConfig struct {
 	AtlasBin       string
 	NATSURL        string
 	BatchSizeMax   int
+	MaxAttempts    int
+	NotifyJobs     func()
 	// OutboxPollInterval and SSEHeartbeat stay zero when unset; the relay and SSE handler apply their defaults.
 	OutboxPollInterval time.Duration
 	SSEHeartbeat       time.Duration
@@ -78,6 +80,13 @@ func loadRuntimeConfig() (runtimeConfig, error) {
 			return runtimeConfig{}, errors.New("BATCH_SIZE_MAX must be a positive 32-bit integer")
 		}
 		cfg.BatchSizeMax = int(value)
+	}
+	if raw := os.Getenv("MIGRATION_MAX_ATTEMPTS"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > 64 {
+			return runtimeConfig{}, errors.New("MIGRATION_MAX_ATTEMPTS must be an integer from 1 to 64")
+		}
+		cfg.MaxAttempts = value
 	}
 	return cfg, nil
 }
@@ -124,7 +133,9 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	protected := http.NewServeMux()
 	auditRecorder := audit.NewRecorder(slog.Default())
 	reviewService := review.NewService(db, migrationStore, auditRecorder, events, clock)
-	migrationService := migrations.NewService(migrationStore, registry, policy, reviewService, auditRecorder, events, runtime.BatchSizeMax)
+	migrationService := migrations.NewService(migrationStore, registry, policy, reviewService, auditRecorder, events, migrations.ServiceOptions{
+		BatchSizeMax: runtime.BatchSizeMax, MaxAttempts: runtime.MaxAttempts, Enqueuer: jobs.NewOutbox(db), NotifyJobs: runtime.NotifyJobs,
+	})
 	migrations.RegisterRoutes(protected, migrations.NewHandler(migrationService, auth.PrincipalFromContext))
 	review.RegisterRoutes(protected, review.NewHandler(reviewService, policy, auth.PrincipalFromContext,
 		func(ctx context.Context, actor contracts.Principal, databaseID, requestID string) (any, error) {
