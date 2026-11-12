@@ -98,7 +98,8 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	policy := access.NewPolicy(db)
 	lifecycle := access.NewDatabaseAccessLifecycle(sessions)
 	generators, diffFeatures := diffGenerators(ctx, registry, runtime)
-	migrationStore := migrations.NewStore(db)
+	clock := platform.SystemClock{}
+	migrationStore := migrations.NewStore(db, clock)
 	connectionService := connections.NewService(db, cipher, registry, migrations.HistoryInitializer{}, lifecycle, migrationStore, connections.ServiceOptions{
 		Policy: connections.Policy{AllowInsecureSSL: cfg.AppEnv != "production"}, SQLiteDir: runtime.SQLiteDir, MetadataIdentity: identity, QueryTimeout: runtime.QueryTimeout,
 		Features: connections.Features{Runner: map[database.Driver]bool{database.Postgres: true, database.SQLite: true}, Diff: diffFeatures, Explain: map[database.Driver]bool{database.Postgres: true, database.SQLite: true}},
