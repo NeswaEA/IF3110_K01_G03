@@ -160,6 +160,34 @@ func TestMigrationReviewHTTP(t *testing.T) {
 		t.Fatalf("unexpected submitted request: %+v", r)
 	}
 	reqPath := base + "/change-requests/" + r.ID
+	type reviewItem struct {
+		Request  migrations.ChangeRequest `json:"request"`
+		Database struct{ ID string }      `json:"database"`
+		MyGroups []struct{ ID string }    `json:"my_groups"`
+	}
+	// inbox returns the open requests awaiting who's decision for this test's request.
+	inbox := func(who session) []reviewItem {
+		t.Helper()
+		var mine []reviewItem
+		for _, item := range migrationResponse[[]reviewItem](t, call(who, "GET", "/reviews", ""), 200).Data {
+			if item.Request.ID == r.ID {
+				mine = append(mine, item)
+			}
+		}
+		return mine
+	}
+	if items := inbox(lead); len(items) != 1 || items[0].Database.ID != databaseID || len(items[0].MyGroups) != 1 ||
+		items[0].MyGroups[0].ID != editGroup || items[0].Request.MigrationTitle != m.Title || len(items[0].Request.Approvals) != 2 {
+		t.Fatalf("lead's inbox: %+v", items)
+	}
+	if items := inbox(viewer); len(items) != 1 || items[0].MyGroups[0].ID != viewGroup {
+		t.Fatalf("viewer's inbox: %+v", items)
+	}
+	if items := inbox(editor); len(items) != 0 {
+		t.Fatalf("a member who leads nothing has no inbox: %+v", items)
+	}
+	migrationError(t, call(session{}, "GET", "/reviews", ""), 401, "UNAUTHENTICATED")
+	migrationError(t, call(lead, "GET", "/reviews?limit=0", ""), 400, "INVALID_REQUEST")
 	migrationError(t, call(editor, "POST", path+"/requests", applyBody), 409, "REQUEST_EXISTS")
 	migrationError(t, call(editor, "POST", reqPath+"/approve", `{}`), 403, "NOT_LEADER")
 	migrationError(t, call(viewer, "POST", other+"/change-requests/"+r.ID+"/approve", `{}`), 404, "NOT_FOUND")
@@ -174,10 +202,16 @@ func TestMigrationReviewHTTP(t *testing.T) {
 		return approved
 	}
 	first := approve(viewer, "pending_review")
+	if len(inbox(viewer)) != 0 || len(inbox(lead)) != 1 {
+		t.Fatal("a decided group must leave only the undecided leader's inbox")
+	}
 	if first.Approvals[0].Decision != "pending" || first.Approvals[1].Decision != "approved" {
 		t.Fatalf("first leader should only approve their group: %+v", first.Approvals)
 	}
 	approve(lead, "approved")
+	if len(inbox(lead)) != 0 {
+		t.Fatal("an approved request is no longer in any inbox")
+	}
 	foundEvent := false
 	for range 10 {
 		msg, err := sub.NextMsg(time.Second)

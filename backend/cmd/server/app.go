@@ -140,6 +140,15 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	review.RegisterRoutes(protected, review.NewHandler(reviewService, policy, auth.PrincipalFromContext,
 		func(ctx context.Context, actor contracts.Principal, databaseID, requestID string) (any, error) {
 			return migrationService.GetChangeRequest(ctx, actor, databaseID, requestID)
+		},
+		func(ctx context.Context, databaseID string) ([]string, error) {
+			// shortcut: one page of 200 open requests per database; page through them if a database ever holds more.
+			requests, err := migrationService.ListChangeRequests(ctx, databaseID, "pending_review", "", 200, 0)
+			ids := make([]string, len(requests))
+			for i, r := range requests {
+				ids[i] = r.ID
+			}
+			return ids, err
 		}))
 	userService := access.NewUserService(db, sessions, policy, platform.SystemClock{}, auditRecorder, auth.NormalizeUsername, (auth.PasswordHasher{}).Hash)
 	groupService := access.NewGroupService(db, sessions, policy, platform.SystemClock{}, auditRecorder)

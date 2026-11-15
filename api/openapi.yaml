@@ -1011,6 +1011,27 @@ paths:
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '500': { $ref: '#/components/responses/InternalError' }
   # --- review -------------------------------------------------------------
+  /reviews:
+    get:
+      operationId: listReviews
+      summary: Open change requests where the caller leads a required group that has not decided yet.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: The caller's review inbox, grouped by database name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/ReviewItem' } }
+                  page: { $ref: '#/components/schemas/Page' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /databases/{id}/change-requests/{rid}/approve:
     parameters:
       - { $ref: '#/components/parameters/DatabaseId' }

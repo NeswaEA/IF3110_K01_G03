@@ -143,7 +143,7 @@ func (h *Handler) listRequests(w http.ResponseWriter, r *http.Request, _ contrac
 		_ = platform.WriteError(w, r, err)
 		return
 	}
-	items, err := h.service.listRequests(r.Context(), databaseID, status, migrationID, page.Limit+1, page.Offset)
+	items, err := h.service.ListChangeRequests(r.Context(), databaseID, status, migrationID, page.Limit+1, page.Offset)
 	writePage(w, r, page, items, err)
 }
 

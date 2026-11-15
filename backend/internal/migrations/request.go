@@ -119,7 +119,8 @@ func (s *Service) getRequest(ctx context.Context, databaseID, id string) (Change
 	})
 }
 
-func (s *Service) listRequests(ctx context.Context, databaseID, status, migrationID string, limit, offset int) ([]ChangeRequest, error) {
+// ListChangeRequests lists a database's requests, newest first; status and migrationID filter when not empty.
+func (s *Service) ListChangeRequests(ctx context.Context, databaseID, status, migrationID string, limit, offset int) ([]ChangeRequest, error) {
 	return inTx(ctx, s.store.DB, &snapshot, func(tx *sql.Tx) ([]ChangeRequest, error) {
 		rows, err := tx.QueryContext(ctx, requestSelect+`
 			WHERE cr.database_id=$1 AND ($2='' OR cr.status=$2) AND

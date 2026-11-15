@@ -159,7 +159,7 @@ func TestHandlerRoutesAndResponses(t *testing.T) {
 		return actor, actor.UserID != ""
 	}, func(_ context.Context, _ contracts.Principal, databaseID, id string) (any, error) {
 		return map[string]string{"id": id, "database_id": databaseID}, nil
-	}))
+	}, nil))
 	call := func(path, body string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("POST", "/api/v1/databases/"+path, strings.NewReader(body))
