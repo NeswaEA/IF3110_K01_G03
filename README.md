@@ -195,7 +195,7 @@ Beban normal: 20 request baca/detik + 1 job/detik (`READ_RPS`, `JOB_RPS`). Tahap
 ```sh
 sh scripts/test-backend.sh   # gofmt, go vet, dan seluruh test Go (Go 1.27.2 di container)
 sh scripts/test-web.sh       # npm ci, typecheck, test, dan build frontend (Node 24.22.0 di container)
-sh scripts/test-e2e.sh       # Chromium, aplikasi asli, serta database/volume test baru
+sh scripts/test-e2e.sh       # Chromium desktop (1280×800) dan mobile (390×844), aplikasi asli, database/volume test baru
 ```
 
 Integration test backend memakai PostgreSQL asli dari `scripts/dev-up.sh` dan URL `TEST_*_DATABASE_URL` di `.env` (sudah diisi oleh `init-env.sh`). Tanpa URL tersebut, test integration dilewati dengan pesan. Argumen tambahan diteruskan ke `go test`, misalnya `sh scripts/test-backend.sh -run Fingerprint ./internal/database/`.

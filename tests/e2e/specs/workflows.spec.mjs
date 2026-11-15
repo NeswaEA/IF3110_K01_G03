@@ -1,13 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { engines, login, metadata, pathFor } from "../helpers.mjs";
+import { engines, login, metadata, pathFor, waitForApp } from "../helpers.mjs";
 
-test.beforeAll(async ({ request }) => {
-  await expect.poll(async () => {
-    try { return (await request.get("/healthz")).status(); } catch { return 0; }
-  }, { timeout: 30_000 }).toBe(200);
-});
+test.beforeAll(async ({ request }) => waitForApp(request));
 
-test("admin tests both source connections before migrations become ready", async ({ page }) => {
+test("admin tests both source connections before migrations become ready @desktop-only", async ({ page }) => {
   await login(page, "fixture-admin");
   await page.goto("/admin/connections");
   for (const engine of engines) {

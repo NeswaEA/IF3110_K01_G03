@@ -10,9 +10,17 @@ export default defineConfig({
   outputDir: "/artifacts/results",
   reporter: [["list"], ["json", { outputFile: "/artifacts/report.json" }]],
   use: {
-    ...devices["Desktop Chrome"],
     baseURL: "http://localhost:8080",
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
+  projects: [
+    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } } },
+    {
+      name: "mobile",
+      // Runs after desktop on the same stack; tests that change fixture state run once, on desktop.
+      grepInvert: /@desktop-only/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
+    },
+  ],
 });

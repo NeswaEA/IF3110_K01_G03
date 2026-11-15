@@ -9,6 +9,13 @@ export const engines = [
 ];
 export const pathFor = (engine) => `/databases/${engine.id}`;
 
+/** Waits until the app answers, since Compose starts it without waiting for health. */
+export async function waitForApp(request) {
+  await expect.poll(async () => {
+    try { return (await request.get("/healthz")).status(); } catch { return 0; }
+  }, { timeout: 30_000 }).toBe(200);
+}
+
 export async function login(page, username = "editor") {
   await page.goto("/login");
   await page.getByLabel("Username", { exact: true }).fill(username);
