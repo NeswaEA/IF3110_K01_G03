@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, Outlet, redirect, useLocation, useNavigate, useParams, useRouter } from "@tanstack/react-router";
-import { Database, LogOut, Server, Table2, Users, UsersRound } from "lucide-react";
+import { ClipboardCheck, Database, LogOut, Server, Table2, Users, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ApiError, onUnauthorized } from "@/api/client";
@@ -140,6 +140,7 @@ function AppSidebar({ databaseId }: { databaseId?: string }) {
           <SidebarGroupContent>
             <SidebarMenu>
               <NavItem to="/databases" icon={Database} label="Daftar database" onNavigate={close} exact />
+              <NavItem to="/reviews" icon={ClipboardCheck} label="Menunggu persetujuan" onNavigate={close} />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -187,7 +188,7 @@ function AppSidebar({ databaseId }: { databaseId?: string }) {
 }
 
 function NavItem({ to, icon: Icon, label, onNavigate, exact }: {
-  to: "/databases" | "/admin/users" | "/admin/groups" | "/admin/connections";
+  to: "/databases" | "/reviews" | "/admin/users" | "/admin/groups" | "/admin/connections";
   icon: typeof Database;
   label: string;
   onNavigate: () => void;

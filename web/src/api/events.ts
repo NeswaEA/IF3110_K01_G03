@@ -43,6 +43,8 @@ export function useDatabaseEvents(databaseId: string | undefined): void {
         for (const feature of features) void queryClient.invalidateQueries({ queryKey: [feature, databaseId] });
       });
     }
+    // The review inbox spans databases, so it is refreshed whole.
+    source.addEventListener("request.updated", () => void queryClient.invalidateQueries({ queryKey: ["reviews"] }));
     return () => source.close();
   }, [databaseId, queryClient]);
 

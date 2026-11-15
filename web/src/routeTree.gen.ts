@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppReviewsRouteImport } from './routes/_app/reviews'
 import { Route as AppAdminConnectionsRouteImport } from './routes/_app/admin/connections'
 import { Route as AppAdminGroupsRouteImport } from './routes/_app/admin/groups'
 import { Route as AppAdminUsersRouteImport } from './routes/_app/admin/users'
@@ -31,6 +32,11 @@ const LoginRoute = LoginRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReviewsRoute = AppReviewsRouteImport.update({
+  id: '/reviews',
+  path: '/reviews',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAdminConnectionsRoute = AppAdminConnectionsRouteImport.update({
@@ -68,6 +74,7 @@ const AppDatabasesDatabaseIdIndexRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
+  '/reviews': typeof AppReviewsRoute
   '/admin/connections': typeof AppAdminConnectionsRoute
   '/admin/groups': typeof AppAdminGroupsRouteWithChildren
   '/admin/users': typeof AppAdminUsersRoute
@@ -77,6 +84,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/reviews': typeof AppReviewsRoute
   '/': typeof AppIndexRoute
   '/admin/connections': typeof AppAdminConnectionsRoute
   '/admin/groups': typeof AppAdminGroupsRouteWithChildren
@@ -89,6 +97,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/_app/reviews': typeof AppReviewsRoute
   '/_app/': typeof AppIndexRoute
   '/_app/admin/connections': typeof AppAdminConnectionsRoute
   '/_app/admin/groups': typeof AppAdminGroupsRouteWithChildren
@@ -102,6 +111,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/reviews'
     | '/admin/connections'
     | '/admin/groups'
     | '/admin/users'
@@ -111,6 +121,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/reviews'
     | '/'
     | '/admin/connections'
     | '/admin/groups'
@@ -122,6 +133,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/login'
+    | '/_app/reviews'
     | '/_app/'
     | '/_app/admin/connections'
     | '/_app/admin/groups'
@@ -157,6 +169,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/reviews': {
+      id: '/_app/reviews'
+      path: '/reviews'
+      fullPath: '/reviews'
+      preLoaderRoute: typeof AppReviewsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/admin/connections': {
@@ -217,6 +236,7 @@ const AppAdminGroupsRouteWithChildren = AppAdminGroupsRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
+  AppReviewsRoute: typeof AppReviewsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppAdminConnectionsRoute: typeof AppAdminConnectionsRoute
   AppAdminGroupsRoute: typeof AppAdminGroupsRouteWithChildren
@@ -226,6 +246,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppReviewsRoute: AppReviewsRoute,
   AppIndexRoute: AppIndexRoute,
   AppAdminConnectionsRoute: AppAdminConnectionsRoute,
   AppAdminGroupsRoute: AppAdminGroupsRouteWithChildren,

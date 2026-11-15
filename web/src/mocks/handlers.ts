@@ -6,6 +6,7 @@ import connectionsTestOk from "../../../tests/fixtures/api/connections_test_ok.j
 import connectionsErrorRevisionConflict from "../../../tests/fixtures/api/connections_error_revision_conflict.json";
 import connectionsErrorValidation from "../../../tests/fixtures/api/connections_error_validation.json";
 import databasesList from "../../../tests/fixtures/api/databases_list.json";
+import reviewsInbox from "../../../tests/fixtures/api/reviews_inbox.json";
 import usersList from "../../../tests/fixtures/api/users_list.json";
 import groupsGrants from "../../../tests/fixtures/api/groups_grants.json";
 import groupsList from "../../../tests/fixtures/api/groups_list.json";
@@ -98,6 +99,8 @@ export const handlers: RequestHandler[] = [
     HttpResponse.json({ data: { database_id: params.databaseId, ...((await request.json()) as object) } }),
   ),
   http.delete(`${API}/admin/groups/:groupId/grants/:databaseId`, () => new HttpResponse(null, { status: 204 })),
+
+  http.get(`${API}/reviews`, () => HttpResponse.json(reviewsInbox)),
 
   http.get(`${API}/databases`, () => HttpResponse.json(databasesList)),
 
