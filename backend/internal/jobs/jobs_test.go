@@ -214,6 +214,57 @@ func TestEnqueueFollowsTransactionAndDeliversOnce(t *testing.T) {
 	}
 }
 
+// listening waits until relay has a LISTEN session other than old, then lets
+// its catch-up round finish so later rows can only be published by NOTIFY.
+func listening(t *testing.T, relay *Relay, old uint32) uint32 {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if pid := relay.listenPID.Load(); pid != 0 && pid != old {
+			time.Sleep(300 * time.Millisecond)
+			return pid
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("relay never attached its LISTEN session")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestNotifyPublishesWithoutWaitingForPoll(t *testing.T) {
+	db := metadata(t)
+	_, js := queue(t)
+	relay := NewRelay(db, js, RelayOptions{PollInterval: time.Hour})
+	run(t, relay.Run)
+	listening(t, relay, 0)
+	h := newHandler(nil)
+	run(t, NewConsumer(js, h, ConsumerOptions{FetchWait: 200 * time.Millisecond}).Run)
+
+	m := enqueue(t, context.Background(), db, true) // another session, like a worker's
+	if got := h.wait(t, 5*time.Second); got != m {
+		t.Fatalf("delivered %+v, want %+v", got, m)
+	}
+}
+
+func TestRelayListensAgainAfterSessionLoss(t *testing.T) {
+	db := metadata(t)
+	_, js := queue(t)
+	relay := NewRelay(db, js, RelayOptions{PollInterval: time.Hour})
+	run(t, relay.Run)
+	pid := listening(t, relay, 0)
+	if _, err := db.Exec(`SELECT pg_terminate_backend($1)`, pid); err != nil {
+		t.Fatal(err)
+	}
+	listening(t, relay, pid)
+	h := newHandler(nil)
+	run(t, NewConsumer(js, h, ConsumerOptions{FetchWait: 200 * time.Millisecond}).Run)
+
+	m := enqueue(t, context.Background(), db, true)
+	if got := h.wait(t, 5*time.Second); got != m {
+		t.Fatalf("delivered %+v, want %+v", got, m)
+	}
+}
+
 func TestRelayPublishesMessageIDAndTraceContext(t *testing.T) {
 	db := metadata(t)
 	_, js := queue(t)

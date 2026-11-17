@@ -3,10 +3,14 @@ package jobs
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"go.opentelemetry.io/otel"
@@ -29,11 +33,12 @@ type RelayOptions struct {
 // publish and commit republishes the row with the same Nats-Msg-Id, which
 // JetStream drops as a duplicate inside its window.
 type Relay struct {
-	db      *sql.DB
-	js      jetstream.JetStream
-	o       RelayOptions
-	notify  chan struct{}
-	cleaned time.Time
+	db        *sql.DB
+	js        jetstream.JetStream
+	o         RelayOptions
+	notify    chan struct{}
+	cleaned   time.Time
+	listenPID atomic.Uint32 // backend of the LISTEN session, 0 while detached
 }
 
 func NewRelay(db *sql.DB, js jetstream.JetStream, o RelayOptions) *Relay {
@@ -58,7 +63,12 @@ func (r *Relay) Notify() {
 }
 
 // Run publishes until ctx ends; failures are logged and retried next round.
+// A NOTIFY from any process's Enqueue starts a round at once; the poll is the
+// safety net for a lost notification or a broken LISTEN session.
 func (r *Relay) Run(ctx context.Context) error {
+	listening := make(chan struct{})
+	go func() { defer close(listening); r.listen(ctx) }()
+	defer func() { <-listening }()
 	ticker := time.NewTicker(r.o.PollInterval)
 	defer ticker.Stop()
 	for {
@@ -79,6 +89,57 @@ func (r *Relay) Run(ctx context.Context) error {
 		case <-r.notify:
 		}
 	}
+}
+
+// listen keeps one metadata session on LISTEN and turns each notification
+// into Notify, reattaching with backoff when the session breaks.
+func (r *Relay) listen(ctx context.Context) {
+	delay := time.Second
+	for ctx.Err() == nil {
+		attached, err := r.listenOnce(ctx)
+		r.listenPID.Store(0)
+		if ctx.Err() != nil {
+			return
+		}
+		if attached {
+			delay = time.Second
+		}
+		slog.WarnContext(ctx, "outbox listener detached", "event", "outbox.failed", "error", err.Error())
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+		delay = min(2*delay, 30*time.Second)
+	}
+}
+
+func (r *Relay) listenOnce(ctx context.Context) (attached bool, err error) {
+	conn, err := r.db.Conn(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer conn.Close()
+	err = conn.Raw(func(dc any) error {
+		sc, ok := dc.(*stdlib.Conn)
+		if !ok {
+			return errors.New("outbox listener needs the pgx driver")
+		}
+		pc := sc.Conn()
+		if _, err := pc.Exec(ctx, "LISTEN "+notifyChannel); err != nil {
+			return errors.Join(err, driver.ErrBadConn)
+		}
+		attached = true
+		r.listenPID.Store(pc.PgConn().PID())
+		r.Notify() // rows committed while no listener was attached
+		for {
+			if _, err := pc.WaitForNotification(ctx); err != nil {
+				return errors.Join(err, driver.ErrBadConn) // never hand a LISTEN session back to the pool
+			}
+			r.Notify()
+		}
+	})
+	return attached, err
 }
 
 type outboxRow struct {

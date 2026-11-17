@@ -55,7 +55,14 @@ func (o *Outbox) Enqueue(ctx context.Context, tx *sql.Tx, m contracts.JobMessage
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO outbox_messages (id, subject, payload, headers) VALUES ($1, $2, $3, $4)`,
-		id.String(), JobSubject(m.DatabaseID), p, h)
+	if _, err := tx.ExecContext(ctx, `INSERT INTO outbox_messages (id, subject, payload, headers) VALUES ($1, $2, $3, $4)`,
+		id.String(), JobSubject(m.DatabaseID), p, h); err != nil {
+		return err
+	}
+	// Delivered only if tx commits, so a relay in another process publishes at once.
+	_, err = tx.ExecContext(ctx, `SELECT pg_notify($1, '')`, notifyChannel)
 	return err
 }
+
+// notifyChannel is the NOTIFY channel that wakes the relays.
+const notifyChannel = "outbox_messages"
