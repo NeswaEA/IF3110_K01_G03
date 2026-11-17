@@ -23,17 +23,24 @@ const MigrationLockKey = `hashtextextended('if3110.migration', 0)`
 type Locker struct {
 	// PingInterval is how often an idle lock connection is checked; default 5s.
 	PingInterval time.Duration
+	// key is the advisory lock key expression; empty means MigrationLockKey. Tests set their own so
+	// they never collide with executors that other test packages run on the same database.
+	key string
 }
 
 var _ database.MigrationLocker = Locker{}
 
 func (l Locker) Acquire(ctx context.Context, h database.TargetHandle) (database.MigrationLock, error) {
+	key := l.key
+	if key == "" {
+		key = MigrationLockKey
+	}
 	conn, err := h.DB.Conn(ctx)
 	if err != nil {
 		return database.MigrationLock{}, database.ClassifyTargetError(ctx, err)
 	}
 	var got bool
-	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(`+MigrationLockKey+`)`).Scan(&got); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(`+key+`)`).Scan(&got); err != nil {
 		discard(conn)
 		return database.MigrationLock{}, database.ClassifyTargetError(ctx, err)
 	}
@@ -75,7 +82,7 @@ func (l Locker) Acquire(ctx context.Context, h database.TargetHandle) (database.
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			var unlocked bool
-			if err := conn.QueryRowContext(ctx, `SELECT pg_advisory_unlock(`+MigrationLockKey+`)`).Scan(&unlocked); err != nil || !unlocked {
+			if err := conn.QueryRowContext(ctx, `SELECT pg_advisory_unlock(`+key+`)`).Scan(&unlocked); err != nil || !unlocked {
 				// Session state unknown (aborted transaction, broken socket): end
 				// the session so the server drops the lock and any open transaction.
 				discard(conn)

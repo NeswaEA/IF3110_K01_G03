@@ -13,7 +13,7 @@ import (
 
 func TestLockerIsExclusivePerDatabase(t *testing.T) {
 	h := target(t)
-	locker := Locker{}
+	locker := Locker{key: testKey(t)}
 	first, err := locker.Acquire(ctx, h)
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +49,7 @@ func TestLockerIsExclusivePerDatabase(t *testing.T) {
 
 func TestLockerReleaseEndsSessionInAbortedTransaction(t *testing.T) {
 	h := target(t)
-	lock, err := Locker{}.Acquire(ctx, h)
+	lock, err := Locker{key: testKey(t)}.Acquire(ctx, h)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestLockerReleaseEndsSessionInAbortedTransaction(t *testing.T) {
 	_, _ = lock.Conn.ExecContext(ctx, "SELECT 1/0") // aborts the transaction
 	lock.Release()
 
-	again, err := Locker{}.Acquire(ctx, h)
+	again, err := Locker{key: testKey(t)}.Acquire(ctx, h)
 	if err != nil {
 		t.Fatalf("acquire after releasing an aborted session: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestLockerReleaseEndsSessionInAbortedTransaction(t *testing.T) {
 
 func TestLockerLostWhenBackendTerminated(t *testing.T) {
 	h := target(t)
-	lock, err := Locker{PingInterval: 100 * time.Millisecond}.Acquire(ctx, h)
+	lock, err := Locker{PingInterval: 100 * time.Millisecond, key: testKey(t)}.Acquire(ctx, h)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestLockerLostWhenBackendTerminated(t *testing.T) {
 		t.Fatal("COMMIT succeeded on a terminated lock connection")
 	}
 	// The server dropped the lock with the session.
-	next, err := Locker{}.Acquire(ctx, h)
+	next, err := Locker{key: testKey(t)}.Acquire(ctx, h)
 	if err != nil {
 		t.Fatalf("acquire after the holder was terminated: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestLockerLostWhenBackendTerminated(t *testing.T) {
 
 func TestLockerKeepsLockWhileStatementRuns(t *testing.T) {
 	h := target(t)
-	lock, err := Locker{PingInterval: 50 * time.Millisecond}.Acquire(ctx, h)
+	lock, err := Locker{PingInterval: 50 * time.Millisecond, key: testKey(t)}.Acquire(ctx, h)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,4 +138,10 @@ func otherDatabase(t *testing.T) database.TargetHandle {
 	}
 	t.Cleanup(func() { db.Close() })
 	return database.TargetHandle{DatabaseID: "30000000-0000-4000-8000-000000000099", Driver: database.Postgres, DB: db}
+}
+
+// testKey is a lock key of this test alone: executors in other test packages
+// take MigrationLockKey on the same database concurrently.
+func testKey(t *testing.T) string {
+	return "hashtextextended('if3110.test." + t.Name() + "', 0)"
 }
