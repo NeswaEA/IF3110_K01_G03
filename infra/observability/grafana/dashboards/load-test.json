@@ -228,7 +228,7 @@
       "description": "",
       "fieldConfig": {
         "defaults": {
-          "unit": "ms"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -281,7 +281,7 @@
       "description": "",
       "fieldConfig": {
         "defaults": {
-          "unit": "ms"
+          "unit": "s"
         },
         "overrides": []
       },
