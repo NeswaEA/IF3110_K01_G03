@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
@@ -18,6 +19,8 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	// target SQL is traced; the platform logger keeps only the parameter types
+	slog.SetDefault(platform.NewLogger(os.Stderr, slog.LevelInfo, nil).With("service", "dbplatform-seed"))
 	if err := run(ctx, os.Args[1:], os.Stdin); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
