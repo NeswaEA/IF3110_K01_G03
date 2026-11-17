@@ -10,6 +10,7 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -173,7 +174,20 @@ func (x *Executor) Handle(ctx context.Context, m contracts.JobMessage) contracts
 	if locker == nil {
 		return x.acquireFailed(ctx, g.executionRow, database.ErrTargetNotReady)
 	}
-	lock, err := locker.Acquire(ctx, target)
+	lockCtx, lockSpan := telemetry.Tracer().Start(ctx, "lock.acquire")
+	lock, err := locker.Acquire(lockCtx, target)
+	outcome, waitMS := "acquired", int64(0) // the first request waits only for this call
+	switch {
+	case errors.Is(err, database.ErrLockBusy):
+		outcome = "busy"
+	case err != nil:
+		outcome = "error"
+	}
+	if g.executionRow.lockRequested != nil {
+		waitMS = x.service.store.now().Sub(*g.executionRow.lockRequested).Milliseconds()
+	}
+	lockSpan.SetAttributes(attribute.String("outcome", outcome), attribute.Int64("wait_ms", waitMS))
+	lockSpan.End()
 	if errors.Is(err, database.ErrLockBusy) {
 		x.log(ctx, g.executionRow, "lock.busy")
 		delay := max(time.Second, database.Backoff(time.Second, x.options.LockRetryMaxDelay, 8))
