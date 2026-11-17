@@ -46,7 +46,9 @@ function ReviewsPage() {
           {data.data.map((item) => (
             <li key={item.request.id} className="grid gap-3">
               <div className="min-w-0">
-                <h2 className="text-lg font-semibold break-words">{item.request.migration_title}</h2>
+                <h2 className="text-lg font-semibold break-words"><Link className="underline-offset-4 hover:underline"
+                  to="/databases/$databaseId/migrations/$migrationId"
+                  params={{databaseId:item.database.id,migrationId:item.request.migration_id}} search={{tab:"revisions"}}>{item.request.migration_title}</Link></h2>
                 <p className="text-sm text-muted-foreground break-words">
                   {item.database.name} · {actions[item.request.action]} revisi {item.request.migration_revision} · diajukan{" "}
                   {new Date(item.request.created_at).toLocaleString("id-ID")}

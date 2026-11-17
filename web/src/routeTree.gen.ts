@@ -19,6 +19,11 @@ import { Route as AppAdminUsersRouteImport } from './routes/_app/admin/users'
 import { Route as AppDatabasesIndexRouteImport } from './routes/_app/databases/index'
 import { Route as AppAdminGroupsGroupIdRouteImport } from './routes/_app/admin/groups/$groupId'
 import { Route as AppDatabasesDatabaseIdIndexRouteImport } from './routes/_app/databases/$databaseId/index'
+import { Route as AppDatabasesDatabaseIdHistoryRouteImport } from './routes/_app/databases/$databaseId/history'
+import { Route as AppDatabasesDatabaseIdSchemaDiffRouteImport } from './routes/_app/databases/$databaseId/schema-diff'
+import { Route as AppDatabasesDatabaseIdExecutionsExecutionIdRouteImport } from './routes/_app/databases/$databaseId/executions/$executionId'
+import { Route as AppDatabasesDatabaseIdMigrationsIndexRouteImport } from './routes/_app/databases/$databaseId/migrations/index'
+import { Route as AppDatabasesDatabaseIdMigrationsMigrationIdRouteImport } from './routes/_app/databases/$databaseId/migrations/$migrationId'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -70,6 +75,36 @@ const AppDatabasesDatabaseIdIndexRoute =
     path: '/databases/$databaseId/',
     getParentRoute: () => AppRoute,
   } as any)
+const AppDatabasesDatabaseIdHistoryRoute =
+  AppDatabasesDatabaseIdHistoryRouteImport.update({
+    id: '/databases/$databaseId/history',
+    path: '/databases/$databaseId/history',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppDatabasesDatabaseIdSchemaDiffRoute =
+  AppDatabasesDatabaseIdSchemaDiffRouteImport.update({
+    id: '/databases/$databaseId/schema-diff',
+    path: '/databases/$databaseId/schema-diff',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppDatabasesDatabaseIdExecutionsExecutionIdRoute =
+  AppDatabasesDatabaseIdExecutionsExecutionIdRouteImport.update({
+    id: '/databases/$databaseId/executions/$executionId',
+    path: '/databases/$databaseId/executions/$executionId',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppDatabasesDatabaseIdMigrationsIndexRoute =
+  AppDatabasesDatabaseIdMigrationsIndexRouteImport.update({
+    id: '/databases/$databaseId/migrations/',
+    path: '/databases/$databaseId/migrations/',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppDatabasesDatabaseIdMigrationsMigrationIdRoute =
+  AppDatabasesDatabaseIdMigrationsMigrationIdRouteImport.update({
+    id: '/databases/$databaseId/migrations/$migrationId',
+    path: '/databases/$databaseId/migrations/$migrationId',
+    getParentRoute: () => AppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -80,7 +115,12 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AppAdminUsersRoute
   '/databases/': typeof AppDatabasesIndexRoute
   '/admin/groups/$groupId': typeof AppAdminGroupsGroupIdRoute
+  '/databases/$databaseId/history': typeof AppDatabasesDatabaseIdHistoryRoute
+  '/databases/$databaseId/schema-diff': typeof AppDatabasesDatabaseIdSchemaDiffRoute
   '/databases/$databaseId/': typeof AppDatabasesDatabaseIdIndexRoute
+  '/databases/$databaseId/executions/$executionId': typeof AppDatabasesDatabaseIdExecutionsExecutionIdRoute
+  '/databases/$databaseId/migrations/$migrationId': typeof AppDatabasesDatabaseIdMigrationsMigrationIdRoute
+  '/databases/$databaseId/migrations/': typeof AppDatabasesDatabaseIdMigrationsIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -91,7 +131,12 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AppAdminUsersRoute
   '/databases': typeof AppDatabasesIndexRoute
   '/admin/groups/$groupId': typeof AppAdminGroupsGroupIdRoute
+  '/databases/$databaseId/history': typeof AppDatabasesDatabaseIdHistoryRoute
+  '/databases/$databaseId/schema-diff': typeof AppDatabasesDatabaseIdSchemaDiffRoute
   '/databases/$databaseId': typeof AppDatabasesDatabaseIdIndexRoute
+  '/databases/$databaseId/executions/$executionId': typeof AppDatabasesDatabaseIdExecutionsExecutionIdRoute
+  '/databases/$databaseId/migrations/$migrationId': typeof AppDatabasesDatabaseIdMigrationsMigrationIdRoute
+  '/databases/$databaseId/migrations': typeof AppDatabasesDatabaseIdMigrationsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -104,7 +149,12 @@ export interface FileRoutesById {
   '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/databases/': typeof AppDatabasesIndexRoute
   '/_app/admin/groups/$groupId': typeof AppAdminGroupsGroupIdRoute
+  '/_app/databases/$databaseId/history': typeof AppDatabasesDatabaseIdHistoryRoute
+  '/_app/databases/$databaseId/schema-diff': typeof AppDatabasesDatabaseIdSchemaDiffRoute
   '/_app/databases/$databaseId/': typeof AppDatabasesDatabaseIdIndexRoute
+  '/_app/databases/$databaseId/executions/$executionId': typeof AppDatabasesDatabaseIdExecutionsExecutionIdRoute
+  '/_app/databases/$databaseId/migrations/$migrationId': typeof AppDatabasesDatabaseIdMigrationsMigrationIdRoute
+  '/_app/databases/$databaseId/migrations/': typeof AppDatabasesDatabaseIdMigrationsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -117,7 +167,12 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/databases/'
     | '/admin/groups/$groupId'
+    | '/databases/$databaseId/history'
+    | '/databases/$databaseId/schema-diff'
     | '/databases/$databaseId/'
+    | '/databases/$databaseId/executions/$executionId'
+    | '/databases/$databaseId/migrations/$migrationId'
+    | '/databases/$databaseId/migrations/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -128,7 +183,12 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/databases'
     | '/admin/groups/$groupId'
+    | '/databases/$databaseId/history'
+    | '/databases/$databaseId/schema-diff'
     | '/databases/$databaseId'
+    | '/databases/$databaseId/executions/$executionId'
+    | '/databases/$databaseId/migrations/$migrationId'
+    | '/databases/$databaseId/migrations'
   id:
     | '__root__'
     | '/_app'
@@ -140,7 +200,12 @@ export interface FileRouteTypes {
     | '/_app/admin/users'
     | '/_app/databases/'
     | '/_app/admin/groups/$groupId'
+    | '/_app/databases/$databaseId/history'
+    | '/_app/databases/$databaseId/schema-diff'
     | '/_app/databases/$databaseId/'
+    | '/_app/databases/$databaseId/executions/$executionId'
+    | '/_app/databases/$databaseId/migrations/$migrationId'
+    | '/_app/databases/$databaseId/migrations/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -220,6 +285,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDatabasesDatabaseIdIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/databases/$databaseId/history': {
+      id: '/_app/databases/$databaseId/history'
+      path: '/databases/$databaseId/history'
+      fullPath: '/databases/$databaseId/history'
+      preLoaderRoute: typeof AppDatabasesDatabaseIdHistoryRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/databases/$databaseId/schema-diff': {
+      id: '/_app/databases/$databaseId/schema-diff'
+      path: '/databases/$databaseId/schema-diff'
+      fullPath: '/databases/$databaseId/schema-diff'
+      preLoaderRoute: typeof AppDatabasesDatabaseIdSchemaDiffRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/databases/$databaseId/executions/$executionId': {
+      id: '/_app/databases/$databaseId/executions/$executionId'
+      path: '/databases/$databaseId/executions/$executionId'
+      fullPath: '/databases/$databaseId/executions/$executionId'
+      preLoaderRoute: typeof AppDatabasesDatabaseIdExecutionsExecutionIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/databases/$databaseId/migrations/': {
+      id: '/_app/databases/$databaseId/migrations/'
+      path: '/databases/$databaseId/migrations'
+      fullPath: '/databases/$databaseId/migrations/'
+      preLoaderRoute: typeof AppDatabasesDatabaseIdMigrationsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/databases/$databaseId/migrations/$migrationId': {
+      id: '/_app/databases/$databaseId/migrations/$migrationId'
+      path: '/databases/$databaseId/migrations/$migrationId'
+      fullPath: '/databases/$databaseId/migrations/$migrationId'
+      preLoaderRoute: typeof AppDatabasesDatabaseIdMigrationsMigrationIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -242,7 +342,12 @@ interface AppRouteChildren {
   AppAdminGroupsRoute: typeof AppAdminGroupsRouteWithChildren
   AppAdminUsersRoute: typeof AppAdminUsersRoute
   AppDatabasesIndexRoute: typeof AppDatabasesIndexRoute
+  AppDatabasesDatabaseIdHistoryRoute: typeof AppDatabasesDatabaseIdHistoryRoute
+  AppDatabasesDatabaseIdSchemaDiffRoute: typeof AppDatabasesDatabaseIdSchemaDiffRoute
   AppDatabasesDatabaseIdIndexRoute: typeof AppDatabasesDatabaseIdIndexRoute
+  AppDatabasesDatabaseIdExecutionsExecutionIdRoute: typeof AppDatabasesDatabaseIdExecutionsExecutionIdRoute
+  AppDatabasesDatabaseIdMigrationsMigrationIdRoute: typeof AppDatabasesDatabaseIdMigrationsMigrationIdRoute
+  AppDatabasesDatabaseIdMigrationsIndexRoute: typeof AppDatabasesDatabaseIdMigrationsIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -252,7 +357,15 @@ const AppRouteChildren: AppRouteChildren = {
   AppAdminGroupsRoute: AppAdminGroupsRouteWithChildren,
   AppAdminUsersRoute: AppAdminUsersRoute,
   AppDatabasesIndexRoute: AppDatabasesIndexRoute,
+  AppDatabasesDatabaseIdHistoryRoute: AppDatabasesDatabaseIdHistoryRoute,
+  AppDatabasesDatabaseIdSchemaDiffRoute: AppDatabasesDatabaseIdSchemaDiffRoute,
   AppDatabasesDatabaseIdIndexRoute: AppDatabasesDatabaseIdIndexRoute,
+  AppDatabasesDatabaseIdExecutionsExecutionIdRoute:
+    AppDatabasesDatabaseIdExecutionsExecutionIdRoute,
+  AppDatabasesDatabaseIdMigrationsMigrationIdRoute:
+    AppDatabasesDatabaseIdMigrationsMigrationIdRoute,
+  AppDatabasesDatabaseIdMigrationsIndexRoute:
+    AppDatabasesDatabaseIdMigrationsIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

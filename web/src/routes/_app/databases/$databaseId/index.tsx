@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ExplainPanel } from "@/features/explain/ExplainPanel";
 import { SchemaTree } from "@/features/viewer/SchemaTree";
+import { MigrationNav } from "@/features/migrations/shared";
 import { TableDataView } from "@/features/viewer/TableDataView";
 
 type Tab = "schema" | "data" | "explain";
@@ -40,6 +41,7 @@ function ViewerPage() {
 
   return (
     <>
+      <MigrationNav databaseId={databaseId}/>
       <PageHeader title={db.name} description="Schema dan isi tabel dibaca langsung dari database target." />
       <Tabs value={tab} onValueChange={(v) => go({ ...search, tab: v === "schema" ? undefined : (v as Tab) })}>
         <TabsList className="h-10">
