@@ -29,8 +29,28 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, stdin io.Reader) error {
-	if len(args) == 0 || (args[0] != "admin" && args[0] != "fixtures" && args[0] != "load") || len(args) > 2 || (len(args) == 2 && (args[0] != "admin" || args[1] != "--password-stdin")) {
-		return errors.New("usage: seed admin [--password-stdin] | seed fixtures | seed load")
+	const usage = "usage: seed admin [--password-stdin] | seed fixtures | seed load | seed bigdata [--rows N]"
+	if len(args) == 0 {
+		return errors.New(usage)
+	}
+	var rows int64
+	switch args[0] {
+	case "admin":
+		if len(args) > 2 || (len(args) == 2 && args[1] != "--password-stdin") {
+			return errors.New(usage)
+		}
+	case "fixtures", "load":
+		if len(args) != 1 {
+			return errors.New(usage)
+		}
+	case "bigdata":
+		var err error
+		rows, err = bigDataRows(args[1:])
+		if err != nil {
+			return err
+		}
+	default:
+		return errors.New(usage)
 	}
 	if args[0] != "admin" && os.Getenv("APP_ENV") != "development" && os.Getenv("APP_ENV") != "test" {
 		return errors.New(args[0] + " requires APP_ENV=development or test")
@@ -40,6 +60,9 @@ func run(ctx context.Context, args []string, stdin io.Reader) error {
 		return err
 	}
 	defer db.Close()
+	if args[0] == "bigdata" {
+		return seedBigData(ctx, db, rows)
+	}
 	if args[0] == "load" {
 		return seedLoad(ctx, db)
 	}
