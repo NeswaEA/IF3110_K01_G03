@@ -48,16 +48,21 @@ export function get(path, name) {
   return http.get(`${API}${path}`, { tags: { name } });
 }
 
-/** Polls an execution until it reaches a final status or timeoutSec passes. */
+/**
+ * Polls an execution until it reaches a final status or timeoutSec passes.
+ * The wait doubles from 0.5 s up to 2 s, so hundreds of waiting VUs do not
+ * become the load they measure. Queue wait and job duration come from the
+ * execution's own timestamps; only job_e2e_ms includes the polling gap.
+ */
 export function waitForExecution(databaseId, executionId, timeoutSec) {
   const deadline = Date.now() + timeoutSec * 1000;
-  while (Date.now() < deadline) {
+  for (let wait = 0.5; Date.now() < deadline; wait = Math.min(2, wait * 2)) {
     const res = get(`/databases/${databaseId}/executions/${executionId}`, "execution");
     if (res.status === 200) {
       const e = res.json("data");
       if (TERMINAL.includes(e.status)) return e;
     }
-    sleep(0.5);
+    sleep(wait);
   }
   return null;
 }
