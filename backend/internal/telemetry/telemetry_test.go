@@ -6,10 +6,13 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -320,5 +323,41 @@ func TestHTTPHandlerNamesSpanByInnerRoute(t *testing.T) {
 	body := scrape(t)
 	if !strings.Contains(body, `http_route="/api/v1/databases/{id}/schema"`) || strings.Contains(body, "30000000-0000-4000-8000-000000000001") {
 		t.Fatalf("http_route label missing or raw path leaked:\n%s", body)
+	}
+}
+
+func TestPrometheusReaderServesExemplars(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := lis.Addr().(*net.TCPAddr)
+	lis.Close()
+	t.Setenv("OTEL_EXPORTER_PROMETHEUS_HOST", "127.0.0.1")
+	t.Setenv("OTEL_EXPORTER_PROMETHEUS_PORT", strconv.Itoa(addr.Port))
+	reader, err := newPrometheusReader()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	defer mp.Shutdown(context.Background())
+	ctx, span := sdktrace.NewTracerProvider().Tracer("test").Start(context.Background(), "job")
+	hist, err := mp.Meter("test").Float64Histogram("job_seconds")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hist.Record(ctx, 0.5)
+	span.End()
+
+	req, _ := http.NewRequest(http.MethodGet, "http://"+addr.String()+"/metrics", nil)
+	req.Header.Set("Accept", "application/openmetrics-text; version=1.0.0")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	if want := `trace_id="` + span.SpanContext().TraceID().String() + `"`; !strings.Contains(string(body), want) {
+		t.Fatalf("no exemplar %s in OpenMetrics output:\n%s", want, body)
 	}
 }
