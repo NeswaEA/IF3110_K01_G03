@@ -242,6 +242,24 @@ type executionFixture struct {
 
 func newExecutionFixture(t *testing.T, engine database.Driver) executionFixture {
 	t.Helper()
+	return newExecutionFixtureWithOrdering(t, engine, 20*time.Millisecond)
+}
+
+func newExecutionFixtureWithOrdering(t *testing.T, engine database.Driver, orderingDelay time.Duration) executionFixture {
+	t.Helper()
+	return newExecutionFixtureWithOptions(t, engine, executionFixtureOptions{executor: migrations.ExecutorOptions{OrderingDelay: orderingDelay}})
+}
+
+type executionFixtureOptions struct {
+	executor    migrations.ExecutorOptions
+	maxAttempts int
+}
+
+func newExecutionFixtureWithOptions(t *testing.T, engine database.Driver, fixtureOptions executionFixtureOptions) executionFixture {
+	t.Helper()
+	if fixtureOptions.maxAttempts == 0 {
+		fixtureOptions.maxAttempts = 1
+	}
 	meta, dsn := appDB(t)
 	const targetID = "32000000-0000-4000-8000-000000000001"
 	const userID = "12000000-0000-4000-8000-000000000001"
@@ -312,7 +330,7 @@ func newExecutionFixture(t *testing.T, engine database.Driver) executionFixture 
 		SessionIdleTimeout: options.IdleTimeout, SessionAbsoluteTimeout: options.AbsoluteTimeout,
 		SessionRotationInterval: options.RotationInterval, SessionGracePeriod: options.GracePeriod}
 	app, closeApp, err := newApp(t.Context(), meta, cfg, runtimeConfig{EncryptionKey: key, SQLiteDir: dir, WebDir: testWeb(t),
-		AtlasBin: filepath.Join(dir, "absent-atlas"), MaxAttempts: 1, NotifyJobs: relay.Notify}, events)
+		AtlasBin: filepath.Join(dir, "absent-atlas"), MaxAttempts: fixtureOptions.maxAttempts, NotifyJobs: relay.Notify}, events)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,10 +366,18 @@ func newExecutionFixture(t *testing.T, engine database.Driver) executionFixture 
 		database.Postgres: postgres.Inspector{}, database.SQLite: sqlite.Inspector{},
 	}}
 	lockers := map[database.Driver]database.MigrationLocker{database.Postgres: postgres.Locker{}, database.SQLite: sqlite.Locker{Metadata: meta}}
-	f.worker = migrations.NewExecutor(svc, registry, inspector, lockers, migrations.ExecutorOptions{
-		WorkerID: "test-worker", HeartbeatInterval: 50 * time.Millisecond, OrderingDelay: 20 * time.Millisecond,
-		RetryBaseDelay: 60 * time.Millisecond, RetryMaxDelay: 150 * time.Millisecond,
-	})
+	opts := fixtureOptions.executor
+	opts.WorkerID = "test-worker"
+	opts.HeartbeatInterval = 50 * time.Millisecond
+	opts.LockTimeout = 200 * time.Millisecond
+	if opts.RetryBaseDelay == 0 {
+		opts.RetryBaseDelay = 60 * time.Millisecond
+		opts.RetryMaxDelay = 150 * time.Millisecond
+	}
+	if opts.OrderingDelay == 0 {
+		opts.OrderingDelay = 20 * time.Millisecond
+	}
+	f.worker = migrations.NewExecutor(svc, registry, inspector, lockers, opts)
 	f.startWorker = func(t *testing.T) {
 		t.Helper()
 		ctx, cancel := context.WithCancel(t.Context())
