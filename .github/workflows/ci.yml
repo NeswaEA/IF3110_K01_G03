@@ -181,6 +181,24 @@ jobs:
       - name: Test real application workflows in Chromium
         run: sh scripts/test-e2e.sh
 
+  observability:
+    name: Observability config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Validate collector and Prometheus configs
+        # same images as infra/docker/compose.yml
+        run: |
+          docker run --rm -v "$PWD/infra/observability:/cfg:ro" \
+            otel/opentelemetry-collector-contrib:0.165.0@sha256:e40d61f10c9a617cca1ffd1be4d7e2b3a4b0f0001798ff07e58cabe82e618cea \
+            validate --config=/cfg/otel-collector.yaml
+          docker run --rm --entrypoint promtool -v "$PWD/infra/observability:/cfg:ro" \
+            prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06 \
+            check config /cfg/prometheus.yml
+
   metadata:
     name: Metadata migrations
     runs-on: ubuntu-24.04
