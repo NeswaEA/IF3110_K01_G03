@@ -189,6 +189,16 @@ outbox.publish                                               (relay, producer; t
 
 Contoh output nyata (pohon span lengkap, span `lock.acquire` dan `db.query`, serta log yang berkorelasi) ada di [`docs/observability/spans.md`](docs/observability/spans.md).
 
+Setiap baris log memuat `time`, `level`, `msg`, `event`, dan `service`. `request_id`, `actor_id`, `trace_id`, dan `span_id` diisi logger dari context. Atribut migration (`execution_id`, `job_id`, `migration_id`, `attempt`, `direction`, dan seterusnya) dan atribut audit (`action`, `actor_name`, `resource_type`, `resource_id`, `details`) memakai kunci yang sama di API dan worker. Redaksi diterapkan logger pada setiap baris:
+
+- kunci yang cocok `(?i)password|secret|token|cookie|csrf|dsn|authorization|session` diganti `"[REDACTED]"`, termasuk di dalam group bersarang;
+- `http.request` hanya mencatat pola route, status, dan durasi, tanpa path mentah, query string, atau body;
+- login gagal tidak mencatat username yang diketik;
+- audit (`event=audit`) ditulis setelah transaksi bisnisnya commit, tanpa SQL lengkap (cukup `content_hash` dan revisi), dan tidak disimpan di database platform;
+- panic di handler menjadi `http.panic` (tipe dan stack trace, tanpa nilai panic) dan dijawab JSON 500.
+
+Contoh log nyata (login, review, eksekusi sukses dan gagal, audit) beserta tabel atribut lengkap ada di [`docs/observability/logs.md`](docs/observability/logs.md).
+
 ## Observability (bonus)
 
 ```sh
