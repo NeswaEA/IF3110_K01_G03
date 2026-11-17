@@ -107,6 +107,27 @@ func (s *SessionStore) CreateInTx(ctx context.Context, tx *sql.Tx, userID string
 	return result, nil
 }
 
+// sessionTouchInterval bounds how often a valid request writes last_seen_at; idle sessions may end that much early.
+const sessionTouchInterval = 60 * time.Second
+
+// sessionState is a session as read for one request, after every rejection check passed.
+type sessionState struct {
+	result           Session
+	generation       int
+	current          bool
+	rotationRequired bool
+	lastSeen         time.Time
+	rotated          time.Time
+	csrf             []byte
+	now              time.Time
+}
+
+func (st sessionState) rotationDue(interval time.Duration) bool {
+	return st.current && (st.rotationRequired || st.now.Sub(st.rotated) >= interval)
+}
+
+// Resolve reads the session without a lock and writes only when the token must rotate or the
+// last recorded activity is at least sessionTouchInterval old; the write re-runs every check under the row lock.
 func (s *SessionStore) Resolve(ctx context.Context, token string) (Session, error) {
 	if err := ctx.Err(); err != nil {
 		return Session{}, sessionFailure(err)
@@ -115,68 +136,27 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (Session, erro
 	if !ok {
 		return Session{}, unauthenticated()
 	}
+	st, err := s.load(ctx, s.db, hash, false)
+	if err != nil {
+		return Session{}, err
+	}
+	if !st.rotationDue(s.options.RotationInterval) && st.now.Sub(st.lastSeen) < sessionTouchInterval {
+		st.result.CSRFToken = base64.RawURLEncoding.EncodeToString(st.csrf)
+		return st.result, nil
+	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return Session{}, sessionFailure(err)
 	}
 	defer tx.Rollback()
-	var result Session
-	err = tx.QueryRowContext(ctx, `SELECT session_id FROM session_tokens WHERE token_hash=$1`, hash).Scan(&result.ID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Session{}, unauthenticated()
-	}
+	// Another request may have rotated the token or touched the session since the unlocked read.
+	st, err = s.load(ctx, tx, hash, true)
 	if err != nil {
-		return Session{}, sessionFailure(err)
+		return Session{}, err
 	}
-	var userID sql.NullString
-	var revoked sql.NullTime
-	var lastSeen, rotated time.Time
-	var generation int
-	var rotationRequired bool
-	var csrf []byte
-	err = tx.QueryRowContext(ctx, `SELECT user_id, absolute_expires_at, last_seen_at, rotated_at,
-		generation, rotation_required, revoked_at, csrf_secret FROM sessions WHERE id=$1 FOR UPDATE`, result.ID).
-		Scan(&userID, &result.AbsoluteExpiresAt, &lastSeen, &rotated, &generation, &rotationRequired, &revoked, &csrf)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Session{}, unauthenticated()
-	}
-	if err != nil {
-		return Session{}, sessionFailure(err)
-	}
-	var current bool
-	var tokenGeneration int
-	var validUntil time.Time
-	// Re-read after the session lock: another request may have rotated this token.
-	err = tx.QueryRowContext(ctx, `SELECT is_current, generation, valid_until FROM session_tokens
-		WHERE token_hash=$1 AND session_id=$2`, hash, result.ID).Scan(&current, &tokenGeneration, &validUntil)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Session{}, unauthenticated()
-	}
-	if err != nil {
-		return Session{}, sessionFailure(err)
-	}
-	now := s.now()
-	if now.Before(lastSeen) {
-		now = lastSeen
-	}
-	if revoked.Valid || !now.Before(result.AbsoluteExpiresAt) || now.Sub(lastSeen) >= s.options.IdleTimeout ||
-		!now.Before(validUntil) || tokenGeneration > generation || (current && tokenGeneration != generation) ||
-		(rotationRequired && !current) {
-		return Session{}, unauthenticated()
-	}
-	if userID.Valid {
-		err = tx.QueryRowContext(ctx, `SELECT id, username, is_platform_admin FROM users WHERE id=$1 AND active`, userID.String).
-			Scan(&result.Principal.UserID, &result.Principal.Username, &result.Principal.IsPlatformAdmin)
-		if errors.Is(err, sql.ErrNoRows) {
-			return Session{}, unauthenticated()
-		}
-		if err != nil {
-			return Session{}, sessionFailure(err)
-		}
-		result.Principal.SessionID = result.ID
-	}
-	if current && (rotationRequired || now.Sub(rotated) >= s.options.RotationInterval) {
-		graceUntil := now.Add(s.options.GracePeriod)
+	result := st.result
+	if st.rotationDue(s.options.RotationInterval) {
+		graceUntil := st.now.Add(s.options.GracePeriod)
 		if graceUntil.After(result.AbsoluteExpiresAt) {
 			graceUntil = result.AbsoluteExpiresAt
 		}
@@ -184,25 +164,84 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (Session, erro
 		if err != nil {
 			return Session{}, sessionFailure(err)
 		}
-		generation++
-		result.Token, err = insertSessionToken(ctx, tx, result.ID, generation, now, result.AbsoluteExpiresAt)
+		generation := st.generation + 1
+		result.Token, err = insertSessionToken(ctx, tx, result.ID, generation, st.now, result.AbsoluteExpiresAt)
 		if err != nil {
 			return Session{}, sessionFailure(err)
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE sessions SET generation=$2, rotated_at=$3, rotation_required=false WHERE id=$1`, result.ID, generation, now)
+		_, err = tx.ExecContext(ctx, `UPDATE sessions SET generation=$2, rotated_at=$3, rotation_required=false WHERE id=$1`, result.ID, generation, st.now)
 		if err != nil {
 			return Session{}, sessionFailure(err)
 		}
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE sessions SET last_seen_at=$2 WHERE id=$1`, result.ID, now)
+	_, err = tx.ExecContext(ctx, `UPDATE sessions SET last_seen_at=$2 WHERE id=$1`, result.ID, st.now)
 	if err != nil {
 		return Session{}, sessionFailure(err)
 	}
 	if err := tx.Commit(); err != nil {
 		return Session{}, sessionFailure(err)
 	}
-	result.CSRFToken = base64.RawURLEncoding.EncodeToString(csrf)
+	result.CSRFToken = base64.RawURLEncoding.EncodeToString(st.csrf)
 	return result, nil
+}
+
+// load reads the session behind a token hash and applies every rejection rule; lock takes the session row lock.
+func (s *SessionStore) load(ctx context.Context, q contracts.Querier, hash []byte, lock bool) (sessionState, error) {
+	var st sessionState
+	err := q.QueryRowContext(ctx, `SELECT session_id FROM session_tokens WHERE token_hash=$1`, hash).Scan(&st.result.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return st, unauthenticated()
+	}
+	if err != nil {
+		return st, sessionFailure(err)
+	}
+	var userID sql.NullString
+	var revoked sql.NullTime
+	query := `SELECT user_id, absolute_expires_at, last_seen_at, rotated_at,
+		generation, rotation_required, revoked_at, csrf_secret FROM sessions WHERE id=$1`
+	if lock {
+		query += " FOR UPDATE"
+	}
+	err = q.QueryRowContext(ctx, query, st.result.ID).
+		Scan(&userID, &st.result.AbsoluteExpiresAt, &st.lastSeen, &st.rotated, &st.generation, &st.rotationRequired, &revoked, &st.csrf)
+	if errors.Is(err, sql.ErrNoRows) {
+		return st, unauthenticated()
+	}
+	if err != nil {
+		return st, sessionFailure(err)
+	}
+	var tokenGeneration int
+	var validUntil time.Time
+	// Re-read after the session row: another request may have rotated this token.
+	err = q.QueryRowContext(ctx, `SELECT is_current, generation, valid_until FROM session_tokens
+		WHERE token_hash=$1 AND session_id=$2`, hash, st.result.ID).Scan(&st.current, &tokenGeneration, &validUntil)
+	if errors.Is(err, sql.ErrNoRows) {
+		return st, unauthenticated()
+	}
+	if err != nil {
+		return st, sessionFailure(err)
+	}
+	st.now = s.now()
+	if st.now.Before(st.lastSeen) {
+		st.now = st.lastSeen
+	}
+	if revoked.Valid || !st.now.Before(st.result.AbsoluteExpiresAt) || st.now.Sub(st.lastSeen) >= s.options.IdleTimeout ||
+		!st.now.Before(validUntil) || tokenGeneration > st.generation || (st.current && tokenGeneration != st.generation) ||
+		(st.rotationRequired && !st.current) {
+		return st, unauthenticated()
+	}
+	if userID.Valid {
+		err = q.QueryRowContext(ctx, `SELECT id, username, is_platform_admin FROM users WHERE id=$1 AND active`, userID.String).
+			Scan(&st.result.Principal.UserID, &st.result.Principal.Username, &st.result.Principal.IsPlatformAdmin)
+		if errors.Is(err, sql.ErrNoRows) {
+			return st, unauthenticated()
+		}
+		if err != nil {
+			return st, sessionFailure(err)
+		}
+		st.result.Principal.SessionID = st.result.ID
+	}
+	return st, nil
 }
 
 func (s *SessionStore) RevokeInTx(ctx context.Context, tx *sql.Tx, sessionID string) error {

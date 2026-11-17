@@ -26,7 +26,7 @@ Login yang berhasil membuat session di backend; browser hanya menerima token aca
 
 | Pengaturan | Default | Variabel `.env` | Perilaku |
 |---|---|---|---|
-| Idle timeout | 30 menit | `SESSION_IDLE_TIMEOUT` | Session berakhir bila tidak ada request selama durasi ini. Setiap request yang valid memperbarui waktu aktivitas terakhir |
+| Idle timeout | 30 menit | `SESSION_IDLE_TIMEOUT` | Session berakhir bila tidak ada request selama durasi ini. Waktu aktivitas terakhir dicatat paling sering sekali per menit, jadi session bisa berakhir paling banyak 60 detik lebih awal, tetapi tidak pernah lebih lambat |
 | Absolute expiration | 8 jam | `SESSION_ABSOLUTE_TIMEOUT` | Dihitung sejak login. Setelah lewat, pengguna harus login ulang walaupun masih aktif |
 | Interval rotasi | 15 menit | `SESSION_ROTATION_INTERVAL` | Request pertama setelah interval ini mendapat token baru dengan nama cookie yang sama |
 | Grace period | 30 detik | `SESSION_GRACE_PERIOD` | Token lama tetap diterima selama durasi ini setelah rotasi, untuk response yang tidak sampai atau request yang berjalan bersamaan. Setelah itu token lama ditolak |
@@ -43,6 +43,7 @@ Aturan tambahan:
 - Token juga dirotasi saat login, karena session pra-login (dipakai hanya untuk CSRF, berlaku 10 menit) dicabut dan diganti session baru. Rotasi juga terjadi pada request berikutnya setelah hak akses naik, yaitu ketika grant baru diberikan, level naik ke `edit`, pengguna ditambahkan ke group, atau data pengguna diubah oleh admin.
 - Rotasi tidak memperpanjang absolute expiration. Batas ini dikunci oleh trigger database, dan grace period tidak pernah melewatinya.
 - Session langsung dinonaktifkan di backend saat logout, saat level turun dari `edit` ke `view`, saat grant dicabut, saat pengguna dikeluarkan dari group, saat group dihapus, saat password direset, saat pengguna dinonaktifkan, saat hak admin dicabut, dan saat koneksi database dinonaktifkan.
+- Request yang tidak perlu merotasi token dan tidak perlu mencatat aktivitas hanya membaca session, tanpa transaksi tulis dan tanpa row lock. Setiap penulisan mengambil lock lalu mengulang semua pemeriksaan, sehingga revocation, kedaluwarsa, dan rotasi tetap berlaku pada request berikutnya.
 - Nilai di `.env` memakai format durasi Go (misalnya `45m`, `12h`, `10s`) dan harus positif.
 
 ## Teknologi

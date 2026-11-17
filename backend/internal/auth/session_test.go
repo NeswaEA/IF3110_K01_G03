@@ -493,3 +493,74 @@ func TestSessionRotationFailureRollsBack(t *testing.T) {
 		t.Fatal("retry after failed rotation was rejected")
 	}
 }
+
+func lastSeen(t *testing.T, f sessionFixture, id string) time.Time {
+	t.Helper()
+	var at time.Time
+	if err := f.db.QueryRow(`SELECT last_seen_at FROM sessions WHERE id=$1`, id).Scan(&at); err != nil {
+		t.Fatal(err)
+	}
+	return at.UTC()
+}
+
+func TestSessionTouchesActivityAtMostOncePerMinute(t *testing.T) {
+	f := newSessionFixture(t)
+	session := f.create(t, sessionUser)
+	created := lastSeen(t, f, session.ID)
+	for _, step := range []time.Duration{30 * time.Second, 30*time.Second - time.Microsecond} {
+		f.clock.Advance(step)
+		resolved, err := f.store.Resolve(t.Context(), session.Token)
+		if err != nil || resolved.Token != "" || resolved.Principal.UserID != sessionUser || resolved.CSRFToken != session.CSRFToken {
+			t.Fatal("a fresh session must resolve without rotating", err)
+		}
+		if !lastSeen(t, f, session.ID).Equal(created) {
+			t.Fatal("activity was written within the touch interval")
+		}
+	}
+	f.clock.Advance(time.Microsecond)
+	if _, err := f.store.Resolve(t.Context(), session.Token); err != nil {
+		t.Fatal(err)
+	}
+	if got := lastSeen(t, f, session.ID); !got.Equal(created.Add(time.Minute)) {
+		t.Fatal("activity older than a minute was not touched", got)
+	}
+}
+
+func TestSessionIdleTimeoutCountsFromTheRecordedTouch(t *testing.T) {
+	t.Run("ends at most a minute early", func(t *testing.T) {
+		f := newSessionFixture(t)
+		session := f.create(t, sessionUser)
+		f.clock.Advance(59 * time.Second)
+		if _, err := f.store.Resolve(t.Context(), session.Token); err != nil {
+			t.Fatal(err)
+		}
+		// The last request was 59 s after the recorded touch, so the session ends 59 s early.
+		f.clock.Advance(30*time.Minute - 59*time.Second)
+		_, err := f.store.Resolve(t.Context(), session.Token)
+		requireSessionError(t, err, "UNAUTHENTICATED")
+	})
+	t.Run("never later", func(t *testing.T) {
+		f := newSessionFixture(t)
+		session := f.create(t, sessionUser)
+		f.clock.Advance(61 * time.Second)
+		if _, err := f.store.Resolve(t.Context(), session.Token); err != nil {
+			t.Fatal(err)
+		}
+		f.clock.Advance(30 * time.Minute)
+		_, err := f.store.Resolve(t.Context(), session.Token)
+		requireSessionError(t, err, "UNAUTHENTICATED")
+	})
+}
+
+func TestSessionRevocationIsSeenWithoutAWrite(t *testing.T) {
+	f := newSessionFixture(t)
+	session := f.create(t, sessionUser)
+	f.clock.Advance(10 * time.Second)
+	if _, err := f.store.Resolve(t.Context(), session.Token); err != nil {
+		t.Fatal(err)
+	}
+	f.change(t, true, func(tx *sql.Tx) error { return f.store.RevokeInTx(t.Context(), tx, session.ID) })
+	f.clock.Advance(10 * time.Second)
+	_, err := f.store.Resolve(t.Context(), session.Token)
+	requireSessionError(t, err, "UNAUTHENTICATED")
+}
