@@ -90,6 +90,8 @@ func ensurePostgresHistory(ctx context.Context, q executor, role string) error {
 		 direction text NOT NULL CHECK (direction IN ('up','down')),
 		 cursor_from bigint NOT NULL, cursor_to bigint NOT NULL, rows integer NOT NULL,
 		 committed_at timestamptz NOT NULL, PRIMARY KEY (execution_id, batch_no))`,
+		`CREATE INDEX IF NOT EXISTS migration_checkpoints_chain_cursor_idx
+		  ON _platform.migration_checkpoints (chain_root_id,direction,cursor_to)`,
 		`REVOKE ALL ON TABLE _platform.migration_history, _platform.migration_checkpoints FROM PUBLIC, ` + editor,
 		`CREATE OR REPLACE FUNCTION _platform.protect_migration_history() RETURNS trigger LANGUAGE plpgsql AS $$
 		  BEGIN RAISE EXCEPTION 'migration history is append-only' USING ERRCODE = '23514'; END $$`,

@@ -45,8 +45,8 @@ func TestMetadataSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	files, err := filepath.Glob(filepath.Join("..", "..", "migrations", "*.sql"))
-	if err != nil || len(files) != 8 {
-		t.Fatalf("expected 8 metadata migrations, got %d (%v)", len(files), err)
+	if err != nil || len(files) != 9 {
+		t.Fatalf("expected 9 metadata migrations, got %d (%v)", len(files), err)
 	}
 	sort.Strings(files)
 	for _, file := range files {

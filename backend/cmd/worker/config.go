@@ -25,6 +25,8 @@ type config struct {
 	RetryBaseDelay      time.Duration
 	RetryMaxDelay       time.Duration
 	StatementTimeout    time.Duration
+	DryRunTimeout       time.Duration
+	BatchTimeout        time.Duration
 	LockTimeout         time.Duration
 }
 
@@ -74,10 +76,12 @@ func loadConfig() (config, error) {
 		{"WORKER_HEARTBEAT_INTERVAL", &cfg.HeartbeatInterval, 5 * time.Second},
 		{"JOB_ACK_WAIT", &cfg.AckWait, 60 * time.Second},
 		{"JOB_LOCK_RETRY_MAX_DELAY", &cfg.LockRetryMaxDelay, 30 * time.Second},
-		{"ORDERING_DELAY", &cfg.OrderingDelay, time.Second},
+		{"ORDERING_DELAY", &cfg.OrderingDelay, 10 * time.Second},
 		{"MIGRATION_RETRY_BASE_DELAY", &cfg.RetryBaseDelay, 2 * time.Second},
 		{"MIGRATION_RETRY_MAX_DELAY", &cfg.RetryMaxDelay, 30 * time.Second},
 		{"MIGRATION_STATEMENT_TIMEOUT", &cfg.StatementTimeout, 30 * time.Minute},
+		{"DRY_RUN_TIMEOUT", &cfg.DryRunTimeout, time.Minute},
+		{"BATCH_STATEMENT_TIMEOUT", &cfg.BatchTimeout, time.Minute},
 		{"MIGRATION_LOCK_TIMEOUT", &cfg.LockTimeout, 5 * time.Second},
 	} {
 		*s.value = s.fallback

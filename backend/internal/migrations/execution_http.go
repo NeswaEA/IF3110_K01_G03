@@ -8,6 +8,15 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 )
 
+func (h *Handler) enqueueDryRun(w http.ResponseWriter, r *http.Request, actor contracts.Principal, databaseID string) {
+	if err := platform.DecodeJSON(w, r, &struct{}{}, 1024); err != nil {
+		_ = platform.WriteError(w, r, err)
+		return
+	}
+	e, reused, err := h.service.enqueueDryRun(r.Context(), actor, databaseID, r.PathValue("mid"))
+	writeExecution(w, r, e, reused, err)
+}
+
 func (h *Handler) executeRequest(w http.ResponseWriter, r *http.Request, actor contracts.Principal, databaseID string) {
 	if err := platform.DecodeJSON(w, r, &struct{}{}, 1024); err != nil {
 		_ = platform.WriteError(w, r, err)
@@ -15,6 +24,15 @@ func (h *Handler) executeRequest(w http.ResponseWriter, r *http.Request, actor c
 	}
 	e, reused, err := h.service.executeRequest(r.Context(), actor, databaseID, r.PathValue("rid"))
 	writeExecution(w, r, e, reused, err)
+}
+
+func (h *Handler) cancelExecution(w http.ResponseWriter, r *http.Request, actor contracts.Principal, databaseID string) {
+	if err := platform.DecodeJSON(w, r, &struct{}{}, 1024); err != nil {
+		_ = platform.WriteError(w, r, err)
+		return
+	}
+	e, err := h.service.cancelExecution(r.Context(), actor, databaseID, r.PathValue("eid"))
+	writeResult(w, r, http.StatusOK, e, err)
 }
 
 func (h *Handler) reconcileExecution(w http.ResponseWriter, r *http.Request, actor contracts.Principal, databaseID string) {
@@ -84,4 +102,35 @@ func (h *Handler) listHistory(w http.ResponseWriter, r *http.Request, _ contract
 	}
 	items, err := h.service.listHistory(r.Context(), databaseID, hide == "true", page.Limit+1, page.Offset)
 	writePage(w, r, page, items, err)
+}
+
+func (h *Handler) listBatches(w http.ResponseWriter, r *http.Request, _ contracts.Principal, databaseID string) {
+	page, err := parsePage(r)
+	if err != nil {
+		_ = platform.WriteError(w, r, err)
+		return
+	}
+	items, err := h.service.listBatches(r.Context(), databaseID, r.PathValue("eid"), page.Limit+1, page.Offset)
+	writePage(w, r, page, items, err)
+}
+
+func (h *Handler) stopExecution(w http.ResponseWriter, r *http.Request, actor contracts.Principal, databaseID string) {
+	if err := platform.DecodeJSON(w, r, &struct{}{}, 1024); err != nil {
+		_ = platform.WriteError(w, r, err)
+		return
+	}
+	e, err := h.service.stopExecution(r.Context(), actor, databaseID, r.PathValue("eid"))
+	writeExecution(w, r, e, false, err)
+}
+
+func (h *Handler) resumeExecution(w http.ResponseWriter, r *http.Request, actor contracts.Principal, databaseID string) {
+	var in struct {
+		BatchSize *int `json:"batch_size"`
+	}
+	if err := platform.DecodeJSON(w, r, &in, 1024); err != nil {
+		_ = platform.WriteError(w, r, err)
+		return
+	}
+	e, reused, err := h.service.resumeExecution(r.Context(), actor, databaseID, r.PathValue("eid"), in.BatchSize)
+	writeExecution(w, r, e, reused, err)
 }

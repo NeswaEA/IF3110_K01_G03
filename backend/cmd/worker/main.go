@@ -102,7 +102,7 @@ func run(ctx context.Context) error {
 		WorkerID: cfg.WorkerID, HeartbeatInterval: cfg.HeartbeatInterval, StaleAfter: 2 * cfg.AckWait,
 		LockRetryMaxDelay: cfg.LockRetryMaxDelay, OrderingDelay: cfg.OrderingDelay,
 		RetryBaseDelay: cfg.RetryBaseDelay, RetryMaxDelay: cfg.RetryMaxDelay,
-		StatementTimeout: cfg.StatementTimeout, LockTimeout: cfg.LockTimeout,
+		StatementTimeout: cfg.StatementTimeout, DryRunTimeout: cfg.DryRunTimeout, BatchTimeout: cfg.BatchTimeout, LockTimeout: cfg.LockTimeout,
 	})
 
 	slog.InfoContext(ctx, "worker started", "event", "worker.started", "worker_id", cfg.WorkerID, "concurrency", cfg.Concurrency)

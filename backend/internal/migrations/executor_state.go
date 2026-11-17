@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/contracts"
@@ -13,31 +14,33 @@ import (
 )
 
 type executionTransition struct {
-	status  string
-	attempt int
-	next    *time.Time
-	detail  *RunError
-	history *HistoryRecord
+	status      string
+	attempt     int
+	next        *time.Time
+	detail      *RunError
+	history     *HistoryRecord
+	report      []byte
+	releaseLock func()
 }
 
 func (x *Executor) retryDelay(attempt int) time.Duration {
 	return database.Backoff(x.options.RetryBaseDelay, x.options.RetryMaxDelay, attempt)
 }
 
-func (x *Executor) complete(ctx context.Context, e executionRow, status string, detail *RunError, history *HistoryRecord) contracts.JobResult {
-	return x.transition(ctx, e, executionTransition{status: status, attempt: e.Attempt, detail: detail, history: history}, false)
+func (x *Executor) complete(ctx context.Context, e executionRow, status string, detail *RunError, history *HistoryRecord, releaseLock func()) contracts.JobResult {
+	return x.transition(ctx, e, executionTransition{status: status, attempt: e.Attempt, detail: detail, history: history, releaseLock: releaseLock}, false)
 }
 
 func (x *Executor) deferEvidence(ctx context.Context, e executionRow, detail *RunError) contracts.JobResult {
 	return x.schedule(ctx, e, "running", e.Attempt, detail, false)
 }
 
-func (x *Executor) retryAttempt(ctx context.Context, e executionRow, detail *RunError, uncertain bool) contracts.JobResult {
+func (x *Executor) retryAttempt(ctx context.Context, e executionRow, detail *RunError, uncertain bool, releaseLock func()) contracts.JobResult {
 	if e.Attempt >= e.MaxAttempts || e.reconcile {
 		if uncertain {
-			return x.complete(ctx, e, "outcome_unknown", detail, nil)
+			return x.complete(ctx, e, "outcome_unknown", detail, nil, releaseLock)
 		}
-		return x.complete(ctx, e, "failed", runFailure("RETRY_EXHAUSTED", "Batas percobaan tercapai."), nil)
+		return x.complete(ctx, e, "failed", runFailure("RETRY_EXHAUSTED", "Batas percobaan tercapai."), nil, releaseLock)
 	}
 	if uncertain {
 		return x.deferEvidence(ctx, e, detail)
@@ -61,13 +64,16 @@ func (x *Executor) acquireFailed(ctx context.Context, e executionRow, err error)
 		return retry("retry", x.options.RetryBaseDelay)
 	}
 	attempt := min(e.Attempt+1, e.MaxAttempts)
-	uncertain := staleOnly || e.reconcile
+	uncertain := staleOnly || e.reconcile || (e.Mode == "batch" && e.Action != "dry_run" && e.StartedAt != nil)
 	failure := targetFailure(err)
 	if errors.Is(err, database.ErrNotFound) {
 		failure.detail = runFailure("ACCESS_REVOKED", "Akses ke database dicabut atau koneksi dinonaktifkan.")
 	}
 	if attempt < e.MaxAttempts && !e.reconcile && (failure.transient || uncertain) {
 		return x.schedule(ctx, e, e.Status, attempt, failure.detail, staleOnly)
+	}
+	if e.Action == "dry_run" {
+		return x.finishDryRun(ctx, e, DryRunReport{Status: "skipped", Message: &failure.detail.Message}, nil)
 	}
 	status := "failed"
 	if uncertain {
@@ -80,8 +86,9 @@ func (x *Executor) acquireFailed(ctx context.Context, e executionRow, err error)
 
 type transitionResult struct {
 	executionRow
-	changed  bool
-	released []string
+	changed         bool
+	released        []string
+	migrationStatus string
 }
 
 func (x *Executor) transition(ctx context.Context, previous executionRow, change executionTransition, staleOnly bool) contracts.JobResult {
@@ -117,26 +124,47 @@ func (x *Executor) transition(ctx context.Context, previous executionRow, change
 		}
 		var version, seq *int64
 		if change.history != nil {
-			if err := finalizeHistory(ctx, tx, e, *change.history, now); err != nil {
+			result.migrationStatus, err = finalizeHistory(ctx, tx, e, *change.history, now)
+			if err != nil {
 				return result, err
 			}
 			version, seq = &change.history.Version, &change.history.Seq
 		}
+		if change.status == "partial" || change.status == "partially_reverted" {
+			if _, err := tx.ExecContext(ctx, `UPDATE migrations SET status='partial',updated_at=$2 WHERE id=$1`,
+				e.MigrationID, now); err != nil {
+				return result, internal(err)
+			}
+		}
 		_, err = tx.ExecContext(ctx, `UPDATE migration_executions SET status=$2, attempt=$3, next_attempt_at=$4,
 			error_code=$5, error_message=$6, finished_at=$7, reconcile_requested=$8,
-			version=COALESCE($9,version), history_seq=COALESCE($10,history_seq) WHERE id=$1`,
-			e.ID, change.status, change.attempt, change.next, code, message, finished, reconcile, version, seq)
+			version=COALESCE($9,version), history_seq=COALESCE($10,history_seq), result=COALESCE($11,result) WHERE id=$1`,
+			e.ID, change.status, change.attempt, change.next, code, message, finished, reconcile, version, seq, change.report)
 		if err != nil {
 			return result, internal(err)
 		}
 		if change.next == nil {
-			result.released, err = x.releaseHeld(ctx, tx, e.DatabaseID)
+			block, err := findBlock(ctx, tx, e.DatabaseID)
 			if err != nil {
 				return result, err
+			}
+			if block == nil {
+				result.released, err = x.releaseHeld(ctx, tx, e.DatabaseID)
+				if err != nil {
+					return result, err
+				}
+				if err := s.wakeNext(ctx, tx, e.DatabaseID, result.released...); err != nil {
+					return result, err
+				}
 			}
 		}
 		result.executionRow, err = readExecution(ctx, tx, e.DatabaseID, e.ID, false)
 		result.changed = err == nil
+		if result.changed && change.releaseLock != nil {
+			// The database row remains locked until commit. Release the target lock
+			// before the outbox notification can reach the next execution.
+			change.releaseLock()
+		}
 		return result, err
 	})
 	if err != nil {
@@ -166,7 +194,7 @@ func (x *Executor) transition(ctx context.Context, previous executionRow, change
 	if change.history != nil {
 		s.auditChange(ctx, contracts.Principal{UserID: e.Actor.ID, Username: e.Actor.Username},
 			"history.recorded", e.DatabaseID, "execution", e.ID, map[string]any{"seq": *e.HistorySeq, "version": *e.Version})
-		s.publish(ctx, e.DatabaseID, "migration.updated", e.MigrationID, migrationStatus(e.Action))
+		s.publish(ctx, e.DatabaseID, "migration.updated", e.MigrationID, result.migrationStatus)
 		s.publish(ctx, e.DatabaseID, "head.updated", e.DatabaseID, "")
 	}
 	for _, id := range result.released {
@@ -186,29 +214,41 @@ func migrationStatus(action string) string {
 	return "applied"
 }
 
-func finalizeHistory(ctx context.Context, tx *sql.Tx, e executionRow, h HistoryRecord, now time.Time) error {
+func finalizeHistory(ctx context.Context, tx *sql.Tx, e executionRow, h HistoryRecord, now time.Time) (string, error) {
 	if err := mirrorHistory(ctx, tx, e.DatabaseID, h); err != nil {
-		return err
+		return "", err
 	}
-	if e.Action == "apply" {
+	if h.Action == "apply" {
 		if _, err := tx.ExecContext(ctx, `UPDATE migrations SET status='superseded', updated_at=$3
 			WHERE database_id=$1 AND status='rolled_back' AND version >= $2`, e.DatabaseID, h.Version, now); err != nil {
-			return internal(err)
+			return "", internal(err)
 		}
 	}
-	_, err := tx.ExecContext(ctx, `UPDATE migrations SET status=$2, version=$3, updated_at=$4, updated_by=$5
-		WHERE id=$1`, e.MigrationID, migrationStatus(e.Action), h.Version, now, e.Actor.ID)
-	if err != nil {
-		return internal(err)
+	status := migrationStatus(h.Action)
+	if h.Action == "rollback" && h.Mode == "batch" {
+		var compensatedApply bool
+		if err := tx.QueryRowContext(ctx, `SELECT target.status='partial' AND root.action='apply'
+			FROM migration_executions target JOIN migration_executions root ON root.id=target.chain_root_id WHERE target.id=$1`,
+			h.RevertsExecution).Scan(&compensatedApply); err != nil {
+			return "", internal(err)
+		}
+		if compensatedApply {
+			status = "pending"
+		}
 	}
-	return nil
+	var version *int64 = &h.Version
+	if status == "pending" {
+		version = nil
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE migrations SET status=$2, version=$3, updated_at=$4, updated_by=$5
+		WHERE id=$1`, e.MigrationID, status, version, now, e.Actor.ID)
+	if err != nil {
+		return "", internal(err)
+	}
+	return status, nil
 }
 
 func (x *Executor) releaseHeld(ctx context.Context, tx *sql.Tx, databaseID string) ([]string, error) {
-	block, err := findBlock(ctx, tx, databaseID)
-	if err != nil || block != nil {
-		return nil, err
-	}
 	rows, err := tx.QueryContext(ctx, `UPDATE migration_executions SET status='queued', held_reason=NULL
 		WHERE database_id=$1 AND status='held' RETURNING id`, databaseID)
 	if err != nil {
@@ -228,4 +268,25 @@ func (x *Executor) releaseHeld(ctx context.Context, tx *sql.Tx, databaseID strin
 		}
 	}
 	return ids, nil
+}
+
+// wakeNext publishes the first queued execution in the database. Callers hold
+// the database row lock and have checked that the database is not blocked.
+func (s *Service) wakeNext(ctx context.Context, tx *sql.Tx, databaseID string, alreadyEnqueued ...string) error {
+	var id string
+	err := tx.QueryRowContext(ctx, `SELECT id FROM migration_executions
+		WHERE database_id=$1 AND status='queued' ORDER BY number LIMIT 1`, databaseID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return internal(err)
+	}
+	if slices.Contains(alreadyEnqueued, id) {
+		return nil
+	}
+	if err := s.enqueuer.Enqueue(ctx, tx, contracts.JobMessage{ExecutionID: id, DatabaseID: databaseID}); err != nil {
+		return internal(err)
+	}
+	return nil
 }

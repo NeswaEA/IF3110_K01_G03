@@ -10,7 +10,7 @@ func TestLoadConfig(t *testing.T) {
 	base := map[string]string{"METADATA_DATABASE_URL": "postgres://x@localhost/m", "NATS_URL": "nats://localhost:4222", "SQLITE_TARGET_DIR": dir}
 	set := func(extra map[string]string) {
 		for _, k := range []string{"METADATA_DATABASE_URL", "NATS_URL", "SQLITE_TARGET_DIR", "WORKER_ID", "WORKER_CONCURRENCY", "JOB_ACK_WAIT",
-			"MIGRATION_RETRY_BASE_DELAY", "MIGRATION_RETRY_MAX_DELAY", "MIGRATION_MAX_ATTEMPTS"} {
+			"MIGRATION_RETRY_BASE_DELAY", "MIGRATION_RETRY_MAX_DELAY", "MIGRATION_MAX_ATTEMPTS", "ORDERING_DELAY"} {
 			t.Setenv(k, "")
 		}
 		for k, v := range base {
@@ -27,7 +27,7 @@ func TestLoadConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cfg.Concurrency != 4 || cfg.MaxAttempts != 3 || cfg.AckWait != time.Minute || cfg.RetryBaseDelay != 2*time.Second ||
-		cfg.RetryMaxDelay != 30*time.Second || cfg.OrderingDelay != time.Second || cfg.WorkerID == "" {
+		cfg.RetryMaxDelay != 30*time.Second || cfg.OrderingDelay != 10*time.Second || cfg.WorkerID == "" {
 		t.Fatalf("defaults: %+v", cfg)
 	}
 	set(map[string]string{"WORKER_ID": "w1", "WORKER_CONCURRENCY": "2", "JOB_ACK_WAIT": "10s"})

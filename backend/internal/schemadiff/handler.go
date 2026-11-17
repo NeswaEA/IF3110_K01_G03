@@ -44,6 +44,7 @@ func (h *Handler) diff(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		DesiredDatabaseID *string `json:"desired_database_id"`
 		Schema            *string `json:"schema"`
+		IncludeDown       bool    `json:"include_down"`
 	}
 	if err := platform.DecodeJSON(w, r, &body, 0); err != nil {
 		_ = platform.WriteError(w, r, err)
@@ -53,7 +54,7 @@ func (h *Handler) diff(w http.ResponseWriter, r *http.Request) {
 		_ = platform.WriteError(w, r, problem("INVALID_REQUEST", "desired_database_id dan schema wajib diisi."))
 		return
 	}
-	result, err := h.service.Diff(r.Context(), p, id, DiffInput{*body.DesiredDatabaseID, *body.Schema})
+	result, err := h.service.Diff(r.Context(), p, id, DiffInput{DesiredDatabaseID: *body.DesiredDatabaseID, Schema: *body.Schema, IncludeDown: body.IncludeDown})
 	if err != nil {
 		_ = platform.WriteError(w, r, domain(err))
 		return

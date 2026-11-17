@@ -61,7 +61,7 @@ const requestSelect = `SELECT cr.id, cr.database_id, cr.migration_id, m.title, c
 	FROM change_requests cr
 	JOIN migrations m ON m.id=cr.migration_id
 	JOIN users u ON u.id=cr.requested_by
-	LEFT JOIN migration_executions e ON e.change_request_id=cr.id`
+	LEFT JOIN migration_executions e ON e.change_request_id=cr.id AND e.status<>'cancelled'`
 
 func scanRequest(row scanner) (requestRow, error) {
 	var r requestRow
@@ -160,8 +160,14 @@ func (s *Service) submitRequest(ctx context.Context, actor contracts.Principal, 
 		if err != nil {
 			return ChangeRequest{}, err
 		}
-		if m.openRequestID != nil {
-			return ChangeRequest{}, problem("REQUEST_EXISTS", "Migrasi sudah memiliki change request terbuka.")
+		var scheduled bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM migration_executions
+			WHERE database_id=$1 AND migration_id=$2 AND change_request_id IS NOT NULL
+			AND status IN ('queued','held','running'))`, databaseID, migrationID).Scan(&scheduled); err != nil {
+			return ChangeRequest{}, internal(err)
+		}
+		if m.openRequestID != nil || scheduled {
+			return ChangeRequest{}, problem("REQUEST_EXISTS", "Migrasi sudah memiliki change request terbuka atau terjadwal.")
 		}
 		if in.BatchSize != nil && (m.Current.Mode != "batch" || *in.BatchSize < 1 || *in.BatchSize > s.batchSizeMax) {
 			return ChangeRequest{}, invalidField("batch_size", "Ukuran batch tidak valid untuk migrasi ini.")

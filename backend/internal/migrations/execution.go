@@ -103,6 +103,17 @@ func scanExecution(row scanner) (executionRow, error) {
 		batch.BatchSize = int(*size)
 		batch.ScopeFrom, batch.ScopeTo, batch.Cursor = decimal(from), decimal(to), decimal(cursor)
 		batch.RowsCommitted = strconv.FormatInt(rows, 10)
+		if e.Direction == "up" && from != nil && to != nil && *to >= *from && *size > 0 {
+			// The lower bound is exclusive. Gaps and filters can reduce the actual count.
+			span, step := uint64(*to)-uint64(*from), uint64(*size)
+			estimate := span / step
+			if span%step != 0 {
+				estimate++
+			}
+			if estimate <= 1<<53-1 && uint64(int(estimate)) == estimate {
+				batch.EstimatedBatches = new(int(estimate))
+			}
+		}
 		e.Batch = &batch
 	}
 	return e, nil
@@ -237,7 +248,7 @@ func (s *Service) executeRequest(ctx context.Context, actor contracts.Principal,
 
 func findRequestExecution(ctx context.Context, q contracts.Querier, databaseID, requestID string) (executionRow, error) {
 	e, err := scanExecution(q.QueryRowContext(ctx, executionSelect+`
-		WHERE e.database_id=$1 AND e.change_request_id=$2 ORDER BY e.number DESC LIMIT 1`, databaseID, requestID))
+		WHERE e.database_id=$1 AND e.change_request_id=$2 AND e.status<>'cancelled'`, databaseID, requestID))
 	if err != nil {
 		return e, internal(err)
 	}
@@ -250,9 +261,6 @@ func (s *Service) enqueueApproved(ctx context.Context, tx *sql.Tx, actor contrac
 	if err != nil {
 		return executionRow{}, err
 	}
-	if m.Current.Mode != "normal" {
-		return executionRow{}, problem("UNSUPPORTED_MODE", "Eksekusi mode batch belum tersedia.")
-	}
 	if subject.Revision != m.Current.Number || hashString(subject.ContentHash) != m.Current.ContentHash {
 		return executionRow{}, problem("REVISION_CONFLICT", "Revisi change request sudah berubah.")
 	}
@@ -260,13 +268,24 @@ func (s *Service) enqueueApproved(ctx context.Context, tx *sql.Tx, actor contrac
 	if err != nil {
 		return executionRow{}, internal(err)
 	}
-	if err := validateRequestAction(ctx, tx, m.Migration, head, requestInput{Action: subject.Action}); err != nil {
+	var targetID *string
+	var batchSize *int
+	if err := tx.QueryRowContext(ctx, `SELECT target_execution_id,batch_size FROM change_requests WHERE id=$1`, subject.RequestID).Scan(&targetID, &batchSize); err != nil {
+		return executionRow{}, internal(err)
+	}
+	if m.Current.Batch != nil && batchSize == nil {
+		batchSize = &m.Current.Batch.BatchSize
+	}
+	if err := validateRequestAction(ctx, tx, m.Migration, head, requestInput{Action: subject.Action, TargetExecutionID: targetID}); err != nil {
 		return executionRow{}, err
 	}
 	direction := "up"
 	var reverts *string
 	if subject.Action == "rollback" {
 		direction = "down"
+		reverts = targetID
+	}
+	if direction == "down" && reverts == nil {
 		var id string
 		err := tx.QueryRowContext(ctx, `SELECT execution_id FROM migration_history
 			WHERE database_id=$1 AND migration_id=$2 AND version=$3 AND action IN ('apply','forward')
@@ -282,18 +301,18 @@ func (s *Service) enqueueApproved(ctx context.Context, tx *sql.Tx, actor contrac
 	if err != nil {
 		return executionRow{}, err
 	}
-	if block != nil {
+	if block != nil && !clearsPartialBlock(block, targetID) {
 		status, heldReason = "held", &block.reason
 	}
 	id := uuid.Must(uuid.NewV7()).String()
 	now := s.store.now()
 	_, err = tx.ExecContext(ctx, `INSERT INTO migration_executions
 		(id,database_id,number,migration_id,change_request_id,action,direction,mode,migration_revision,content_hash,
-		 status,max_attempts,reverts_execution_id,chain_root_id,held_reason,enqueued_by,enqueued_by_name,enqueued_at)
+		 status,max_attempts,reverts_execution_id,chain_root_id,held_reason,enqueued_by,enqueued_by_name,enqueued_at,batch_size)
 		VALUES ($1,$2,(SELECT COALESCE(max(number),0)+1 FROM migration_executions WHERE database_id=$2),
-		 $3,$4,$5,$6,'normal',$7,$8,$9,$10,$11,$1,$12,$13,$14,$15)`,
+		 $3,$4,$5,$6,$16,$7,$8,$9,$10,$11,$1,$12,$13,$14,$15,$17)`,
 		id, databaseID, migrationID, subject.RequestID, subject.Action, direction, subject.Revision, subject.ContentHash,
-		status, s.maxAttempts, reverts, heldReason, actor.UserID, actor.Username, now)
+		status, s.maxAttempts, reverts, heldReason, actor.UserID, actor.Username, now, m.Current.Mode, batchSize)
 	if err != nil {
 		return executionRow{}, internal(err)
 	}

@@ -78,7 +78,7 @@ func fixture() serviceFixture {
 	)
 	inspector := &snapshotInspector{snapshots: map[string]database.SchemaSnapshot{source.DatabaseID: source, desired.DatabaseID: desired}, errors: map[string]error{}}
 	s := NewService(provider, inspector, testkit.NewFixtureAccessChecker(), func(context.Context, contracts.Principal, string) (int64, error) { return 7, nil }, Options{})
-	return serviceFixture{s, provider, inspector, DiffInput{desired.DatabaseID, "main"}}
+	return serviceFixture{s, provider, inspector, DiffInput{DesiredDatabaseID: desired.DatabaseID, Schema: "main"}}
 }
 
 func assertCode(t *testing.T, err error, code string) {

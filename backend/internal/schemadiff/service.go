@@ -142,6 +142,11 @@ func (s *Service) Diff(ctx context.Context, p contracts.Principal, sourceID stri
 			result.Warnings = append(result.Warnings, candidate.Warnings...)
 			if candidate.Executable {
 				result.CandidateSQL = candidate.SQL
+				if in.IncludeDown && candidate.SQL != "" {
+					// Generate against the same snapshots, so the comparison still only
+					// requires view access to the desired database.
+					result.CandidateDownSQL = reverseCandidate(ctx, generator, from, to, fromSchema, toSchema)
+				}
 			} else if len(candidate.Warnings) == 0 {
 				result.Warnings = append(result.Warnings, "Perubahan schema ini belum didukung generator SQL.")
 			}
@@ -172,6 +177,18 @@ func (s *Service) Diff(ctx context.Context, p contracts.Principal, sourceID stri
 	}
 	result.Warnings = uniqueWarnings(result.Warnings)
 	return result, nil
+}
+
+func reverseCandidate(ctx context.Context, generator Generator, from, to database.SchemaSnapshot, fromSchema, toSchema database.Schema) string {
+	changes, _, err := compare(toSchema, fromSchema)
+	if err != nil {
+		return ""
+	}
+	candidate, err := generator.Generate(ctx, Comparison{to, from, fromSchema.Name, changes})
+	if err != nil || !candidate.Executable || !utf8.ValidString(candidate.SQL) || strings.ContainsRune(candidate.SQL, 0) || len(candidate.SQL) > 256<<10 {
+		return ""
+	}
+	return candidate.SQL
 }
 
 func (s *Service) readVersion(ctx context.Context, p contracts.Principal, id string) (int64, error) {

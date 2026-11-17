@@ -84,7 +84,7 @@ func TestMetadataMigrationsReplayAndRerun(t *testing.T) {
 		}
 	}
 	var count int
-	if err := db.QueryRow("SELECT count(*) FROM app_schema_migrations WHERE length(checksum)=64 AND applied_at IS NOT NULL").Scan(&count); err != nil || count != 8 {
+	if err := db.QueryRow("SELECT count(*) FROM app_schema_migrations WHERE length(checksum)=64 AND applied_at IS NOT NULL").Scan(&count); err != nil || count != 9 {
 		t.Fatal("migration ledger is incomplete")
 	}
 	var tables, dropped int

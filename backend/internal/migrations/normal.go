@@ -19,8 +19,8 @@ import (
 )
 
 type attemptFailure struct {
-	detail               *RunError
-	transient, uncertain bool
+	detail                               *RunError
+	transient, uncertain, outcomeUnknown bool
 }
 
 func failed(code, message string) *attemptFailure {
@@ -69,7 +69,17 @@ func (x *Executor) checkInputs(ctx context.Context, q contracts.Querier, e execu
 	if level != contracts.AccessEdit {
 		return migrationRow{}, failed("ACCESS_REVOKED", "Pengguna tidak lagi memiliki akses edit.")
 	}
-	if e.ChangeRequestID == nil || e.Mode != "normal" || (e.Action != "apply" && e.Action != "rollback" && e.Action != "forward") {
+	m, err := readMigration(ctx, q, e.DatabaseID, e.MigrationID)
+	if err != nil {
+		return m, metadataFailure()
+	}
+	if m.Current.Number != e.MigrationRevision || m.Current.Mode != e.Mode || !bytes.Equal(m.contentHash, e.contentHash) {
+		return m, failed("REVISION_CHANGED", "Revisi migrasi berubah sebelum SQL dijalankan.")
+	}
+	if e.Action == "resume" && e.Mode == "batch" && e.ResumesExecution != nil {
+		return m, nil
+	}
+	if e.ChangeRequestID == nil || (e.Action != "apply" && e.Action != "rollback" && e.Action != "forward") {
 		return migrationRow{}, failed("INTERNAL_ERROR", "Jenis eksekusi tidak didukung worker ini.")
 	}
 	subject, err := s.store.LoadSubject(ctx, q, *e.ChangeRequestID)
@@ -83,13 +93,8 @@ func (x *Executor) checkInputs(ctx context.Context, q contracts.Querier, e execu
 	if state.Status != "approved" || subject.Status != "executed" {
 		return migrationRow{}, failed("APPROVAL_REVOKED", "Approval wajib berubah sebelum SQL dijalankan.")
 	}
-	m, err := readMigration(ctx, q, e.DatabaseID, e.MigrationID)
-	if err != nil {
-		return m, metadataFailure()
-	}
 	if subject.DatabaseID != e.DatabaseID || subject.MigrationID != e.MigrationID || subject.Action != e.Action ||
-		subject.Revision != e.MigrationRevision || m.Current.Number != e.MigrationRevision ||
-		!bytes.Equal(subject.ContentHash, e.contentHash) || !bytes.Equal(m.contentHash, e.contentHash) {
+		subject.Revision != e.MigrationRevision || !bytes.Equal(subject.ContentHash, e.contentHash) {
 		return m, failed("REVISION_CHANGED", "Revisi migrasi berubah sebelum SQL dijalankan.")
 	}
 	return m, nil
@@ -172,6 +177,10 @@ func (t normalTarget) prepare(ctx context.Context, statementTimeout, lockTimeout
 	if err := t.exec(ctx, "BEGIN"); err != nil {
 		return err
 	}
+	return t.configureTimeouts(ctx, statementTimeout, lockTimeout)
+}
+
+func (t normalTarget) configureTimeouts(ctx context.Context, statementTimeout, lockTimeout time.Duration) error {
 	return t.exec(ctx, `SELECT set_config('statement_timeout',$1,true), set_config('lock_timeout',$2,true)`,
 		strconv.FormatInt(max(1, statementTimeout.Milliseconds()), 10),
 		strconv.FormatInt(max(1, lockTimeout.Milliseconds()), 10))

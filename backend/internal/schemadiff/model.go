@@ -29,6 +29,7 @@ const (
 type DiffInput struct {
 	DesiredDatabaseID string `json:"desired_database_id"`
 	Schema            string `json:"schema"`
+	IncludeDown       bool   `json:"include_down"`
 }
 
 type DiffChange struct {
@@ -44,6 +45,7 @@ type DiffResult struct {
 	DesiredFingerprint string          `json:"desired_fingerprint"`
 	Changes            []DiffChange    `json:"changes"`
 	CandidateSQL       string          `json:"candidate_sql"`
+	CandidateDownSQL   string          `json:"candidate_down_sql,omitempty"`
 	Warnings           []string        `json:"warnings"`
 	Executable         bool            `json:"executable"`
 }

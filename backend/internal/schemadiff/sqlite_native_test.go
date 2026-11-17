@@ -23,7 +23,7 @@ func nativeDiff(t *testing.T, sourceDDL, desiredDDL string) (DiffResult, databas
 	before, after := schemaDDL(t, source.DB), schemaDDL(t, desired.DB)
 	provider := databasetest.NewProvider(source, desired)
 	s := NewService(provider, sqliteadapter.Inspector{}, testkit.NewFixtureAccessChecker(), func(context.Context, contracts.Principal, string) (int64, error) { return 0, nil }, Options{Generators: map[database.Driver]Generator{database.SQLite: SQLiteGenerator{provider}}})
-	result, err := s.Diff(t.Context(), principal, source.DatabaseID, DiffInput{desired.DatabaseID, "main"})
+	result, err := s.Diff(t.Context(), principal, source.DatabaseID, DiffInput{DesiredDatabaseID: desired.DatabaseID, Schema: "main"})
 	if err != nil {
 		t.Fatal(err)
 	}

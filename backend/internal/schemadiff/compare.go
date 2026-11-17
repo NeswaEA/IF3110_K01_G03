@@ -225,3 +225,29 @@ func compareConstraints(table string, source, desired []database.Constraint) ([]
 	}
 	return changes, warnings
 }
+
+// CompareSnapshots reports schema changes using the same comparison as schema diff.
+func CompareSnapshots(source, desired database.SchemaSnapshot) ([]DiffChange, error) {
+	before, err := byName(source.Schemas, func(s database.Schema) string { return s.Name })
+	if err != nil {
+		return nil, err
+	}
+	after, err := byName(desired.Schemas, func(s database.Schema) string { return s.Name })
+	if err != nil {
+		return nil, err
+	}
+	changes := []DiffChange{}
+	for _, name := range joinedNames(before, after) {
+		if name == "_platform" {
+			continue
+		}
+		old, next := before[name], after[name]
+		old.Name, next.Name = name, name
+		diff, _, err := compare(old, next)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, diff...)
+	}
+	return changes, nil
+}

@@ -68,7 +68,7 @@ func TestDiffReadsRealSQLiteWithoutChangingEitherTarget(t *testing.T) {
 			beforeSource, beforeDesired := schemaDDL(t, source.DB), schemaDDL(t, desired.DB)
 			provider := databasetest.NewProvider(source, desired)
 			s := NewService(provider, sqliteadapter.Inspector{}, testkit.NewFixtureAccessChecker(), func(context.Context, contracts.Principal, string) (int64, error) { return 3, nil }, Options{})
-			result, err := s.Diff(t.Context(), principal, source.DatabaseID, DiffInput{desired.DatabaseID, "main"})
+			result, err := s.Diff(t.Context(), principal, source.DatabaseID, DiffInput{DesiredDatabaseID: desired.DatabaseID, Schema: "main"})
 			if err != nil || result.ExpectedVersion != 3 {
 				t.Fatal(result, err)
 			}

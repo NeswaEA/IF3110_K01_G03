@@ -15,11 +15,11 @@ import (
 )
 
 type ExecutorOptions struct {
-	WorkerID                         string
-	HeartbeatInterval, StaleAfter    time.Duration
-	LockRetryMaxDelay, OrderingDelay time.Duration
-	RetryBaseDelay, RetryMaxDelay    time.Duration
-	StatementTimeout, LockTimeout    time.Duration
+	WorkerID                                                   string
+	HeartbeatInterval, StaleAfter                              time.Duration
+	LockRetryMaxDelay, OrderingDelay                           time.Duration
+	RetryBaseDelay, RetryMaxDelay                              time.Duration
+	StatementTimeout, DryRunTimeout, BatchTimeout, LockTimeout time.Duration
 }
 
 type Executor struct {
@@ -47,7 +47,7 @@ func NewExecutor(s *Service, provider database.TargetProvider, inspector databas
 		o.LockRetryMaxDelay = 30 * time.Second
 	}
 	if o.OrderingDelay <= 0 {
-		o.OrderingDelay = time.Second
+		o.OrderingDelay = 10 * time.Second
 	}
 	if o.RetryBaseDelay <= 0 {
 		o.RetryBaseDelay = 2 * time.Second
@@ -57,6 +57,12 @@ func NewExecutor(s *Service, provider database.TargetProvider, inspector databas
 	}
 	if o.StatementTimeout <= 0 {
 		o.StatementTimeout = 30 * time.Minute
+	}
+	if o.BatchTimeout <= 0 {
+		o.BatchTimeout = time.Minute
+	}
+	if o.DryRunTimeout <= 0 {
+		o.DryRunTimeout = time.Minute
 	}
 	if o.LockTimeout <= 0 {
 		o.LockTimeout = 5 * time.Second
@@ -108,7 +114,8 @@ func (x *Executor) gate(ctx context.Context, m contracts.JobMessage, claim bool)
 			if err != nil {
 				return g, err
 			}
-			if block != nil && e.Status == "queued" {
+			resolves := clearsPartialBlock(block, e.ResumesExecution) || (e.Direction == "down" && clearsPartialBlock(block, e.RevertsExecution))
+			if block != nil && !resolves && e.Status == "queued" && e.Action != "dry_run" {
 				if _, err := tx.ExecContext(ctx, `UPDATE migration_executions SET status='held', held_reason=$2 WHERE id=$1`, e.ID, block.reason); err != nil {
 					return g, internal(err)
 				}
@@ -120,7 +127,7 @@ func (x *Executor) gate(ctx context.Context, m contracts.JobMessage, claim bool)
 				WHERE database_id=$1 AND number<$2 AND status IN ('queued','running'))`, e.DatabaseID, e.Number).Scan(&earlier); err != nil {
 				return g, internal(err)
 			}
-			if earlier {
+			if earlier && !resolves && !(block != nil && e.Action == "dry_run") {
 				g.result = retry("ordering", x.options.OrderingDelay)
 				return g, nil
 			}
@@ -130,6 +137,7 @@ func (x *Executor) gate(ctx context.Context, m contracts.JobMessage, claim bool)
 				if _, err := tx.ExecContext(ctx, `UPDATE migration_executions SET lock_requested_at=$2 WHERE id=$1`, e.ID, now); err != nil {
 					return g, internal(err)
 				}
+				g.lockRequested = &now
 			}
 			return g, nil
 		}
@@ -176,16 +184,14 @@ func (x *Executor) Handle(ctx context.Context, m contracts.JobMessage) contracts
 	}
 	lockCtx, lockSpan := telemetry.Tracer().Start(ctx, "lock.acquire")
 	lock, err := locker.Acquire(lockCtx, target)
-	outcome, waitMS := "acquired", int64(0) // the first request waits only for this call
+	outcome := "acquired"
 	switch {
 	case errors.Is(err, database.ErrLockBusy):
 		outcome = "busy"
 	case err != nil:
 		outcome = "error"
 	}
-	if g.executionRow.lockRequested != nil {
-		waitMS = x.service.store.now().Sub(*g.executionRow.lockRequested).Milliseconds()
-	}
+	waitMS := max(0, x.service.store.now().Sub(*g.lockRequested).Milliseconds())
 	lockSpan.SetAttributes(attribute.String("outcome", outcome), attribute.Int64("wait_ms", waitMS))
 	lockSpan.End()
 	if errors.Is(err, database.ErrLockBusy) {
@@ -222,34 +228,40 @@ func (x *Executor) Handle(ctx context.Context, m contracts.JobMessage) contracts
 
 	work, stop := x.track(ctx, lock, e)
 	defer stop()
+	if e.Action == "dry_run" {
+		return x.finishDryRun(ctx, e, x.dryRun(work, e, target, lock), lock.Release)
+	}
+	if e.Mode == "batch" {
+		return x.handleBatch(ctx, work, target, lock, g)
+	}
 	if g.recover {
 		proof, err := x.readEvidence(work, target, lock.Conn, e)
 		if err != nil {
-			return x.retryAttempt(ctx, e, runFailure("TARGET_UNAVAILABLE", "Bukti commit belum dapat diperiksa."), true)
+			return x.retryAttempt(ctx, e, runFailure("TARGET_UNAVAILABLE", "Bukti commit belum dapat diperiksa."), true, lock.Release)
 		}
 		if proof != nil {
-			return x.complete(ctx, e, "succeeded", nil, proof)
+			return x.complete(ctx, e, "succeeded", nil, proof, lock.Release)
 		}
 		if e.reconcile {
-			return x.complete(ctx, e, "failed", runFailure("EXECUTION_INTERRUPTED", "Bukti commit tidak ditemukan."), nil)
+			return x.complete(ctx, e, "failed", runFailure("EXECUTION_INTERRUPTED", "Bukti commit tidak ditemukan."), nil, lock.Release)
 		}
 		if g.exhausted {
-			return x.complete(ctx, e, "failed", runFailure("RETRY_EXHAUSTED", "Batas percobaan tercapai."), nil)
+			return x.complete(ctx, e, "failed", runFailure("RETRY_EXHAUSTED", "Batas percobaan tercapai."), nil, lock.Release)
 		}
 	}
 	history, failure := x.runNormal(work, target, lock, e)
 	switch {
 	case failure == nil:
-		return x.complete(ctx, e, "succeeded", nil, history)
+		return x.complete(ctx, e, "succeeded", nil, history, lock.Release)
 	case failure.uncertain:
 		// Keep ownership recorded until another session can verify the commit.
 		return x.deferEvidence(ctx, e, failure.detail)
 	case work.Err() != nil:
 		return x.deferEvidence(ctx, e, runFailure("EXECUTION_INTERRUPTED", "Eksekusi terputus."))
 	case failure.transient:
-		return x.retryAttempt(ctx, e, failure.detail, false)
+		return x.retryAttempt(ctx, e, failure.detail, false, lock.Release)
 	default:
-		return x.complete(ctx, e, "failed", failure.detail, nil)
+		return x.complete(ctx, e, "failed", failure.detail, nil, lock.Release)
 	}
 }
 
