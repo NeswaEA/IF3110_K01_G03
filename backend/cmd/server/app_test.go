@@ -341,6 +341,9 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 	if err := db.QueryRow(`SELECT count(*) FROM migration_executions WHERE database_id=$1`, databaseID).Scan(&executionsBefore); err != nil || executionsBefore != 1 {
 		t.Fatal("executions before disable", executionsBefore, err)
 	}
+	if counts, err := activeJobCounts(t.Context(), db); err != nil || len(counts) != 4 || counts["queued"] != 1 || counts["running"] != 0 {
+		t.Fatal("job gauge counts", counts, err)
+	}
 	if w := request("DELETE", "/api/v1/admin/connections/"+databaseID, "", admin.cookie, admin.csrf); w.Code != 204 {
 		t.Fatal("disable failed", w.Code)
 	}

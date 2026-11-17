@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net"
@@ -61,6 +62,11 @@ func run(ctx context.Context) error {
 	}
 	defer db.Close()
 	defer telemetry.RegisterPool("metadata", db)()
+	if err := telemetry.RegisterJobGauge(func(ctx context.Context) (map[string]int64, error) {
+		return activeJobCounts(ctx, db)
+	}); err != nil {
+		return err
+	}
 	nc, err := nats.Connect(runtime.NATSURL, nats.Name(service), nats.MaxReconnects(-1))
 	if err != nil {
 		return errors.New("cannot connect to NATS_URL")
@@ -93,4 +99,25 @@ func run(ctx context.Context) error {
 	g.Go(func() error { return relay.Run(gctx) })
 	g.Go(func() error { return platform.Serve(gctx, server, listener) })
 	return g.Wait()
+}
+
+// activeJobCounts counts executions per active status from metadata, the source of truth for job state.
+// Every status is reported, so an empty queue shows 0 instead of a gap.
+func activeJobCounts(ctx context.Context, db *sql.DB) (map[string]int64, error) {
+	counts := map[string]int64{"queued": 0, "held": 0, "running": 0, "outcome_unknown": 0}
+	rows, err := db.QueryContext(ctx, `SELECT status, count(*) FROM migration_executions
+		WHERE status IN ('queued', 'held', 'running', 'outcome_unknown') GROUP BY status`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var status string
+		var n int64
+		if err := rows.Scan(&status, &n); err != nil {
+			return nil, err
+		}
+		counts[status] = n
+	}
+	return counts, rows.Err()
 }
