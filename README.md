@@ -168,6 +168,27 @@ Setiap database target menjalankan paling banyak satu migration. Worker mengambi
 
 SQLite memakai advisory lock pada koneksi metadata yang dipin (lepas bila worker mati) dan `BEGIN IMMEDIATE`.
 
+## Logging dan tracing
+
+API dan worker menulis log JSON ke stdout dan trace OpenTelemetry ke exporter console (`OTEL_TRACES_EXPORTER=console`, default). Satu eksekusi menjadi satu trace dari request HTTP sampai SQL di target:
+
+```text
+POST /api/v1/databases/{id}/change-requests/{rid}/execute   (API, server)
+ └─ outbox.enqueue                                           (traceparent ikut disimpan di outbox)
+     └─ migration.job                                        (worker, consumer; parent dari pesan NATS)
+         ├─ lock.acquire          outcome, wait_ms
+         ├─ execution.revalidate
+         ├─ db.query              SQL migration, history target, COMMIT pada koneksi lock
+         └─ execution.finalize
+outbox.publish                                               (relay, producer; trace sendiri dengan link ke outbox.enqueue)
+```
+
+- Setiap query PostgreSQL (metadata dan target, termasuk read-only) menjadi span `db.query` dengan `db.pool`, `db.operation`, `db.query`, tipe `db.params`, `rows`, dan `sqlstate` bila gagal; SQLite memakai format yang sama. Query target juga dicatat sebagai log `db.query`/`db.tx.*` level INFO, metadata level DEBUG.
+- SQL yang ditulis pengguna dinormalisasi sebelum dicatat (literal menjadi `$n`), dan nilai parameter tidak pernah dicatat, hanya tipenya.
+- Log yang ditulis selama span aktif membawa `trace_id` dan `span_id` span itu, sehingga log worker dapat dicari dari trace dan sebaliknya.
+
+Contoh output nyata (pohon span lengkap, span `lock.acquire` dan `db.query`, serta log yang berkorelasi) ada di [`docs/observability/spans.md`](docs/observability/spans.md).
+
 ## Observability (bonus)
 
 ```sh
@@ -180,6 +201,18 @@ sh scripts/obs-up.sh down   # matikan stack; aplikasi kembali ke trace console
 - Korelasi: exemplar `trace_id` pada histogram → trace di Tempo → log di Loki dengan `trace_id` yang sama (`{service_name="dbplatform-worker"} | trace_id="<id>"`), dan sebaliknya dari log ke trace.
 - Tanpa stack ini, log JSON tetap ke stdout dan trace dicetak exporter console.
 
+Contoh korelasi dari run nyata: request execute dengan `trace_id` `c173c8e4421aba15087d30b8ca3a5e45` (stress test 16 November 2026) dibuka di Tempo sebagai satu trace dari `dbplatform-api` sampai `dbplatform-worker` (75 span), lalu query Loki `{service_name=~"dbplatform-.*"} | trace_id="c173c8e4421aba15087d30b8ca3a5e45"` menampilkan 82 baris log API dan worker untuk trace yang sama (dari `execution.enqueued` sampai `lock.released`). Arah metrik → trace memakai exemplar: `/metrics` disajikan dalam format OpenMetrics sehingga setiap observasi histogram membawa `trace_id`. Pada smoke 17 November 2026, exemplar `migration_duration_seconds` dengan `trace_id` `89fb4925f875342c9205457d796163b0` (salah satu titik belah ketupat di panel *Durasi migration*) mengarah ke trace execute → worker lengkap (77 span) di Tempo; datasource Prometheus terprovision memetakan label `trace_id` exemplar ke Tempo.
+
+| Trace di Tempo | Log trace yang sama di Loki |
+|---|---|
+| ![Trace execute di Tempo](docs/observability/img/trace.png) | ![Log dengan trace_id yang sama di Loki](docs/observability/img/trace-logs.png) |
+
+Dashboard terprovision:
+
+- *Migration queue* (k6 smoke, 17 November 2026): job aktif per status, job selesai, queue wait, lock wait, durasi (titik belah ketupat adalah exemplar), dan alasan pengiriman pesan. ![Dashboard Migration queue](docs/observability/img/migration-queue.png)
+- *Load test (k6)* (stress tersebar, 16 November 2026). Lonjakan "Request gagal" di awal adalah nilai terakhir dari run smoke sebelumnya yang belum kedaluwarsa, bukan bagian run ini. ![Dashboard Load test](docs/observability/img/load-test.png)
+- *Database pools* dan *API HTTP* (stress tersebar yang sama). ![Dashboard Database pools](docs/observability/img/db-pool.png) ![Dashboard API HTTP](docs/observability/img/api.png)
+
 ## Stress test k6 (bonus)
 
 ```sh
@@ -188,7 +221,52 @@ EDITOR_PASSWORD=<FIXTURE_PASSWORD> sh scripts/load-test.sh                    # 
 EDITOR_PASSWORD=<FIXTURE_PASSWORD> sh scripts/load-test.sh -e TARGETS=same    # semua job di load_1
 ```
 
-Beban normal: 20 request baca/detik + 1 job/detik (`READ_RPS`, `JOB_RPS`). Tahapan: naik ke normal 2 menit, tahan 2 menit, naik ke 2×, 4×, 8× masing-masing 2 menit, turun ke normal 2 menit, tahan 2 menit. `setup()` menyiapkan migration dan change request yang sudah di-approve; skenario `job_submit` hanya menekan execute lalu menunggu status akhir (202 bukan berarti sukses). Threshold: p95 baca < 300 ms, p95 execute < 500 ms, request gagal < 1%, checks > 99%. Hasil dikirim ke Prometheus (dashboard *Load test (k6)*). Tabel hasil per tahap ditulis setelah run nyata.
+Beban normal: 20 request baca/detik + 1 job/detik (`READ_RPS`, `JOB_RPS`). Tahapan: naik ke normal 2 menit, tahan 2 menit, naik ke 2×, 4×, 8× masing-masing 2 menit, turun ke normal 2 menit, tahan 2 menit. `setup()` menyiapkan migration dan change request yang sudah di-approve; skenario `job_submit` hanya menekan execute lalu menunggu status akhir (202 bukan berarti sukses). Threshold: p95 baca < 300 ms, p95 execute < 500 ms, request gagal < 1%, checks > 99%. Hasil dikirim ke Prometheus (dashboard *Load test (k6)*).
+
+`setup()` login sebagai `fixture-admin` untuk menguji koneksi `load_1..4` (menyiapkan tabel riwayat), lalu sebagai `lead` (satu-satunya pengguna dengan akses edit, sekaligus leader group ops) membuat dan meng-approve migration. Ganti dengan `ADMIN_USER`/`ADMIN_PASSWORD` dan `EDITOR_USER`/`LEADER_USER` bila akun lain dipakai.
+
+#### Hasil (16 November 2026)
+
+Mesin: Intel Core i9-13900H, RAM 32 GB, Windows 11 + Docker Desktop (WSL2, 20 vCPU dan 15,5 GB untuk Docker). API satu replika, worker dua replika (`WORKER_CONCURRENCY=4`), semua service di mesin yang sama dengan k6. Angka per tahap dihitung dari metrik server (`http_server_request_duration_seconds`, `migration_*`) dengan jendela 2 menit di akhir setiap tahap; tahap "naik" mencatat beban yang sedang menuju target.
+
+Ringkasan k6 untuk seluruh run:
+
+| Run | Request | Gagal | Checks | Job sukses / gagal | p95 baca | p95 execute | Queue wait p50 / p95 | Iterasi terbuang (VU habis) |
+|---|---|---|---|---|---|---|---|---|
+| Tersebar (`load_1..4`) | 56.471 | 0% | 100% | 2.086 / 0 | 61,7 ms | 83,6 ms | 15 ms / 2,0 s | 864 |
+| Satu DB (`TARGETS=same`) | 235.104 | 0% | 100% | 1.338 / 0 | 191,8 ms | 131,2 ms | 3,0 s / 199,5 s | 855 |
+
+Job tersebar di empat database:
+
+| Tahap (2 menit) | API baca p50 / p95 (ms) | execute p95 (ms) | Throughput (req/s) | Error 5xx | Queue wait p50 / p95 (ms) | Lock wait p95 (ms) | Durasi job p50 / p95 (ms) | Job sukses/menit |
+|---|---|---|---|---|---|---|---|---|
+| 0 → 1× | 15,9 / 24,6 | 23,7 | 12,3 | 0% | 16,4 / 24,4 | 9,9 | 17,0 / 24,5 | 30 |
+| 1× tahan | 16,0 / 24,3 | 24,2 | 23,0 | 0% | 17,3 / 24,6 | 18,8 | 17,0 / 24,5 | 59 |
+| 1× → 2× | 14,6 / 24,4 | 33,6 | 34,3 | 0% | 17,4 / 27,3 | 20,2 | 16,7 / 31,2 | 90 |
+| 2× → 4× | 9,7 / 39,7 | 51,7 | 69,0 | 0% | 19,1 / 46,8 | 24,2 | 19,2 / 46,2 | 179 |
+| 4× → 8× | 9,2 / 192 | 455 | 144,2 | 0% | 23,0 / 2.261 | 23,3 | 18,6 / 44,0 | 352 |
+| 8× → 1× | 9,1 / 33,4 | 55,2 | 110,6 | 0% | 1.026 / 2.353 | 23,1 | 18,7 / 43,3 | 279 |
+| 1× pemulihan | 14,5 / 29,7 | 42,7 | 23,0 | 0% | 17,8 / 42,1 | 21,9 | 18,0 / 37,9 | 59 |
+
+Semua job di `load_1`:
+
+| Tahap (2 menit) | API baca p50 / p95 (ms) | execute p95 (ms) | Throughput (req/s) | Error 5xx | Queue wait p50 / p95 (ms) | Lock wait p95 (ms) | Durasi job p50 / p95 (ms) | Job sukses/menit |
+|---|---|---|---|---|---|---|---|---|
+| 0 → 1× | 15,2 / 33,2 | 29,2 | 11,7 | 0% | 19,0 / 43,0 | 24,2 | 18,6 / 40,0 | 31 |
+| 1× tahan | 15,0 / 24,8 | 42,0 | 23,0 | 0% | 19,5 / 44,1 | 22,4 | 19,0 / 43,5 | 59 |
+| 1× → 2× | 13,5 / 28,8 | 47,2 | 33,4 | 0% | 19,4 / 47,3 | 24,0 | 19,8 / 44,7 | 89 |
+| 2× → 4× | 9,0 / 25,0 | 54,3 | 75,4 | 0% | 1.838 / 4.506 | 23,0 | 19,0 / 46,1 | 175 |
+| 4× → 8× | 8,9 / 96,1 | 71,1 | 258,0 | 0% | 9.429 / 46.235 | 49,6 | 22,5 / 79,0 | 170 |
+| 8× → 1× | 24,8 / 446 | 223 | 662,3 | 0% | 89.610 / 240.706 | 94,9 | 73,1 / 97,3 | 61 |
+| 1× pemulihan | 25,1 / 860 | 875 | 658,7 | 0% | 210.000 / 291.000 | 91,6 | 70,8 / 97,1 | 64 |
+
+#### Analisis
+
+- **Eksekusi SQL bukan bottleneck.** Durasi job tetap ±20 ms (p95 < 50 ms) sampai 8× pada run tersebar, dan lock wait p95 tetap < 25 ms. Respons execute (202) tidak bergantung pada durasi migration.
+- **Database berbeda berjalan paralel, database sama berurutan.** Pada run tersebar terdapat 104 pasang eksekusi di database berbeda yang rentang `running`-nya overlap; pada kedua run tidak ada satu pun pasangan `running` yang overlap di database yang sama. Queue wait satu DB (p50 3,0 s) jauh di atas run tersebar (p50 15 ms).
+- **Batas pertama: pool metadata API.** Pool metadata API dibatasi 5 koneksi. Pada 8× pool itu menunggu 8.298 kali (total 1.290 detik dalam 2 menit), sehingga p95 baca naik ke 192 ms dan p95 execute ke 455 ms; pool target dan pool worker tidak pernah menunggu. Menaikkan batas pool metadata API adalah langkah pertama bila beban lebih besar dibutuhkan.
+- **Batas kedua: urutan job dalam satu database.** Job berikutnya di database yang sama di-NAK dengan jeda `ORDERING_DELAY` (1 s) selama job sebelumnya belum selesai. Dengan empat database, redelivery `ordering` hanya ratusan per 2 menit dan antrean pulih setelah beban turun. Dengan satu database, kapasitas mentok di ±170 job/menit; begitu kedatangan melampaui itu (4×), antrean tumbuh dan setiap job yang menunggu dikirim ulang setiap detik. Pada 8× → 1× tercatat ±23.800 redelivery `ordering` per 2 menit dibanding 128 job selesai, sehingga throughput justru turun ke ±60 job/menit. Polling status oleh 400 VU k6 menambah beban ke pool metadata API (8.728 detik total tunggu dalam 2 menit), yang menaikkan p95 baca ke 860 ms.
+- **Pemulihan.** Run tersebar kembali ke angka beban normal pada tahap terakhir (p95 baca 29,7 ms, queue wait p95 42 ms). Run satu DB belum pulih dalam 14 menit: setelah k6 selesai masih ada 325 job `queued` yang dikuras worker setelahnya; seluruh 1.694 job run ini berakhir `succeeded`. Tidak ada request gagal atau job gagal pada kedua run. Perbaikan yang paling berdampak adalah menunda redelivery job yang menunggu urutan sebanding dengan posisinya di antrean, bukan jeda tetap 1 detik.
 
 ## Test
 
@@ -220,6 +298,22 @@ Backend CI juga memeriksa bootstrap PostgreSQL desired dan pengulangan seed yang
 Setiap job backend memakai PostgreSQL 17.11 metadata dan target yang terpisah, dengan role target `platform_runner` dan `platform_editor`. Kredensial `ci_*` hanya untuk database sementara job; CI tidak membaca `.env` lokal atau membutuhkan secret repository. Hasil Go ditulis ke job summary; test case yang dilewati atau filter yang tidak menjalankan test membuat job gagal. Package tanpa test tetap diperbolehkan. Job bonus berjalan independen, sehingga kegagalan Atlas tidak membatalkan job wajib. Action dikunci dengan commit SHA dan image PostgreSQL dengan digest.
 
 ## Arsitektur proyek
+
+```mermaid
+flowchart LR
+  spa[SPA React] -->|HTTP /api/v1 + SSE| api[backend: API + relay]
+  api -->|execution + outbox, satu transaksi| meta[(PostgreSQL metadata)]
+  api -->|relay: publish Nats-Msg-Id| nats[[NATS JetStream<br/>stream MIGRATIONS]]
+  nats -->|pull consumer| w1[worker 1]
+  nats --> w2[worker 2]
+  w1 -->|advisory lock + SQL migration<br/>pada koneksi yang sama| target[(database target)]
+  w2 --> target
+  w1 -->|status, checkpoint, history mirror| meta
+  w1 -->|event migrations.events.db| nats
+  nats -->|event| api
+```
+
+Biner dan service: `backend` (API, SPA, relay outbox, SSE), `worker` (2 replika: consumer, sweeper, executor), `migrate` dan `seed` (CLI), `metadata-postgres`, `target-postgres`, `nats`; profile `observability` menambah `otel-collector`, `loki`, `tempo`, `prometheus`, `grafana`, dan profile `load` menambah `k6`.
 
 - **Satu backend.** Go menyajikan API JSON di `/api/v1` dan hasil build SPA (`backend/cmd/server/spa.go`). Server tidak merender HTML.
 - **SPA.**
@@ -254,7 +348,10 @@ web/src/
   components/                         komponen bersama dan shadcn/ui
   features/                           komponen per fitur (access, connections, reviews, viewer, explain)
 infra/docker/, infra/postgres/        Dockerfile, Compose, role target
+infra/observability/                  OTel Collector, Tempo, Prometheus, dashboard dan datasource Grafana
 tests/fixtures/                       payload API, fixture PostgreSQL dan SQLite bersama
+tests/e2e/, tests/load/               Playwright desktop/mobile, stress test k6
+docs/observability/                   contoh span dari run nyata dan screenshot Grafana
 scripts/                              setup, menjalankan aplikasi, dan test
 ```
 
