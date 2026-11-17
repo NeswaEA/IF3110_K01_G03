@@ -25,6 +25,8 @@ function csrfToken() {
  * with full-jitter backoff instead of failing the run.
  */
 export function login(username, password) {
+  // the API rejects a login on a session that is already signed in (setup signs in twice)
+  http.cookieJar().clear(BASE);
   for (let attempt = 0; attempt < 8; attempt++) {
     const res = http.post(`${API}/auth/login`, JSON.stringify({ username, password }), {
       headers: jsonHeaders(csrfToken()),
@@ -32,6 +34,7 @@ export function login(username, password) {
       responseCallback: http.expectedStatuses(200, 429),
     });
     if (res.status === 200) return { csrf: csrfToken() }; // login rotates the session and its token
+    if (res.status !== 429) fail(`login ${username}: HTTP ${res.status}`);
     sleep(Math.random() * Math.min(30, 2 ** attempt));
   }
   fail(`login ${username}: still rate limited`);

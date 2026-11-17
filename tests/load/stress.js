@@ -19,7 +19,8 @@ const targets = __ENV.TARGETS === "same" ? LOAD_DBS.slice(0, 1) : LOAD_DBS;
 const readRps = Number(__ENV.READ_RPS || 20);
 const jobRps = Number(__ENV.JOB_RPS || 1);
 const jobsPerMinute = smoke ? 30 : Math.round(jobRps * 60);
-const editor = { user: __ENV.EDITOR_USER || "editor", password: __ENV.EDITOR_PASSWORD };
+// only lead (ops group) may edit load_1..load_4; as its leader it also approves its own requests
+const editor = { user: __ENV.EDITOR_USER || "lead", password: __ENV.EDITOR_PASSWORD };
 const leader = { user: __ENV.LEADER_USER || "lead", password: __ENV.LEADER_PASSWORD || __ENV.EDITOR_PASSWORD };
 
 // normal for 2+2 min, then 2x, 4x, 8x for 2 min each, back to normal and hold: 14 min
@@ -39,6 +40,7 @@ const area = (n) => stages(n).reduce((acc, s, i, all) => {
 
 export const options = {
   setupTimeout: "15m",
+  noCookiesReset: true, // keep each VU's session cookie across iterations (one login per VU)
   scenarios: {
     api_read: {
       executor: "ramping-arrival-rate", exec: "apiRead", timeUnit: "1s", startRate: 0,
@@ -69,6 +71,12 @@ const jobsFailed = new Counter("jobs_failed");
 export function setup() {
   if (!editor.password) throw new Error("set EDITOR_PASSWORD (and LEADER_PASSWORD if it differs)");
   const jobs = Math.ceil((area(jobsPerMinute) / 60) * 1.1); // arrivals over the run, plus slack
+  // a target runs migrations only after an admin connection test has prepared its history
+  const admin = login(__ENV.ADMIN_USER || "fixture-admin", __ENV.ADMIN_PASSWORD || editor.password);
+  for (const db of targets) {
+    const res = post(admin, `/admin/connections/${db}/test`, {}, "setup_test");
+    if (res.status !== 200) throw new Error(`connection test: HTTP ${res.status} ${res.body}`);
+  }
   const author = login(editor.user, editor.password);
   const requests = [];
   for (let i = 0; i < jobs; i++) {
