@@ -3,6 +3,7 @@ package review_test
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -82,7 +83,8 @@ func TestApproveByEveryLeaderApprovesTheRequest(t *testing.T) {
 	}
 	events := f.audit.Events()
 	if len(events) != 2 || events[1].Action != "request.approved" || events[1].Details["status"] != "approved" ||
-		*events[1].DatabaseID != dbShared || events[1].ResourceID != requestID {
+		*events[1].DatabaseID != dbShared || events[1].ResourceID != requestID ||
+		events[1].Details["content_hash"] != "sha256:"+hex.EncodeToString(f.subjects.subject.ContentHash) {
 		t.Fatal("approvals must be audited after commit", events)
 	}
 	// Already approved: nothing left for this leader to decide.

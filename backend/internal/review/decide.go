@@ -102,7 +102,7 @@ func (s *Service) decide(ctx context.Context, actor contracts.Principal, databas
 		Action: "request." + decision, ActorID: &actor.UserID, ActorName: &actor.Username, DatabaseID: &databaseID,
 		ResourceType: "change_request", ResourceID: requestID,
 		Details: map[string]any{"migration_id": subject.MigrationID, "action": subject.Action, "revision": subject.Revision,
-			"content_hash": hex.EncodeToString(subject.ContentHash), "group_ids": groups, "status": state.Status},
+			"content_hash": "sha256:" + hex.EncodeToString(subject.ContentHash), "group_ids": groups, "status": state.Status},
 	})
 	if s.events != nil {
 		s.events.Publish(ctx, contracts.DatabaseEvent{
