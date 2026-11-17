@@ -25,6 +25,32 @@ func TestMetadataRejectsInvalidDSN(t *testing.T) {
 	}
 }
 
+func TestMetadataPoolSizeFromEnvironment(t *testing.T) {
+	for _, raw := range []string{"0", "101", "ten", "-1", " 20"} {
+		t.Setenv("METADATA_MAX_OPEN_CONNS", raw)
+		db, err := platform.OpenDatabase(context.Background(), "postgres://user:secret@localhost:5432/metadata", nil)
+		if db != nil || err == nil || err.Error() != "METADATA_MAX_OPEN_CONNS must be an integer from 1 to 100" {
+			t.Fatalf("%q must be rejected before connecting: %v", raw, err)
+		}
+	}
+	dsn := os.Getenv("TEST_METADATA_DATABASE_URL")
+	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("TEST_METADATA_DATABASE_URL is required in CI")
+		}
+		t.Skip("TEST_METADATA_DATABASE_URL is not set")
+	}
+	t.Setenv("METADATA_MAX_OPEN_CONNS", "20")
+	db, err := platform.OpenDatabase(t.Context(), dsn, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if db.Stats().MaxOpenConnections != 20 {
+		t.Fatal("METADATA_MAX_OPEN_CONNS was not applied", db.Stats().MaxOpenConnections)
+	}
+}
+
 func TestMetadataCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -50,8 +76,8 @@ func TestMetadataConnectionIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if db.Stats().MaxOpenConnections != 5 {
-		t.Fatal("unexpected pool limit")
+	if db.Stats().MaxOpenConnections != 10 {
+		t.Fatal("the metadata pool must default to 10 connections", db.Stats().MaxOpenConnections)
 	}
 	var one int
 	if err := db.QueryRowContext(ctx, "SELECT 1").Scan(&one); err != nil || one != 1 {
