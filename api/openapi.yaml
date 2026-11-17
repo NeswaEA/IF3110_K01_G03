@@ -222,6 +222,48 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
         '502': { $ref: '#/components/responses/TargetFailure' }
         '504': { $ref: '#/components/responses/TargetFailure' }
+  /databases/{id}/schema-diff:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+    post:
+      operationId: compareSchemas
+      summary: Compare schemas and generate a candidate migration.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [desired_database_id, schema]
+              additionalProperties: false
+              properties:
+                desired_database_id: { $ref: '#/components/schemas/UUID' }
+                schema: { type: string }
+                include_down: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Comparison and candidate SQL.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/DiffResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '502': { $ref: '#/components/responses/TargetFailure' }
+        '503': { $ref: '#/components/responses/TargetFailure' }
+        '504': { $ref: '#/components/responses/TargetFailure' }
   /databases/{id}/events:
     parameters: [{ $ref: '#/components/parameters/DatabaseId' }]
     get:
@@ -1112,7 +1154,7 @@ paths:
       - { $ref: '#/components/parameters/ChangeRequestId' }
     post:
       operationId: executeChangeRequest
-      summary: Queue an approved normal migration action.
+      summary: Queue an approved migration action.
       security:
         - sessionCookie: []
           csrfToken: []
@@ -1206,6 +1248,38 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/executions/{eid}/cancel:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - { $ref: '#/components/parameters/ExecutionId' }
+    post:
+      operationId: cancelExecution
+      summary: Cancel a queued or held execution before any batch has committed and reopen its change request.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '200':
+          description: The cancelled execution.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Execution' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /databases/{id}/executions/{eid}/reconcile:
     parameters:
       - { $ref: '#/components/parameters/DatabaseId' }
@@ -1238,6 +1312,156 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/migrations/{mid}/dry-run:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - { $ref: '#/components/parameters/MigrationId' }
+    post:
+      operationId: queueMigrationDryRun
+      summary: Queue a rollback-only validation run for the current revision.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '200':
+          description: The existing execution.
+          headers: { Location: { $ref: '#/components/headers/Location' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Execution' }
+        '202':
+          description: The accepted execution.
+          headers: { Location: { $ref: '#/components/headers/Location' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Execution' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/executions/{eid}/stop:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - { $ref: '#/components/parameters/ExecutionId' }
+    post:
+      operationId: stopExecution
+      summary: Stop a running batch at the next transaction boundary.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '202':
+          description: The accepted execution.
+          headers: { Location: { $ref: '#/components/headers/Location' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Execution' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/executions/{eid}/resume:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - { $ref: '#/components/parameters/ExecutionId' }
+    post:
+      operationId: resumeExecution
+      summary: Resume a partial batch using its existing approval.
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                batch_size: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: The existing execution.
+          headers: { Location: { $ref: '#/components/headers/Location' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Execution' }
+        '202':
+          description: The accepted execution.
+          headers: { Location: { $ref: '#/components/headers/Location' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Execution' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /databases/{id}/executions/{eid}/batches:
+    parameters:
+      - { $ref: '#/components/parameters/DatabaseId' }
+      - { $ref: '#/components/parameters/ExecutionId' }
+      - { $ref: '#/components/parameters/WideLimit' }
+      - { $ref: '#/components/parameters/WideOffset' }
+    get:
+      operationId: listExecutionBatches
+      summary: List committed checkpoints mirrored from the target.
+      responses:
+        '200':
+          description: Batch records ordered by batch number, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page]
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/BatchRecord' } }
+                  page: { $ref: '#/components/schemas/Page' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
   /databases/{id}/head:
     parameters:
@@ -1756,6 +1980,9 @@ components:
         desired_fingerprint: { $ref: '#/components/schemas/Fingerprint' }
         changes: { type: array, items: { $ref: '#/components/schemas/DiffChange' } }
         candidate_sql: { type: string }
+        candidate_down_sql:
+          type: string
+          description: Reverse candidate when requested and supported by the generator.
         warnings: { type: array, items: { type: string } }
         executable: { type: boolean }
 

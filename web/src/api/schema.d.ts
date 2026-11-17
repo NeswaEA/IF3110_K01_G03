@@ -161,6 +161,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/databases/{id}/schema-diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Compare schemas and generate a candidate migration. */
+        post: operations["compareSchemas"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/databases/{id}/events": {
         parameters: {
             query?: never;
@@ -623,7 +642,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Queue an approved normal migration action. */
+        /** Queue an approved migration action. */
         post: operations["executeChangeRequest"];
         delete?: never;
         options?: never;
@@ -670,6 +689,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/databases/{id}/executions/{eid}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                eid: components["parameters"]["ExecutionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel a queued or held execution before any batch has committed and reopen its change request. */
+        post: operations["cancelExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/databases/{id}/executions/{eid}/reconcile": {
         parameters: {
             query?: never;
@@ -684,6 +723,89 @@ export interface paths {
         put?: never;
         /** Queue verification of a previously uncertain commit. */
         post: operations["reconcileExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/databases/{id}/migrations/{mid}/dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                mid: components["parameters"]["MigrationId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue a rollback-only validation run for the current revision. */
+        post: operations["queueMigrationDryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/databases/{id}/executions/{eid}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                eid: components["parameters"]["ExecutionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop a running batch at the next transaction boundary. */
+        post: operations["stopExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/databases/{id}/executions/{eid}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                eid: components["parameters"]["ExecutionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume a partial batch using its existing approval. */
+        post: operations["resumeExecution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/databases/{id}/executions/{eid}/batches": {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["WideLimit"];
+                offset?: components["parameters"]["WideOffset"];
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                eid: components["parameters"]["ExecutionId"];
+            };
+            cookie?: never;
+        };
+        /** List committed checkpoints mirrored from the target. */
+        get: operations["listExecutionBatches"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -991,6 +1113,8 @@ export interface components {
             desired_fingerprint: components["schemas"]["Fingerprint"];
             changes: components["schemas"]["DiffChange"][];
             candidate_sql: string;
+            /** @description Reverse candidate when requested and supported by the generator. */
+            candidate_down_sql?: string;
             warnings: string[];
             executable: boolean;
         };
@@ -1614,6 +1738,50 @@ export interface operations {
             422: components["responses"]["Unprocessable"];
             500: components["responses"]["InternalError"];
             502: components["responses"]["TargetFailure"];
+            504: components["responses"]["TargetFailure"];
+        };
+    };
+    compareSchemas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    desired_database_id: components["schemas"]["UUID"];
+                    schema: string;
+                    /** @default false */
+                    include_down?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Comparison and candidate SQL. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DiffResult"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["Unprocessable"];
+            500: components["responses"]["InternalError"];
+            502: components["responses"]["TargetFailure"];
+            503: components["responses"]["TargetFailure"];
             504: components["responses"]["TargetFailure"];
         };
     };
@@ -2836,6 +3004,42 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    cancelExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                eid: components["parameters"]["ExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description The cancelled execution. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Execution"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     reconcileExecution: {
         parameters: {
             query?: never;
@@ -2870,6 +3074,179 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    queueMigrationDryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                mid: components["parameters"]["MigrationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description The existing execution. */
+            200: {
+                headers: {
+                    Location: components["headers"]["Location"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Execution"];
+                    };
+                };
+            };
+            /** @description The accepted execution. */
+            202: {
+                headers: {
+                    Location: components["headers"]["Location"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Execution"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["Unprocessable"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    stopExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                eid: components["parameters"]["ExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description The accepted execution. */
+            202: {
+                headers: {
+                    Location: components["headers"]["Location"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Execution"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    resumeExecution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                eid: components["parameters"]["ExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    batch_size?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description The existing execution. */
+            200: {
+                headers: {
+                    Location: components["headers"]["Location"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Execution"];
+                    };
+                };
+            };
+            /** @description The accepted execution. */
+            202: {
+                headers: {
+                    Location: components["headers"]["Location"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Execution"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            422: components["responses"]["Unprocessable"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listExecutionBatches: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["WideLimit"];
+                offset?: components["parameters"]["WideOffset"];
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["DatabaseId"];
+                eid: components["parameters"]["ExecutionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Batch records ordered by batch number, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["BatchRecord"][];
+                        page: components["schemas"]["Page"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };
