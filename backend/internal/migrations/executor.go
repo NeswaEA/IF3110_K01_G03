@@ -326,7 +326,7 @@ func (x *Executor) StaleJobs(ctx context.Context, olderThan time.Duration) ([]co
 	})
 }
 
-func (x *Executor) log(ctx context.Context, e executionRow, event string) {
+func (x *Executor) log(ctx context.Context, e executionRow, event string, extra ...any) {
 	attrs := []any{"event", event, "execution_id", e.ID, "job_id", e.ID, "database_id", e.DatabaseID,
 		"migration_id", e.MigrationID, "migration_revision", e.MigrationRevision, "attempt", e.Attempt,
 		"actor_id", e.Actor.ID, "status", e.Status, "direction", e.Direction}
@@ -336,7 +336,7 @@ func (x *Executor) log(ctx context.Context, e executionRow, event string) {
 	if e.Error != nil {
 		attrs = append(attrs, "error_code", e.Error.Code)
 	}
-	slog.InfoContext(ctx, event, attrs...)
+	slog.InfoContext(ctx, event, append(attrs, extra...)...)
 }
 
 func runFailure(code, message string) *RunError { return &RunError{Code: code, Message: message} }

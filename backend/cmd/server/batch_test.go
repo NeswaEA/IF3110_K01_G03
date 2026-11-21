@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -124,6 +126,7 @@ func TestBatchStopResumeRollback(t *testing.T) {
 }
 
 func TestBatchRevertsCommittedRangesAfterFailure(t *testing.T) {
+	logs := captureBatchLogs(t)
 	f := newExecutionFixture(t, database.Postgres)
 	setup := f.approved(t, "CREATE TABLE batch_items(id bigint PRIMARY KEY, price integer CHECK(price>=0)); INSERT INTO batch_items SELECT id,0 FROM generate_series(1,8) id", "DROP TABLE batch_items")
 	f.startWorker(t)
@@ -131,6 +134,12 @@ func TestBatchRevertsCommittedRangesAfterFailure(t *testing.T) {
 	m := f.batchMigration(t, 0, "CASE WHEN batch_items.id=3 THEN -1 ELSE price+1 END", "price - 1")
 	first := f.execute(t, f.request(t, m.ID, "apply"), 202)
 	f.await(t, first.ID, "partial")
+	outcomes := logs.forExecution(first.ID)
+	if len(outcomes) != 2 ||
+		outcomes[0] != (batchLog{ExecutionID: first.ID, Event: "batch.committed", Status: "committed", Direction: "up", Batch: 1, Rows: 2}) ||
+		outcomes[1] != (batchLog{ExecutionID: first.ID, Event: "batch.failed", Status: "failed", Direction: "up", Batch: 2, ErrorCode: "SQL_EXECUTION_FAILED"}) {
+		t.Fatalf("expected one committed batch followed by a failed batch: %+v", outcomes)
+	}
 	f.assertBatchPrices(t, -1)
 	req := migrationResponse[migrations.ChangeRequest](t, f.call("POST", "/migrations/"+m.ID+"/requests", `{"action":"rollback","target_execution_id":"`+first.ID+`"}`), 201).Data
 	req = migrationResponse[migrations.ChangeRequest](t, f.call("POST", "/change-requests/"+req.ID+"/approve", `{}`), 200).Data
@@ -189,6 +198,7 @@ func TestBatchStatementTimeoutCanResumeWithSmallerBatches(t *testing.T) {
 }
 
 func TestBatchRecoversCheckpointAfterMirrorFailure(t *testing.T) {
+	logs := captureBatchLogs(t)
 	f := newExecutionFixtureWithOptions(t, database.Postgres, executionFixtureOptions{maxAttempts: 3})
 	setup := f.approved(t, "CREATE TABLE batch_items(id bigint PRIMARY KEY, price integer); INSERT INTO batch_items SELECT id,0 FROM generate_series(1,8) id", "DROP TABLE batch_items")
 	f.startWorker(t)
@@ -218,6 +228,61 @@ func TestBatchRecoversCheckpointAfterMirrorFailure(t *testing.T) {
 	if e.Attempt < 2 || target != 4 || mirror != target || e.Batch.RowsCommitted != "8" {
 		t.Fatalf("checkpoint recovery repeated work or missed evidence: attempt=%d target=%d mirror=%d batch=%+v", e.Attempt, target, mirror, e.Batch)
 	}
+	outcomes := logs.forExecution(e.ID)
+	if len(outcomes) != mirror {
+		t.Fatalf("expected one log per mirrored checkpoint: %+v", outcomes)
+	}
+	for i, outcome := range outcomes {
+		if outcome.Event != "batch.committed" || outcome.Batch != i+1 || outcome.Rows != 2 {
+			t.Fatalf("unexpected recovered batch outcome: %+v", outcome)
+		}
+	}
+}
+
+type batchLog struct {
+	ExecutionID string `json:"execution_id"`
+	Event       string `json:"event"`
+	Status      string `json:"status"`
+	Direction   string `json:"direction"`
+	Batch       int    `json:"batch"`
+	Rows        int    `json:"rows"`
+	ErrorCode   string `json:"error_code"`
+}
+
+type batchLogRecorder struct {
+	mu      sync.Mutex
+	entries []batchLog
+}
+
+func captureBatchLogs(t *testing.T) *batchLogRecorder {
+	t.Helper()
+	previous := slog.Default()
+	recorder := &batchLogRecorder{}
+	slog.SetDefault(slog.New(slog.NewJSONHandler(recorder, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return recorder
+}
+
+func (r *batchLogRecorder) Write(line []byte) (int, error) {
+	var entry batchLog
+	if json.Unmarshal(line, &entry) == nil && (entry.Event == "batch.committed" || entry.Event == "batch.failed") {
+		r.mu.Lock()
+		r.entries = append(r.entries, entry)
+		r.mu.Unlock()
+	}
+	return len(line), nil
+}
+
+func (r *batchLogRecorder) forExecution(id string) []batchLog {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var entries []batchLog
+	for _, entry := range r.entries {
+		if entry.ExecutionID == id {
+			entries = append(entries, entry)
+		}
+	}
+	return entries
 }
 
 func TestBatchWithCommittedChangesCannotBeCancelledDuringRetry(t *testing.T) {

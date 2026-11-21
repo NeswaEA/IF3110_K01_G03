@@ -285,6 +285,11 @@ func (x *Executor) runBatch(ctx context.Context, t normalTarget, lock database.M
 		r, failure := x.commitBatch(ctx, t, lock, e, &h, original, cursor, scope.to, n+1, batches, rows)
 		if failure != nil {
 			telemetry.RecordBatch(ctx, e.Direction, "failed", 0)
+			if !failure.uncertain {
+				outcome := e
+				outcome.Status, outcome.Error = "failed", failure.detail
+				x.log(ctx, outcome, "batch.failed", "batch", n+1)
+			}
 			return nil, progress, failure
 		}
 		if r == nil {
@@ -299,7 +304,6 @@ func (x *Executor) runBatch(ctx context.Context, t normalTarget, lock database.M
 		if err := x.mirrorCheckpoint(ctx, e, *r); err != nil {
 			return nil, progress, &attemptFailure{detail: runFailure("INTERNAL_ERROR", "Checkpoint sudah tersimpan pada target."), uncertain: true}
 		}
-		telemetry.RecordBatch(ctx, e.Direction, "committed", int64(r.rows))
 		now := s.store.now()
 		if now.Sub(lastEvent) >= time.Second {
 			s.publish(ctx, e.DatabaseID, "execution.updated", e.ID, "running")
@@ -558,5 +562,13 @@ func (x *Executor) mirrorCheckpoint(ctx context.Context, e executionRow, cp chec
 		}
 		return struct{}{}, err
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// Both a normal commit and checkpoint recovery reach this point. The
+	// metadata cursor prevents recovery from reporting the same batch again.
+	telemetry.RecordBatch(ctx, e.Direction, "committed", int64(cp.rows))
+	e.Status, e.Error = "committed", nil
+	x.log(ctx, e, "batch.committed", "batch", cp.number, "rows", cp.rows)
+	return nil
 }

@@ -80,6 +80,15 @@ Statement kedua melanggar primary key (`sqlstate` `23505`). Seluruh transaksi ta
 {"time":"2026-11-17T10:44:33.070493316Z","level":"INFO","msg":"execution.finished","service":"dbplatform-worker","event":"execution.finished","execution_id":"01a1e91b-c285-74df-9efa-b514e54c7db9","job_id":"01a1e91b-c285-74df-9efa-b514e54c7db9","database_id":"30000000-0000-4000-8000-000000000001","migration_id":"01a1e91b-bfb8-771a-93e5-d4dc246d12ea","migration_revision":1,"attempt":1,"actor_id":"10000000-0000-4000-8000-000000000003","status":"failed","direction":"up","change_request_id":"01a1e91b-bfc6-792f-8a02-ee1fcb27681a","error_code":"SQL_EXECUTION_FAILED","trace_id":"3e4b661803abc276e7b30e15b9eacc75","span_id":"c6cbedcce0f4de22"}
 ```
 
+## Outcome batch
+
+Skenario E2E PostgreSQL mencatat commit dua baris pada batch pertama. Batch kedua gagal dan execution berakhir `partial`. `batch.committed` terbit setelah checkpoint target tercatat di metadata, termasuk ketika worker memulihkan checkpoint.
+
+```json
+{"time":"2026-11-21T10:00:22.190385667Z","level":"INFO","msg":"batch.committed","service":"dbplatform-worker","event":"batch.committed","execution_id":"01a1fd8c-bf8c-7429-8b39-0e34c9f9b789","job_id":"01a1fd8c-bf8c-7429-8b39-0e34c9f9b789","database_id":"30000000-0000-4000-8000-000000000005","migration_id":"01a1fd8c-bf6a-7614-abb4-60a2aeffea72","migration_revision":1,"attempt":1,"actor_id":"10000000-0000-4000-8000-000000000005","status":"committed","direction":"up","change_request_id":"01a1fd8c-bf7b-7970-bf2d-d6e824b958a0","batch":1,"rows":2,"trace_id":"86b730adc185af7e36f4a4c9d9160537","span_id":"ecd0c3123cff8197"}
+{"time":"2026-11-21T10:00:22.191064917Z","level":"INFO","msg":"batch.failed","service":"dbplatform-worker","event":"batch.failed","execution_id":"01a1fd8c-bf8c-7429-8b39-0e34c9f9b789","job_id":"01a1fd8c-bf8c-7429-8b39-0e34c9f9b789","database_id":"30000000-0000-4000-8000-000000000005","migration_id":"01a1fd8c-bf6a-7614-abb4-60a2aeffea72","migration_revision":1,"attempt":1,"actor_id":"10000000-0000-4000-8000-000000000005","status":"failed","direction":"up","change_request_id":"01a1fd8c-bf7b-7970-bf2d-d6e824b958a0","error_code":"SQL_EXECUTION_FAILED","batch":2,"trace_id":"86b730adc185af7e36f4a4c9d9160537","span_id":"ecd0c3123cff8197"}
+```
+
 ## Audit admin
 
 Reset password hanya mencatat jenis perubahannya; password baru tidak pernah ditulis:
@@ -90,4 +99,4 @@ Reset password hanya mencatat jenis perubahannya; password baru tidak pernah dit
 
 ## Belum tercakup
 
-Event batch (`batch.committed`, `batch.failed`), `execution.retry_scheduled`, `execution.held`, `lock.busy`, dan `recovery.evidence_checked` belum muncul di sesi ini. Contohnya ditambahkan setelah mode batch dan alur retry tersedia.
+Cuplikan log untuk `execution.retry_scheduled`, `execution.held`, `lock.busy`, dan `recovery.evidence_checked` belum disertakan di halaman ini.
