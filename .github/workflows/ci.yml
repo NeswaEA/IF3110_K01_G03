@@ -78,6 +78,8 @@ jobs:
           test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
           go vet ./...
           go build -o "$RUNNER_TEMP/bin/" ./cmd/server ./cmd/worker ./cmd/migrate ./cmd/seed
+          dead="$(go run golang.org/x/tools/cmd/deadcode@v0.52.0 -test ./...)"
+          test -z "$dead" || { echo "$dead"; echo "remove the unreachable functions above" >&2; exit 1; }
           go mod tidy
           git diff --exit-code -- go.mod go.sum || { echo "go.mod/go.sum are not tidy; run go mod tidy" >&2; exit 1; }
           python3 -m unittest discover -s ../scripts/ci -p 'test_*.py'
