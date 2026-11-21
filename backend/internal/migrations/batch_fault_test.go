@@ -9,6 +9,7 @@ import (
 
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/database/postgres"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/testkit"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/testkit/pgfault"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -25,15 +26,8 @@ func TestBatchCheckpointSurvivesLostCommitReply(t *testing.T) {
 		t.Fatal("invalid target DSN")
 	}
 	upstream := net.JoinHostPort(cfg.Host, strconv.Itoa(int(cfg.Port)))
-	proxy := newPostgresFaultProxy(t, upstream)
-	host, rawPort, err := net.SplitHostPort(proxy.listener.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	port, err := strconv.ParseUint(rawPort, 10, 16)
-	if err != nil {
-		t.Fatal(err)
-	}
+	proxy := pgfault.New(t, upstream)
+	host, port := proxy.HostPort()
 	cfg.Host, cfg.Port = host, uint16(port)
 	cfg.TLSConfig, cfg.Fallbacks = nil, nil
 	cfg.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
@@ -43,7 +37,7 @@ func TestBatchCheckpointSurvivesLostCommitReply(t *testing.T) {
 	x := Executor{service: &Service{store: NewStore(nil, testkit.NewClock(time.Now()))},
 		options: ExecutorOptions{BatchTimeout: time.Second, LockTimeout: time.Second}}
 
-	for _, mode := range []postgresFault{dropUserStatement, dropBeforeCommit, dropCommitReply} {
+	for _, mode := range []pgfault.Fault{pgfault.DropUserStatement, pgfault.DropBeforeCommit, pgfault.DropCommitReply} {
 		t.Run(string(mode), func(t *testing.T) {
 			id := uuid.New()
 			name := "public.fault_batch_" + strings.ReplaceAll(id.String(), "-", "")
@@ -64,26 +58,26 @@ func TestBatchCheckpointSurvivesLostCommitReply(t *testing.T) {
 			}
 			defer lock.Release()
 
-			proxy.arm(mode, name)
+			proxy.Arm(mode, name)
 			e := executionRow{Execution: Execution{ID: id.String(), ChainRootID: id.String(), Direction: "up", Batch: &ExecutionBatch{BatchSize: 1}}}
 			history := HistoryRecord{SQLExecuted: "INSERT INTO " + name + " SELECT $1::bigint+1 WHERE $1<$2 LIMIT $3 RETURNING id"}
 			checkpoint, failure := x.commitBatch(ctx, normalTarget{conn: lock.Conn, target: target}, lock, e, &history, "", 0, 2, 1, 0, 0)
-			if checkpoint != nil || failure == nil || (mode != dropUserStatement && !failure.uncertain) {
+			if checkpoint != nil || failure == nil || (mode != pgfault.DropUserStatement && !failure.uncertain) {
 				t.Fatalf("lost session must not report a confirmed checkpoint: %+v, %+v", checkpoint, failure)
 			}
-			committed := mode == dropCommitReply
+			committed := mode == pgfault.DropCommitReply
 			select {
-			case event := <-proxy.events:
-				if event.mode != mode || event.commitForwarded != committed || event.commitConfirmed != committed {
+			case event := <-proxy.Events():
+				if event.Mode != mode || event.CommitForwarded != committed || event.CommitConfirmed != committed {
 					t.Fatalf("unexpected proxy event: %+v", event)
 				}
 			case <-time.After(5 * time.Second):
 				t.Fatal("proxy did not observe the requested failure")
 			}
-			if proxy.userQueries() != 1 {
+			if proxy.UserQueries() != 1 {
 				t.Fatal("the failed attempt should have sent exactly one batch query")
 			}
-			proxy.restore()
+			proxy.Restore()
 
 			var rows, checkpoints int
 			if err := direct.DB.QueryRowContext(ctx, "SELECT count(*) FROM "+name).Scan(&rows); err != nil {
