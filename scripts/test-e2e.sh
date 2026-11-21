@@ -15,6 +15,7 @@ cleanup() {
   code=$?
   trap - EXIT HUP INT TERM
   compose logs --no-color app > "$E2E_ARTIFACT_DIR/server.log" 2>&1 || true
+  compose logs --no-color migration-worker > "$E2E_ARTIFACT_DIR/worker.log" 2>&1 || true
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   echo "Browser artifacts: $E2E_ARTIFACT_DIR"
   exit "$code"
@@ -29,7 +30,8 @@ compose exec -T target psql -U target_admin -d postgres -v ON_ERROR_STOP=1 < inf
 compose run --rm --entrypoint /app/migrate app up
 compose run --rm --entrypoint /app/migrate app up
 compose run --rm --entrypoint /app/seed app fixtures
-compose up -d app
+compose run --rm --entrypoint /app/seed app bigdata --rows 20
+compose up -d app migration-worker
 if compose run --rm browser npm test -- "$@"; then result=0; else result=$?; fi
 compose run --rm browser node check-results.mjs /artifacts/report.json
 exit "$result"

@@ -7,7 +7,7 @@ Admin mendaftarkan database target (PostgreSQL atau SQLite) dan memberi hak akse
 - dengan akses **lihat**, pengguna dapat membaca schema, data, dan riwayat migrasi;
 - dengan akses **edit**, pengguna juga dapat membandingkan schema dan menyiapkan perubahan.
 
-> **Status Milestone 2.** Runner migrasi sinkron Milestone 1 (draft, run, ledger target) sudah dihapus. Penggantinya adalah alur migration dengan review, approval leader, queue, dan worker, yang sedang dibangun di atas schema metadata `0005`–`0008` dan tabel riwayat target `_platform.migration_history`. Target dari Milestone 1 yang masih memiliki `_platform.migration_ledger` ditolak dengan `LEDGER_INCOMPATIBLE`; reset volume development sekali dengan `sh scripts/dev-up.sh down -v`.
+> **Status Milestone 2.** Migration memakai revisi immutable, review dengan approval leader, dan eksekusi lewat antrean worker. PostgreSQL mendukung mode normal dan batch. SQLite mendukung mode normal. Schema metadata workflow ada di migrasi `0005`–`0009`, dengan riwayat di target. Target Milestone 1 yang masih memiliki ledger lama menghasilkan `LEDGER_INCOMPATIBLE`. Untuk memulai dengan volume development kosong, jalankan `sh scripts/dev-up.sh down -v`.
 
 ## Fitur
 
@@ -94,15 +94,68 @@ Untuk mengatur akses database, buka Administrasi → Grup → Hak akses pada gru
 
 Sebelum sebuah koneksi dipakai sebagai source perbandingan atau target migrasi, admin harus **menguji koneksi itu terlebih dahulu** di halaman Koneksi. Pengujian menyiapkan tabel riwayat migrasi di target; sampai diuji, operasi tersebut menjawab `TARGET_NOT_READY`.
 
+### Alur migrasi
+
+Dari halaman database, buka **Migrasi**, simpan SQL up/down, lalu periksa lint dan dry-run pada tab **Validasi**. Ajukan perubahan melalui tab **Permintaan**. Setelah semua leader menyetujui, editor dapat menjalankan eksekusi dan memantau statusnya. Untuk membuka trace pada Grafana lokal saat stack observability aktif, klik ID trace di detail eksekusi. [Dokumentasi Grafana Explore](https://grafana.com/docs/grafana/latest/visualizations/explore/get-started-with-explore/)
+
+Dry-run selalu membatalkan transaksi target. PostgreSQL mempertahankan efek `nextval` dan `setval` pada sequence meski transaksi dibatalkan. `INSERT` yang memakai default `serial` atau identity dapat memakai nilai sequence. [Dokumentasi sequence PostgreSQL](https://www.postgresql.org/docs/17/functions-sequence.html)
+
 ### Perbandingan schema
 
-Pengguna dengan akses edit dapat membuka **Bandingkan schema** dari halaman database, atau langsung ke `/databases/{id}/schema-diff`. Halaman dirender Go dan dapat dibuka lewat URL/refresh biasa; JavaScript menangani interaksi di halaman tersebut tanpa router klien.
+Pengguna dengan akses edit dapat membuka **Bandingkan schema** dari halaman database atau lewat `/databases/{id}/schema-diff` di SPA.
 
 1. Admin menguji koneksi source terlebih dahulu. Pembanding cukup memiliki akses view dan tidak memerlukan tabel riwayat.
 2. Pilih database pembanding sejenis dan schema, lalu tekan **Bandingkan schema**.
-3. Tinjau daftar perubahan, penanda destruktif, warning, dan kandidat SQL (hanya baca).
+3. Tinjau daftar perubahan, penanda destruktif, dan warning. Sunting kandidat SQL up dan down sebelum menyimpan migrasi. Jika generator belum dapat membuat SQL down, isi SQL down atau pilih **Irreversible** dan tulis alasannya.
 
-Schema identik atau perubahan unsupported tidak menampilkan kandidat kosong/parsial. Mengubah pilihan menandai hasil lama sebagai usang. Sesi kedaluwarsa menampilkan tautan login di tab baru; perbandingan lalu diulang secara manual.
+Schema identik atau perubahan unsupported tidak menampilkan form migrasi. Mengubah database atau schema menghapus kandidat lama. Jika sesi kedaluwarsa saat menyimpan, dialog masuk kembali mempertahankan isi editor.
+
+### Dataset migrasi besar
+
+Setelah `app-up.sh seed`, isi `demo_big.public.big_items` dengan satu `INSERT … SELECT generate_series` dan jalankan `ANALYZE` lewat seed CLI. Default-nya lima juta baris. Untuk mengulang pengukuran, mulai dengan database demo kosong dan pilih satu juta baris. Seed ulang mempertahankan data bila tabel sudah berisi baris.
+
+```sh
+docker compose --env-file .env -f infra/docker/compose.yml --profile app run --rm \
+  --entrypoint /app/seed backend bigdata --rows 1000000
+docker compose --env-file .env -f infra/docker/compose.yml exec target-postgres \
+  psql -U target_admin -d demo_big
+```
+
+Di `psql`, tekan Enter setelah tiap baris. `ROLLBACK` mengembalikan harga awal sebelum uji worker.
+
+```sql
+\timing on
+SELECT count(*), sum(price) FROM public.big_items;
+BEGIN;
+SET LOCAL ROLE platform_editor;
+UPDATE public.big_items SET price = price * 1.01;
+ROLLBACK;
+```
+
+1. Uji koneksi `demo_big` sebagai `fixture-admin`. Masuk sebagai `lead` dan simpan migrasi mode normal dengan `UPDATE public.big_items SET price = price * 1.01;` sebagai SQL up dan `UPDATE public.big_items SET price = round(price / 1.01, 2);` sebagai SQL down. Ajukan, setujui, dan jalankan.
+2. Ajukan dan jalankan rollback. Untuk dataset seed, hasil `sum(price)` awal adalah `599500000.00`.
+3. Buat migrasi batch untuk `public.big_items` dengan kolom key `id`, ukuran batch `10000` dan jeda `0` ms. Pakai SQL up berikut. Untuk SQL down, gunakan query yang sama dan ganti ekspresi harga menjadi `round(price / 1.01, 2)`. Ajukan, setujui, dan jalankan melalui worker.
+
+```sql
+WITH b AS (
+  SELECT id FROM public.big_items WHERE id > $1 AND id <= $2 ORDER BY id LIMIT $3
+)
+UPDATE public.big_items SET price = price * 1.01
+FROM b WHERE big_items.id = b.id
+RETURNING big_items.id;
+```
+
+Uji lokal 17 November 2026 memakai Apple M4, RAM 16 GiB, SSD internal 494,4 GB, macOS 26.1, dan Docker Desktop dengan 10 vCPU serta RAM 7,65 GiB. Stack terisolasi menjalankan PostgreSQL 17.11, satu API, dan dua worker. Kedua mode memproses satu juta baris. Durasi worker diukur dari `started_at` sampai `finished_at`.
+
+| Jalur | Durasi | Lock tulis terlama yang teramati | p95 SELECT paralel |
+| --- | ---: | ---: | ---: |
+| Normal via `psql \timing` | 1,830 dtk | — | — |
+| Normal via worker | 2,783 dtk | 2,756 dtk | 0,544 ms |
+| Batch via worker | 3,968 dtk | 0,203 dtk | 0,461 ms |
+
+Rollback normal yang mereset dataset selesai dalam 2,854 detik. Eksekusi batch menyimpan 100 checkpoint untuk 1.000.000 baris. Jumlah harga akhir yang diharapkan dan terukur adalah `605495000.00`. Sesi pengamat mengambil sampel `RowExclusiveLock` di `pg_locks` per transaksi dengan jeda 8 ms, sambil menjalankan `SELECT price FROM public.big_items WHERE id=500000`. Durasi lock memakai selisih sampel pertama dan terakhir pada transaksi yang sama. p95 SELECT memakai 281 sampel mode normal dan 409 sampel mode batch. Angka berasal dari satu run lokal.
+
+Pada uji pemulihan terpisah di stack yang sama, satu worker dimatikan dengan SIGKILL setelah paling sedikit tiga checkpoint. Worker kedua menuntaskan job pada percobaan kedua dengan tepat 100 checkpoint dan 1.000.000 baris. `docker stats` mencatat 11,5–19,4 MiB memori per worker selama pengukuran dataset dan uji pemulihan.
 
 ### API schema diff
 
@@ -289,9 +342,9 @@ sh scripts/test-e2e.sh       # Chromium desktop (1280×800) dan mobile (390×844
 
 Integration test backend memakai PostgreSQL asli dari `scripts/dev-up.sh` dan URL `TEST_*_DATABASE_URL` di `.env` (sudah diisi oleh `init-env.sh`). Tanpa URL tersebut, test integration dilewati dengan pesan. Argumen tambahan diteruskan ke `go test`, misalnya `sh scripts/test-backend.sh -run Fingerprint ./internal/database/`.
 
-Suite browser tidak membaca `.env` lokal dan tidak memerlukan aplikasi development berjalan. Script membangun image aplikasi dan Chromium, membuat project Compose unik tanpa port host, menginisialisasi PostgreSQL/SQLite baru, serta menjalankan satu worker tanpa retry. Browser berbagi network namespace dengan aplikasi dan memakai `localhost` agar API browser seperti UUID tersedia seperti pada development. Koneksi database, auth, CSRF, Atlas PostgreSQL dan generator SQLite semuanya nyata. Network runtime tidak memiliki akses internet; download dependency hanya terjadi saat build.
+Suite browser membangun image aplikasi dan Chromium, membuat project Compose terisolasi, lalu menyiapkan PostgreSQL, SQLite, NATS, serta dua replika worker dari konfigurasi tes. Browser berbagi network namespace dengan API. Chromium menjalankan project desktop dan mobile tanpa retry.
 
-Setelah selesai atau gagal, script menghapus container/network/volume milik run tersebut. Volume development tetap ada. Report JSON, screenshot, trace kegagalan, dan log server berada di `output/playwright/<run>/`. Hasil ini tidak masuk `.gitignore`: biarkan tidak terpilih saat commit. Source test, konfigurasi, dan lockfile di `tests/e2e/` tetap perlu disertakan. Suite gagal bila ada test gagal, dilewati, atau tidak ada test yang dijalankan.
+Script membersihkan container, network, dan volume milik run. Report JSON, screenshot, trace kegagalan, `server.log`, dan `worker.log` disimpan di folder lokal `output/playwright/<run>/` yang diabaikan Git. Suite gagal bila ada test gagal, dilewati, atau daftar test kosong.
 
 Untuk memilih skenario, gunakan misalnya `sh scripts/test-e2e.sh --grep 'rolls back'`.
 

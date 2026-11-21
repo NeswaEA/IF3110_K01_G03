@@ -1,0 +1,9 @@
+{
+  "data": {
+    "version": 3,
+    "migration_id": "40000000-0000-4000-8000-000000000002",
+    "history_seq": 3,
+    "blocked": false,
+    "blocking_execution_id": null
+  }
+}

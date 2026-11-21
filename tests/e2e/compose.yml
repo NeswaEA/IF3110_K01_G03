@@ -41,10 +41,11 @@ services:
     image: nats:2.15.2@sha256:b6c40dcfe5ae9174dcafa9c43f800afb93b8b0ffcde02ac00efc6b66031d9a50
     command: ["-js"]
   app:
+    image: ${COMPOSE_PROJECT_NAME}-app
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile
-    environment:
+    environment: &app-environment
       APP_ENV: test
       HTTP_ADDR: ":8080"
       APP_ORIGIN: http://localhost:8080
@@ -64,6 +65,17 @@ services:
       target:
         condition: service_healthy
       nats:
+        condition: service_started
+  migration-worker:
+    image: ${COMPOSE_PROJECT_NAME}-app
+    entrypoint: ["/app/worker"]
+    deploy:
+      replicas: 2
+    environment: *app-environment
+    volumes:
+      - sqlite:/data/sqlite
+    depends_on:
+      app:
         condition: service_started
   browser:
     build:

@@ -9,6 +9,10 @@
     "explain_*": "Execution plans and unsupported statement errors.",
     "users_*": "User administration list and validation errors.",
     "groups_*": "Groups with leaders, members, grants and leader errors.",
-    "reviews_*": "Change requests with live approvals and approval errors."
+    "reviews_*": "Change requests with live approvals and approval errors.",
+    "migrations_*": "Migration definitions with immutable revisions.",
+    "execution_*": "Migration job detail and status.",
+    "timeline_*": "Migration history and execution visibility.",
+    "database_head*": "Current migration position and blockade state."
   }
 }

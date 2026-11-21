@@ -1,5 +1,6 @@
 import { http, HttpResponse, type RequestHandler } from "msw";
 import { createAuthHandlers } from "./auth";
+import { migrationHandlers } from "./migrations";
 
 import connectionsList from "../../../tests/fixtures/api/connections_list.json";
 import connectionsTestOk from "../../../tests/fixtures/api/connections_test_ok.json";
@@ -32,6 +33,7 @@ const notFound = () => HttpResponse.json(viewerErrorNotFound, { status: 404 });
 
 export const handlers: RequestHandler[] = [
   ...createAuthHandlers(),
+  ...migrationHandlers(API, knownIds),
   http.get(`${API}/admin/connections`, () => HttpResponse.json(connectionsList)),
 
   http.post(`${API}/admin/connections`, async ({ request }) => {
