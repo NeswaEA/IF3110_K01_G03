@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -136,8 +138,8 @@ func TestBatchRevertsCommittedRangesAfterFailure(t *testing.T) {
 	f.await(t, first.ID, "partial")
 	outcomes := logs.forExecution(first.ID)
 	if len(outcomes) != 2 ||
-		outcomes[0] != (batchLog{ExecutionID: first.ID, Event: "batch.committed", Status: "committed", Direction: "up", Batch: 1, Rows: 2}) ||
-		outcomes[1] != (batchLog{ExecutionID: first.ID, Event: "batch.failed", Status: "failed", Direction: "up", Batch: 2, ErrorCode: "SQL_EXECUTION_FAILED"}) {
+		outcomes[0] != (batchLog{ExecutionID: first.ID, Event: "batch.committed", Status: "committed", Direction: "up", Batch: 1, Rows: 2, Attempt: 1}) ||
+		outcomes[1] != (batchLog{ExecutionID: first.ID, Event: "batch.failed", Status: "failed", Direction: "up", Batch: 2, ErrorCode: "SQL_EXECUTION_FAILED", Attempt: 1}) {
 		t.Fatalf("expected one committed batch followed by a failed batch: %+v", outcomes)
 	}
 	f.assertBatchPrices(t, -1)
@@ -247,25 +249,38 @@ type batchLog struct {
 	Batch       int    `json:"batch"`
 	Rows        int    `json:"rows"`
 	ErrorCode   string `json:"error_code"`
+	Attempt     int    `json:"attempt"`
 }
 
 type batchLogRecorder struct {
 	mu      sync.Mutex
+	events  []string
 	entries []batchLog
 }
 
 func captureBatchLogs(t *testing.T) *batchLogRecorder {
 	t.Helper()
-	previous := slog.Default()
-	recorder := &batchLogRecorder{}
+	return captureLogs(t, "batch.committed", "batch.failed")
+}
+
+// captureLogs records the JSON log lines of the given events until the test ends.
+func captureLogs(t *testing.T, events ...string) *batchLogRecorder {
+	t.Helper()
+	previous, output, flags := slog.Default(), log.Writer(), log.Flags()
+	recorder := &batchLogRecorder{events: events}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(recorder, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
+	t.Cleanup(func() {
+		// SetDefault redirected the log package to the recorder; restoring slog alone leaves it there.
+		slog.SetDefault(previous)
+		log.SetOutput(output)
+		log.SetFlags(flags)
+	})
 	return recorder
 }
 
 func (r *batchLogRecorder) Write(line []byte) (int, error) {
 	var entry batchLog
-	if json.Unmarshal(line, &entry) == nil && (entry.Event == "batch.committed" || entry.Event == "batch.failed") {
+	if json.Unmarshal(line, &entry) == nil && slices.Contains(r.events, entry.Event) {
 		r.mu.Lock()
 		r.entries = append(r.entries, entry)
 		r.mu.Unlock()

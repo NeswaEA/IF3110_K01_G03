@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -30,6 +31,7 @@ import (
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/migrations"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/platform"
 	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/review"
+	"github.com/NeswaEA/IF3110_K01_G03/backend/internal/testkit/pgfault"
 )
 
 func TestQueuedNormalMigrations(t *testing.T) {
@@ -237,7 +239,9 @@ type executionFixture struct {
 	call         func(method, path, body string) *httptest.ResponseRecorder
 	startWorker  func(*testing.T)
 	worker       *migrations.Executor
+	newWorker    func(workerID string) *migrations.Executor // another worker process on the same queue
 	deliveries   chan delivery
+	proxy        *pgfault.Proxy // set by executionFixtureOptions.proxy
 }
 
 func newExecutionFixture(t *testing.T, engine database.Driver) executionFixture {
@@ -253,6 +257,7 @@ func newExecutionFixtureWithOrdering(t *testing.T, engine database.Driver, order
 type executionFixtureOptions struct {
 	executor    migrations.ExecutorOptions
 	maxAttempts int
+	proxy       bool // PostgreSQL only: the workers reach the target through a fault proxy
 }
 
 func newExecutionFixtureWithOptions(t *testing.T, engine database.Driver, fixtureOptions executionFixtureOptions) executionFixture {
@@ -269,7 +274,13 @@ func newExecutionFixtureWithOptions(t *testing.T, engine database.Driver, fixtur
 	var targetConfig any
 	var err error
 	if engine == database.Postgres {
-		f.target, targetConfig = isolatedExecutionPostgres(t, dsn)
+		var pg connections.PostgresConfig
+		f.target, pg = isolatedExecutionPostgres(t, dsn)
+		if fixtureOptions.proxy {
+			f.proxy = pgfault.New(t, net.JoinHostPort(pg.Host, strconv.Itoa(pg.Port)))
+			pg.Host, pg.Port = f.proxy.HostPort()
+		}
+		targetConfig = pg
 	} else {
 		f.target, err = sql.Open("sqlite3", filepath.Join(dir, "execution.sqlite"))
 		if err != nil {
@@ -367,7 +378,6 @@ func newExecutionFixtureWithOptions(t *testing.T, engine database.Driver, fixtur
 	}}
 	lockers := map[database.Driver]database.MigrationLocker{database.Postgres: postgres.Locker{}, database.SQLite: sqlite.Locker{Metadata: meta}}
 	opts := fixtureOptions.executor
-	opts.WorkerID = "test-worker"
 	opts.HeartbeatInterval = 50 * time.Millisecond
 	opts.LockTimeout = 200 * time.Millisecond
 	if opts.RetryBaseDelay == 0 {
@@ -377,7 +387,12 @@ func newExecutionFixtureWithOptions(t *testing.T, engine database.Driver, fixtur
 	if opts.OrderingDelay == 0 {
 		opts.OrderingDelay = 20 * time.Millisecond
 	}
-	f.worker = migrations.NewExecutor(svc, registry, inspector, lockers, opts)
+	f.newWorker = func(workerID string) *migrations.Executor {
+		o := opts
+		o.WorkerID = workerID
+		return migrations.NewExecutor(svc, registry, inspector, lockers, o)
+	}
+	f.worker = f.newWorker("test-worker")
 	f.startWorker = func(t *testing.T) {
 		t.Helper()
 		ctx, cancel := context.WithCancel(t.Context())
