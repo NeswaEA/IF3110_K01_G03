@@ -123,6 +123,26 @@ func TestLockerKeepsLockWhileStatementRuns(t *testing.T) {
 	}
 }
 
+// A statement that outlasts the ping timeout (5s) must not look like a dead
+// connection: the ping used to start its deadline before waiting for the statement.
+func TestLockerKeepsLockThroughLongStatement(t *testing.T) {
+	h := target(t)
+	lock, err := Locker{PingInterval: 100 * time.Millisecond, key: testKey(t)}.Acquire(ctx, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Release()
+	if _, err := lock.Conn.ExecContext(ctx, "SELECT pg_sleep(6)"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond) // let the waiting ping finish
+	select {
+	case <-lock.Lost:
+		t.Fatal("Lost closed after a long statement on a healthy connection")
+	default:
+	}
+}
+
 // otherDatabase opens the same server's "postgres" database, which every role
 // may connect to by default.
 func otherDatabase(t *testing.T) database.TargetHandle {

@@ -94,11 +94,11 @@ func (l Locker) Acquire(ctx context.Context, h database.TargetHandle) (database.
 	return database.MigrationLock{Conn: conn, Lost: lost, Release: release}, nil
 }
 
-// alive pings the lock connection unless a statement is using it; a busy
-// connection is alive by definition, and a dead one fails that statement.
+// alive pings the lock connection. Raw waits while a statement holds the
+// connection, so the ping deadline starts only once Raw gets it; a dead
+// connection fails the running statement instead. An open result set leaves
+// the connection busy between rows, and a busy connection is alive.
 func alive(conn *sql.Conn, timeout time.Duration) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 	err := conn.Raw(func(dc any) error {
 		c, ok := dc.(*stdlib.Conn)
 		if !ok {
@@ -107,6 +107,8 @@ func alive(conn *sql.Conn, timeout time.Duration) bool {
 		if c.Conn().PgConn().IsBusy() {
 			return nil
 		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
 		return c.Conn().Ping(ctx)
 	})
 	return err == nil
