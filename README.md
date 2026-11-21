@@ -289,7 +289,7 @@ Beban normal: 20 request baca/detik + 1 job/detik (`READ_RPS`, `JOB_RPS`). Tahap
 
 `setup()` login sebagai `fixture-admin` untuk menguji koneksi `load_1..4` (menyiapkan tabel riwayat), lalu sebagai `lead` (satu-satunya pengguna dengan akses edit, sekaligus leader group ops) membuat dan meng-approve migration. Ganti dengan `ADMIN_USER`/`ADMIN_PASSWORD` dan `EDITOR_USER`/`LEADER_USER` bila akun lain dipakai.
 
-#### Hasil (16 November 2026)
+#### Hasil awal (16 November 2026)
 
 Mesin: Intel Core i9-13900H, RAM 32 GB, Windows 11 + Docker Desktop (WSL2, 20 vCPU dan 15,5 GB untuk Docker). API satu replika, worker dua replika (`WORKER_CONCURRENCY=4`), semua service di mesin yang sama dengan k6. Angka per tahap dihitung dari metrik server (`http_server_request_duration_seconds`, `migration_*`) dengan jendela 2 menit di akhir setiap tahap; tahap "naik" mencatat beban yang sedang menuju target.
 
@@ -331,6 +331,54 @@ Semua job di `load_1`:
 - **Batas pertama: pool metadata API.** Pool metadata API dibatasi 5 koneksi. Pada 8× pool itu menunggu 8.298 kali (total 1.290 detik dalam 2 menit), sehingga p95 baca naik ke 192 ms dan p95 execute ke 455 ms; pool target dan pool worker tidak pernah menunggu. Menaikkan batas pool metadata API adalah langkah pertama bila beban lebih besar dibutuhkan.
 - **Batas kedua: urutan job dalam satu database.** Job berikutnya di database yang sama di-NAK dengan jeda `ORDERING_DELAY` (1 s) selama job sebelumnya belum selesai. Dengan empat database, redelivery `ordering` hanya ratusan per 2 menit dan antrean pulih setelah beban turun. Dengan satu database, kapasitas mentok di ±170 job/menit; begitu kedatangan melampaui itu (4×), antrean tumbuh dan setiap job yang menunggu dikirim ulang setiap detik. Pada 8× → 1× tercatat ±23.800 redelivery `ordering` per 2 menit dibanding 128 job selesai, sehingga throughput justru turun ke ±60 job/menit. Polling status oleh 400 VU k6 (setiap 0,5 detik) menambah beban ke pool metadata API (8.728 detik total tunggu dalam 2 menit), yang menaikkan p95 baca ke 860 ms. Sejak 17 November 2026 polling memakai backoff 0,5 → 2 detik; angka di atas diukur sebelum perubahan itu.
 - **Pemulihan.** Run tersebar kembali ke angka beban normal pada tahap terakhir (p95 baca 29,7 ms, queue wait p95 42 ms). Run satu DB belum pulih dalam 14 menit: setelah k6 selesai masih ada 325 job `queued` yang dikuras worker setelahnya; seluruh 1.694 job run ini berakhir `succeeded`. Tidak ada request gagal atau job gagal pada kedua run. Perbaikan yang paling berdampak adalah menunda redelivery job yang menunggu urutan sebanding dengan posisinya di antrean, bukan jeda tetap 1 detik.
+
+#### Run ulang setelah perbaikan (21 November 2026)
+
+Tiga perbaikan dari analisis di atas sudah masuk sebelum run ini:
+
+- Execution yang selesai atau dibatalkan langsung membangunkan execution `queued` berikutnya di database yang sama. `ORDERING_DELAY` naik ke 10 detik dan hanya menjadi jaring pengaman.
+- Relay API menerima `pg_notify` dari `Outbox.Enqueue`, sehingga wake-up dari worker terbit tanpa menunggu poll.
+- Pool metadata API dinaikkan ke 20 koneksi (`METADATA_MAX_OPEN_CONNS`), worker tetap 10.
+
+Polling k6 sudah memakai backoff 0,5 → 2 detik. Mesin, tahapan, dan volume sama dengan run 16 November (2.100 job per run); database dimulai dari project Compose baru (`main@ac7965e`).
+
+| Run | Request | Gagal | Checks | Job sukses / gagal | p95 baca | p95 execute | Queue wait p50 / p95 | Iterasi terbuang (VU habis) |
+|---|---|---|---|---|---|---|---|---|
+| Tersebar, 16 Nov | 56.471 | 0% | 100% | 2.086 / 0 | 61,7 ms | 83,6 ms | 15 ms / 2,0 s | 864 |
+| Tersebar, 21 Nov | 55.365 | 0% | 100% | 2.100 / 0 | 19,7 ms | 30,1 ms | 11 ms / 33 ms | 0 |
+| Satu DB, 16 Nov | 235.104 | 0% | 100% | 1.338 / 0 | 191,8 ms | 131,2 ms | 3,0 s / 199,5 s | 855 |
+| Satu DB, 21 Nov | 55.365 | 0% | 100% | 2.100 / 0 | 17,0 ms | 28,1 ms | 11 ms / 27 ms | 0 |
+
+Job tersebar di empat database (21 November):
+
+| Tahap (2 menit) | API baca p50 / p95 (ms) | execute p95 (ms) | Throughput (req/s) | Error 5xx | Queue wait p50 / p95 (ms) | Lock wait p95 (ms) | Durasi job p50 / p95 (ms) | Job sukses/menit | Redelivery `ordering` | Tunggu pool metadata API |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0 → 1× | 13,3 / 36,3 | 48,7 | 12,1 | 0% | 23,1 / 78,5 | 46,1 | 22,7 / 57,8 | 29 | 0 | 0 |
+| 1× tahan | 15,0 / 39,3 | 87,5 | 23,0 | 0% | 29,2 / 230 | 187 | 24,7 / 208 | 61 | 0 | 0 |
+| 1× → 2× | 9,7 / 24,6 | 44,4 | 34,6 | 0% | 20,3 / 47,1 | 23,5 | 18,4 / 40,6 | 91 | 0 | 0 |
+| 2× → 4× | 8,1 / 23,3 | 27,3 | 69,1 | 0% | 19,4 / 45,6 | 23,5 | 18,4 / 42,3 | 182 | 0 | 0 |
+| 4× → 8× | 5,7 / 16,9 | 21,5 | 138 | 0% | 15,9 / 24,5 | 17,2 | 17,4 / 24,6 | 364 | 0 | 0 |
+| 8× → 1× | 6,6 / 20,6 | 24,2 | 103 | 0% | 16,8 / 35,0 | 21,8 | 18,1 / 35,7 | 265 | 0 | 0 |
+| 1× pemulihan | 8,6 / 23,6 | 43,0 | 23,0 | 0% | 18,7 / 46,0 | 21,6 | 18,7 / 41,9 | 60 | 0 | 0 |
+
+Semua job di `load_1` (21 November):
+
+| Tahap (2 menit) | API baca p50 / p95 (ms) | execute p95 (ms) | Throughput (req/s) | Error 5xx | Queue wait p50 / p95 (ms) | Lock wait p95 (ms) | Durasi job p50 / p95 (ms) | Job sukses/menit | Redelivery `ordering` | Tunggu pool metadata API |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0 → 1× | 8,5 / 23,4 | 28,3 | 12,1 | 0% | 16,9 / 37,0 | 20,1 | 16,7 / 24,2 | 28 | 0 | 0 |
+| 1× tahan | 9,9 / 23,6 | 27,1 | 23,0 | 0% | 18,4 / 38,9 | 21,5 | 17,8 / 24,8 | 58 | 0 | 0 |
+| 1× → 2× | 9,7 / 23,5 | 24,9 | 34,0 | 0% | 17,7 / 30,0 | 17,8 | 17,7 / 24,6 | 90 | 0 | 0 |
+| 2× → 4× | 8,0 / 22,7 | 24,9 | 68,1 | 0% | 17,8 / 32,9 | 21,0 | 17,9 / 26,0 | 178 | 0 | 0 |
+| 4× → 8× | 5,7 / 16,3 | 24,3 | 136 | 0% | 17,1 / 25,6 | 20,1 | 17,8 / 24,9 | 356 | ±14 | 0 |
+| 8× → 1× | 6,3 / 20,2 | 34,1 | 107 | 0% | 17,6 / 48,7 | 21,2 | 18,0 / 29,5 | 276 | ±14 | 0 |
+| 1× pemulihan | 9,5 / 23,5 | 56,2 | 23,0 | 0% | 21,0 / 174 | 136 | 19,0 / 161 | 61 | 0 | 0 |
+
+Perbandingan sebelum/sesudah:
+
+- **Urutan satu database tidak lagi membatasi throughput.** Run satu DB sekarang mengikuti kedatangan sampai 8× (356 job/menit, sebelumnya mentok ±170 dan turun ke ±60 saat antrean panjang). Queue wait p95 pada 4× → 8× turun dari 46.235 ms ke 25,6 ms, dan pada 8× → 1× dari 240.706 ms ke 48,7 ms. Seluruh run hanya mencatat 29 redelivery `ordering`, dibanding ±23.800 per 2 menit sebelumnya. Tidak ada job yang tersisa `queued` setelah k6 selesai (sebelumnya 325).
+- **Pool metadata API tidak pernah menunggu.** `db_pool_wait_count` pool metadata API dan worker tetap 0 pada kedua run (sebelumnya 8.298 kali dan 1.290 detik pada 8×). p95 baca pada 8× turun dari 192 ms ke 16,9 ms (tersebar), dan p95 execute dari 455 ms ke 21,5 ms.
+- **Database sama tetap berurutan.** Pada kedua run tidak ada pasangan execution di database yang sama dengan rentang `running` yang overlap. Karena job sekarang langsung dijalankan begitu tiba, overlap antardatabase pada run tersebar hanya 2 pasang (sebelumnya 104, akibat job yang menumpuk menunggu redelivery).
+- **Sisa batas.** Durasi job tetap ±18 ms dan k6 tidak lagi kehabisan VU, jadi beban 8× di mesin ini belum menemukan batas baru. Lonjakan p95 sesaat (lock wait 187 ms pada "1× tahan" tersebar, 136 ms pada pemulihan satu DB) terjadi tanpa error atau antrean dan tidak berulang pada tahap berikutnya.
 
 ## Test
 
