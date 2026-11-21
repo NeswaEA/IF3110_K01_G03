@@ -271,11 +271,11 @@ Contoh korelasi dari run nyata: request execute dengan `trace_id` `c173c8e4421ab
 |---|---|
 | ![Trace execute di Tempo](docs/observability/img/trace.png) | ![Log dengan trace_id yang sama di Loki](docs/observability/img/trace-logs.png) |
 
-Dashboard terprovision:
+Dashboard terprovision, diambil dari run ulang k6 21 November 2026 (15.49–16.20 UTC). Puncak pertama adalah run tersebar dan puncak kedua run satu database (lihat "Run ulang setelah perbaikan"):
 
-- *Migration queue* (k6 smoke, 17 November 2026): job aktif per status, job selesai, queue wait, lock wait, durasi (titik belah ketupat adalah exemplar), dan alasan pengiriman pesan. ![Dashboard Migration queue](docs/observability/img/migration-queue.png)
-- *Load test (k6)* (stress tersebar, 16 November 2026). Lonjakan "Request gagal" di awal adalah nilai terakhir dari run smoke sebelumnya yang belum kedaluwarsa, bukan bagian run ini. ![Dashboard Load test](docs/observability/img/load-test.png)
-- *Database pools* dan *API HTTP* (stress tersebar yang sama). ![Dashboard Database pools](docs/observability/img/db-pool.png) ![Dashboard API HTTP](docs/observability/img/api.png)
+- *Migration queue*: job aktif per status, job selesai, queue wait, lock wait, durasi (titik belah ketupat adalah exemplar), dan alasan pengiriman pesan. Antrean `queued` tidak pernah menumpuk pada kedua run. ![Dashboard Migration queue](docs/observability/img/migration-queue.png)
+- *Load test (k6)*: VU, request per detik, request gagal (0), latensi, queue wait, durasi, dan job per menit. ![Dashboard Load test](docs/observability/img/load-test.png)
+- *Database pools* dan *API HTTP*. Panel menunggu koneksi tetap 0 untuk pool metadata dan target, dan tidak ada respons 4xx atau 5xx. ![Dashboard Database pools](docs/observability/img/db-pool.png) ![Dashboard API HTTP](docs/observability/img/api.png)
 
 ## Stress test k6 (bonus)
 
