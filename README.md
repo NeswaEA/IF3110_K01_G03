@@ -380,6 +380,20 @@ Perbandingan sebelum/sesudah:
 - **Database sama tetap berurutan.** Pada kedua run tidak ada pasangan execution di database yang sama dengan rentang `running` yang overlap. Karena job sekarang langsung dijalankan begitu tiba, overlap antardatabase pada run tersebar hanya 2 pasang (sebelumnya 104, akibat job yang menumpuk menunggu redelivery).
 - **Sisa batas.** Durasi job tetap ±18 ms dan k6 tidak lagi kehabisan VU, jadi beban 8× di mesin ini belum menemukan batas baru. Lonjakan p95 sesaat (lock wait 187 ms pada "1× tahan" tersebar, 136 ms pada pemulihan satu DB) terjadi tanpa error atau antrean dan tidak berulang pada tahap berikutnya.
 
+## CodeQL (bonus)
+
+Workflow `.github/workflows/codeql.yml` menganalisis `go` (build manual dengan CGO), `javascript-typescript`, dan `actions` dengan suite `security-extended`, pada setiap push, pull request, dan jadwal mingguan.
+
+Scan menghasilkan 7 alert, semuanya di Go; JavaScript/TypeScript dan Actions bersih. Enam alert `go/sql-injection` ada di jalur yang memang meneruskan SQL pengguna ke database target (viewer, EXPLAIN, lint migration). Satu alert `go/log-injection` ada di log error 500.
+
+| Keputusan | Alert | Alasan singkat |
+|---|---|---|
+| False positive | #1, #2 viewer data | Identifier divalidasi ke katalog dan di-quote, nilai dikirim sebagai parameter |
+| Diperbaiki | #6 log error | Tidak dapat dieksploitasi (log berformat JSON, kode dari daftar tetap), tetapi log kini menulis konstanta `INTERNAL_ERROR` sehingga aliran data dari error hilang |
+| Risiko diterima | #3, #4, #5 EXPLAIN; #7 lint SQLite | Statement hanya di-prepare atau di-`EXPLAIN` tanpa `ANALYZE`, dalam transaksi read-only yang di-rollback atau di bawah authorizer, dan butuh akses `edit` |
+
+Tidak ada temuan yang dapat dieksploitasi. Tabel lengkap (rule, severity, lokasi, dampak, keputusan dan alasan, tindak lanjut) ada di [`docs/security/codeql.md`](docs/security/codeql.md).
+
 ## Test
 
 ```sh
@@ -465,6 +479,7 @@ infra/observability/                  OTel Collector, Tempo, Prometheus, dashboa
 tests/fixtures/                       payload API, fixture PostgreSQL dan SQLite bersama
 tests/e2e/, tests/load/               Playwright desktop/mobile, stress test k6
 docs/observability/                   contoh span dari run nyata dan screenshot Grafana
+docs/security/codeql.md               triase hasil CodeQL
 scripts/                              setup, menjalankan aplikasi, dan test
 ```
 
