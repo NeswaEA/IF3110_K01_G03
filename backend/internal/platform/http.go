@@ -141,7 +141,7 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) error {
 	if status == http.StatusInternalServerError {
 		slog.ErrorContext(r.Context(), "HTTP request failed",
 			"request_id", response.RequestID, "action", "http.error",
-			"status", status, "code", response.Code)
+			"status", status, "code", "INTERNAL_ERROR")
 	}
 	return writeJSON(w, status, struct {
 		Error any `json:"error"`
