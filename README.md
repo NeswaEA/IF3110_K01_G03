@@ -251,7 +251,7 @@ Setiap baris log memuat `time`, `level`, `msg`, `event`, dan `service`. `request
 - audit (`event=audit`) ditulis setelah transaksi bisnisnya commit, tanpa SQL lengkap (cukup `content_hash` dan revisi), dan tidak disimpan di database platform;
 - panic di handler menjadi `http.panic` (tipe dan stack trace, tanpa nilai panic) dan dijawab JSON 500.
 
-Contoh log nyata (login, review, eksekusi sukses dan gagal, audit) beserta tabel atribut lengkap ada di [`docs/observability/logs.md`](docs/observability/logs.md).
+Contoh log nyata (login, review, eksekusi sukses dan gagal, outcome batch, batch dengan stop dan resume, lock sibuk, retry, recovery setelah worker mati, audit) beserta tabel atribut lengkap ada di [`docs/observability/logs.md`](docs/observability/logs.md).
 
 ## Observability (bonus)
 

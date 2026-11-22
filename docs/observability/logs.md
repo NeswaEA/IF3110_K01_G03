@@ -97,6 +97,63 @@ Reset password hanya mencatat jenis perubahannya; password baru tidak pernah dit
 {"time":"2026-11-17T10:44:32.060049426Z","level":"INFO","msg":"audit","service":"dbplatform-api","event":"audit","action":"user.changed","actor_id":"10000000-0000-4000-8000-000000000001","actor_name":"fixture-admin","resource_type":"user","resource_id":"10000000-0000-4000-8000-000000000004","details":{"change":"password_reset"},"request_id":"TQONANT7DVITOSKYBQAMZFS2LC","trace_id":"7a204a097d7105a90684854900fa3d77","span_id":"c875c7ed37f27616"}
 ```
 
-## Belum tercakup
+## Batch, retry, dan recovery
 
-Cuplikan log untuk `execution.retry_scheduled`, `execution.held`, `lock.busy`, dan `recovery.evidence_checked` belum disertakan di halaman ini.
+Sesi kedua pada 21 November 2026, terhadap database yang sama, dengan cara pengambilan log yang sama (879 baris, semuanya JSON valid dengan atribut inti dan tanpa password, cookie, DSN, atau literal SQL). `editor` membuat tabel 120 baris lalu menjalankan migration batch (`batch_size` 20, jeda 1,5 detik) dan menghentikannya setelah batch kedua. Gangguan lain dibuat dari `psql` di container target: memegang advisory lock migration, memegang lock tabel lebih lama dari `MIGRATION_LOCK_TIMEOUT`, dan mematikan worker (`docker kill`) di tengah statement panjang.
+
+### Batch, stop, dan resume
+
+Setiap baris di dalam satu batch membawa atribut `batch`. Literal template (`'active'`, `1.10`) tercatat sebagai `$5` dan `$4`, sedangkan `$1`–`$3` adalah cursor, batas scope, dan ukuran batch. Stop dicatat sebagai audit, dan execution berakhir `partial` dengan `error_code` `STOPPED`:
+
+```json
+{"time":"2026-11-21T09:24:50.24378697Z","level":"INFO","msg":"sql executed","service":"dbplatform-worker","event":"db.query","db.pool":"target","db.operation":"UPDATE","db.query":"WITH batch AS (SELECT id FROM public.batch_demo_1795253089 WHERE id > $1 AND id <= $2 AND status = $5 ORDER BY id LIMIT $3)\nUPDATE public.batch_demo_1795253089 AS t SET price = t.price * $4 FROM batch WHERE t.id = batch.id RETURNING t.id;","db.params":["<pgx.QueryResultFormatsByOID>","<int64>","<int64>","<int>"],"duration_ms":1.026,"database_id":"30000000-0000-4000-8000-000000000001","rows":20,"status":"ok","execution_id":"01a1fd6c-37a5-7859-8a7b-b720967fe132","job_id":"01a1fd6c-37a5-7859-8a7b-b720967fe132","actor_id":"10000000-0000-4000-8000-000000000003","migration_id":"01a1fd6c-3787-713f-b02f-6d474c3c0811","migration_revision":1,"attempt":1,"direction":"up","change_request_id":"01a1fd6c-3790-76b1-a978-db650d6ba56e","batch":1,"trace_id":"84d072c178e5534aadc8867fe3720718","span_id":"4144b85d89eb514d"}
+{"time":"2026-11-21T09:24:51.776815301Z","level":"INFO","msg":"audit","service":"dbplatform-api","event":"audit","action":"execution.stop_requested","actor_id":"10000000-0000-4000-8000-000000000003","actor_name":"editor","database_id":"30000000-0000-4000-8000-000000000001","resource_type":"execution","resource_id":"01a1fd6c-37a5-7859-8a7b-b720967fe132","request_id":"VF6HYGDVBK3METEPVIDHYA3B43","trace_id":"47cf1669aced64bfbd2b117571d18d84","span_id":"73caf31d625d7771"}
+{"time":"2026-11-21T09:24:51.860715359Z","level":"INFO","msg":"execution.finished","service":"dbplatform-worker","event":"execution.finished","execution_id":"01a1fd6c-37a5-7859-8a7b-b720967fe132","job_id":"01a1fd6c-37a5-7859-8a7b-b720967fe132","database_id":"30000000-0000-4000-8000-000000000001","migration_id":"01a1fd6c-3787-713f-b02f-6d474c3c0811","migration_revision":1,"attempt":1,"actor_id":"10000000-0000-4000-8000-000000000003","status":"partial","direction":"up","change_request_id":"01a1fd6c-3790-76b1-a978-db650d6ba56e","error_code":"STOPPED","trace_id":"84d072c178e5534aadc8867fe3720718","span_id":"7d895ed789934ccf"}
+```
+
+Resume membuat execution baru (`action` `resume` di audit) yang melanjutkan dari checkpoint dan menutup chain:
+
+```json
+{"time":"2026-11-21T09:25:01.907822598Z","level":"INFO","msg":"audit","service":"dbplatform-api","event":"audit","action":"execution.enqueued","actor_id":"10000000-0000-4000-8000-000000000003","actor_name":"editor","database_id":"30000000-0000-4000-8000-000000000001","resource_type":"execution","resource_id":"01a1fd6c-6551-7d18-8d03-28e6bcacbd42","details":{"action":"resume","migration_id":"01a1fd6c-3787-713f-b02f-6d474c3c0811","revision":1,"status":"queued"},"request_id":"HBSXOPD2ELFTMKCEMUE4RWGCJA","trace_id":"0d9fdb9d27f9b6034aec2519ff90a4df","span_id":"9c5a11bcea432cb9"}
+{"time":"2026-11-21T09:25:07.95719818Z","level":"INFO","msg":"execution.finished","service":"dbplatform-worker","event":"execution.finished","execution_id":"01a1fd6c-6551-7d18-8d03-28e6bcacbd42","job_id":"01a1fd6c-6551-7d18-8d03-28e6bcacbd42","database_id":"30000000-0000-4000-8000-000000000001","migration_id":"01a1fd6c-3787-713f-b02f-6d474c3c0811","migration_revision":1,"attempt":1,"actor_id":"10000000-0000-4000-8000-000000000003","status":"succeeded","direction":"up","trace_id":"0d9fdb9d27f9b6034aec2519ff90a4df","span_id":"79e5b999386b2da7"}
+{"time":"2026-11-21T09:25:07.957359049Z","level":"INFO","msg":"audit","service":"dbplatform-worker","event":"audit","action":"history.recorded","actor_id":"10000000-0000-4000-8000-000000000003","actor_name":"editor","database_id":"30000000-0000-4000-8000-000000000001","resource_type":"execution","resource_id":"01a1fd6c-6551-7d18-8d03-28e6bcacbd42","details":{"seq":4,"version":4},"trace_id":"0d9fdb9d27f9b6034aec2519ff90a4df","span_id":"79e5b999386b2da7"}
+```
+
+### Execution ditahan
+
+Migration lain di database yang sama sudah antre sebelum stop. Saat worker mengambilnya, database sedang diblokir oleh execution `partial`, jadi execution itu ditahan (`held_reason` `partial` di API). Setelah resume selesai, execution ini dilepas dan berakhir `succeeded`:
+
+```json
+{"time":"2026-11-21T09:25:01.782468097Z","level":"INFO","msg":"execution.held","service":"dbplatform-worker","event":"execution.held","execution_id":"01a1fd6c-3dba-73b5-a500-db40f4591e57","job_id":"01a1fd6c-3dba-73b5-a500-db40f4591e57","database_id":"30000000-0000-4000-8000-000000000001","migration_id":"01a1fd6c-37aa-725b-b80e-395bbbfc8975","migration_revision":1,"attempt":0,"actor_id":"10000000-0000-4000-8000-000000000003","status":"held","direction":"up","change_request_id":"01a1fd6c-37af-7579-b9bf-95a02ab51898","trace_id":"743122698dc2f61fd108da83feabd81a","span_id":"2b13c4620be27c1a"}
+{"time":"2026-11-21T09:25:07.999901037Z","level":"INFO","msg":"execution.finished","service":"dbplatform-worker","event":"execution.finished","execution_id":"01a1fd6c-3dba-73b5-a500-db40f4591e57","job_id":"01a1fd6c-3dba-73b5-a500-db40f4591e57","database_id":"30000000-0000-4000-8000-000000000001","migration_id":"01a1fd6c-37aa-725b-b80e-395bbbfc8975","migration_revision":1,"attempt":1,"actor_id":"10000000-0000-4000-8000-000000000003","status":"succeeded","direction":"up","change_request_id":"01a1fd6c-37af-7579-b9bf-95a02ab51898","trace_id":"0d9fdb9d27f9b6034aec2519ff90a4df","span_id":"509dac9913e3bcda"}
+```
+
+### Lock sedang dipakai
+
+Sesi `psql` memegang `pg_advisory_lock(hashtextextended('if3110.migration', 0))` selama 6 detik. Worker mencatat `lock.busy`, mengembalikan job ke antrean dengan backoff, lalu berhasil setelah lock dilepas:
+
+```json
+{"time":"2026-11-21T09:25:09.517745058Z","level":"INFO","msg":"lock.busy","service":"dbplatform-worker","event":"lock.busy","execution_id":"01a1fd6c-8308-7de3-81a3-7bdc92d01f82","job_id":"01a1fd6c-8308-7de3-81a3-7bdc92d01f82","database_id":"30000000-0000-4000-8000-000000000001","migration_id":"01a1fd6c-82ef-787c-bb28-702879aaf04d","migration_revision":1,"attempt":0,"actor_id":"10000000-0000-4000-8000-000000000003","status":"queued","direction":"up","change_request_id":"01a1fd6c-82f7-7924-849d-7ddfe1238c3b","trace_id":"b6cf2da32ba0c644d66f631b7977aa65","span_id":"b1c57ee05794a268"}
+{"time":"2026-11-21T09:25:21.777329856Z","level":"INFO","msg":"lock.acquired","service":"dbplatform-worker","event":"lock.acquired","execution_id":"01a1fd6c-8308-7de3-81a3-7bdc92d01f82","job_id":"01a1fd6c-8308-7de3-81a3-7bdc92d01f82","database_id":"30000000-0000-4000-8000-000000000001","migration_id":"01a1fd6c-82ef-787c-bb28-702879aaf04d","migration_revision":1,"attempt":1,"actor_id":"10000000-0000-4000-8000-000000000003","status":"running","direction":"up","change_request_id":"01a1fd6c-82f7-7924-849d-7ddfe1238c3b","trace_id":"b6cf2da32ba0c644d66f631b7977aa65","span_id":"9ea7af51f93bad3b"}
+{"time":"2026-11-21T09:25:21.789821483Z","level":"INFO","msg":"execution.finished","service":"dbplatform-worker","event":"execution.finished","execution_id":"01a1fd6c-8308-7de3-81a3-7bdc92d01f82","job_id":"01a1fd6c-8308-7de3-81a3-7bdc92d01f82","database_id":"30000000-0000-4000-8000-000000000001","migration_id":"01a1fd6c-82ef-787c-bb28-702879aaf04d","migration_revision":1,"attempt":1,"actor_id":"10000000-0000-4000-8000-000000000003","status":"succeeded","direction":"up","change_request_id":"01a1fd6c-82f7-7924-849d-7ddfe1238c3b","trace_id":"b6cf2da32ba0c644d66f631b7977aa65","span_id":"fd8d6ae0b9b4dc67"}
+```
+
+### Retry setelah error transient
+
+Sesi `psql` memegang `ACCESS EXCLUSIVE` pada tabel selama 8 detik. `ALTER TABLE` berhenti setelah `lock_timeout` 5 detik dengan `sqlstate` `55P03`, yang tergolong transient. Execution dijadwalkan ulang (`LOCK_TIMEOUT`), dan percobaan kedua berhasil:
+
+```json
+{"time":"2026-11-21T09:25:28.194153544Z","level":"INFO","msg":"sql executed","service":"dbplatform-worker","event":"db.query","db.pool":"target","db.operation":"ALTER","db.query":"ALTER TABLE batch_demo_1795253089 ADD COLUMN tag text","db.params":[],"duration_ms":5000.685,"database_id":"30000000-0000-4000-8000-000000000001","sqlstate":"55P03","status":"error","execution_id":"01a1fd6c-b86e-798b-8466-043a4838e274","job_id":"01a1fd6c-b86e-798b-8466-043a4838e274","actor_id":"10000000-0000-4000-8000-000000000003","migration_id":"01a1fd6c-b858-7e71-a849-e4bb6e3b7afc","migration_revision":1,"attempt":1,"direction":"up","change_request_id":"01a1fd6c-b860-7d2a-9158-20024fe9b89e","trace_id":"e3a126ed97f831c2471f805bb8191843","span_id":"e9a02441424da372"}
+{"time":"2026-11-21T09:25:28.205327135Z","level":"INFO","msg":"execution.retry_scheduled","service":"dbplatform-worker","event":"execution.retry_scheduled","execution_id":"01a1fd6c-b86e-798b-8466-043a4838e274","job_id":"01a1fd6c-b86e-798b-8466-043a4838e274","database_id":"30000000-0000-4000-8000-000000000001","migration_id":"01a1fd6c-b858-7e71-a849-e4bb6e3b7afc","migration_revision":1,"attempt":1,"actor_id":"10000000-0000-4000-8000-000000000003","status":"queued","direction":"up","change_request_id":"01a1fd6c-b860-7d2a-9158-20024fe9b89e","error_code":"LOCK_TIMEOUT","trace_id":"e3a126ed97f831c2471f805bb8191843","span_id":"cc350453dee7757c"}
+{"time":"2026-11-21T09:25:28.80824053Z","level":"INFO","msg":"job received","service":"dbplatform-worker","event":"job.received","execution_id":"01a1fd6c-b86e-798b-8466-043a4838e274","job_id":"01a1fd6c-b86e-798b-8466-043a4838e274","database_id":"30000000-0000-4000-8000-000000000001","delivery":2,"trace_id":"e3a126ed97f831c2471f805bb8191843","span_id":"a7864c5d5d1927d0"}
+{"time":"2026-11-21T09:25:30.245242384Z","level":"INFO","msg":"execution.finished","service":"dbplatform-worker","event":"execution.finished","execution_id":"01a1fd6c-b86e-798b-8466-043a4838e274","job_id":"01a1fd6c-b86e-798b-8466-043a4838e274","database_id":"30000000-0000-4000-8000-000000000001","migration_id":"01a1fd6c-b858-7e71-a849-e4bb6e3b7afc","migration_revision":1,"attempt":2,"actor_id":"10000000-0000-4000-8000-000000000003","status":"succeeded","direction":"up","change_request_id":"01a1fd6c-b860-7d2a-9158-20024fe9b89e","trace_id":"e3a126ed97f831c2471f805bb8191843","span_id":"acb5535570440c6f"}
+```
+
+### Worker mati di tengah eksekusi
+
+Worker yang menjalankan `INSERT` besar dimatikan. Setelah `JOB_ACK_WAIT` (60 detik), NATS mengirim ulang job ke worker lain. Sebelum menjalankan SQL lagi, worker itu memeriksa bukti commit di `_platform.migration_history`. Bukti tidak ada (`found=false`), artinya transaksi pertama tidak pernah commit, jadi aman diulang:
+
+```json
+{"time":"2026-11-21T09:27:10.10574203Z","level":"INFO","msg":"job received","service":"dbplatform-worker","event":"job.received","execution_id":"01a1fd6d-6fb6-79eb-8985-962dc02a13ac","job_id":"01a1fd6d-6fb6-79eb-8985-962dc02a13ac","database_id":"30000000-0000-4000-8000-000000000001","delivery":2,"trace_id":"7541963ca9196b11ab47c55d88d94435","span_id":"605c90b56fc402aa"}
+{"time":"2026-11-21T09:27:10.113591758Z","level":"INFO","msg":"commit evidence checked","service":"dbplatform-worker","event":"recovery.evidence_checked","execution_id":"01a1fd6d-6fb6-79eb-8985-962dc02a13ac","found":false,"trace_id":"7541963ca9196b11ab47c55d88d94435","span_id":"605c90b56fc402aa"}
+```
