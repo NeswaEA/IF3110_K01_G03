@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { engines, login, metadata, pathFor, waitForApp } from "../helpers.mjs";
+import { engines, expectNoSideScroll, login, metadata, pathFor, waitForApp } from "../helpers.mjs";
 
 const database = pathFor(engines[0]);
 const bigId = "30000000-0000-4000-8000-000000000005";
@@ -67,6 +67,8 @@ async function waitStatus(page, base, id, status) {
 test("creates, dry-runs, reviews and executes a migration through the SPA", async ({page,browser}, info) => {
   await allowTarget(browser, engines[0].id);
   await login(page, "editor");
+  await page.goto(database);
+  await expectNoSideScroll(page);
   const suffix=info.project.name.replace(/[^a-z]/g,"");
   const title=`Migration ${suffix}`;
   await page.goto(database+"/migrations");
@@ -76,7 +78,7 @@ test("creates, dry-runs, reviews and executes a migration through the SPA", asyn
   await page.getByLabel("SQL down",{exact:true}).fill(`DROP TABLE m2_e2e_${suffix}`);
   await page.getByRole("button",{name:"Simpan migrasi"}).click();
   await expect(page.getByRole("heading",{name:title})).toBeVisible();
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await expectNoSideScroll(page);
   const detail=new URL(page.url()).pathname;
   const id=detail.split("/").at(-1);
   await page.getByRole("tab",{name:"Validasi"}).click();
@@ -102,8 +104,10 @@ test("creates, dry-runs, reviews and executes a migration through the SPA", asyn
     await page.getByRole("button",{name:"Jalankan",exact:true}).click();
     await page.getByRole("link",{name:"Lihat eksekusi",exact:true}).click();
     await expect(page.getByText("Berhasil",{exact:true})).toBeVisible({timeout:15000});
+    await expectNoSideScroll(page);
     await page.goto(database+"/history");
     await expect(page.getByRole("link",{name:new RegExp(title)})).toBeVisible();
+    await expectNoSideScroll(page);
 
     for (const action of ["rollback","forward"]) {
       const request=await requestFromApi(page,database,id,action);
@@ -120,6 +124,8 @@ test("creates, dry-runs, reviews and executes a migration through the SPA", asyn
     await expect(page.getByLabel("Sembunyikan rollback")).toBeChecked();
     await page.goto(detail);
     await expect(page.getByLabel("SQL up",{exact:true})).not.toBeEditable();
+    await expect(page.getByRole("list",{name:"Alur migrasi"}).locator("[aria-current=step]")).toHaveText(/Selesai.*Berhasil/);
+    await expectNoSideScroll(page);
   } finally {
     await Promise.all([reviewer.close(), leader.close()]);
   }

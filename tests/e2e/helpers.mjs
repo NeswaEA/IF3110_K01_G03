@@ -24,6 +24,13 @@ export async function login(page, username = "editor") {
   await expect(page).toHaveURL(origin + "/databases");
 }
 
+/** Fails when the page is wider than the viewport, i.e. the document scrolls sideways. */
+export async function expectNoSideScroll(page) {
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow, `${new URL(page.url()).pathname} scrolls sideways`).toBeLessThanOrEqual(0);
+}
+
 export async function metadata(sql, params = []) {
   const client = new pg.Client("postgres://metadata_owner:e2e_metadata@metadata:5432/metadata?sslmode=disable");
   await client.connect();
