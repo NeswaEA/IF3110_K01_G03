@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MigrationForm } from "@/features/migrations/MigrationForm";
 import { MigrationNav, useDatabaseMutation } from "@/features/migrations/shared";
+import { WorkflowPipeline } from "@/features/migrations/WorkflowPipeline";
 import { ApprovalPanel } from "@/features/reviews/ApprovalPanel";
 
 type Tab = "sql" | "validation" | "revisions" | "requests";
@@ -70,13 +71,7 @@ function WorkflowStatus({migration:m}: {migration:Schemas["Migration"]}) {
   const {data:executions}=useSuspenseQuery(executionsQuery(m.database_id,m.id));
   const request=m.open_request ?? requests[0];
   const execution=executions.find((e) => e.action !== "dry_run");
-  return <ol aria-label="Alur migrasi" className="mb-4 grid gap-2 rounded-md border p-3 text-sm sm:grid-cols-3">
-    <li className="flex flex-wrap items-center gap-2">Migrasi <StatusBadge kind="migration" status={m.status}/></li>
-    <li className="flex flex-wrap items-center gap-2">Review {request
-      ? <StatusBadge kind="request" status={request.status}/> : <span className="text-muted-foreground">Belum diajukan</span>}</li>
-    <li className="flex flex-wrap items-center gap-2">Eksekusi {execution
-      ? <StatusBadge kind="execution" status={execution.status}/> : <span className="text-muted-foreground">Belum dijalankan</span>}</li>
-  </ol>;
+  return <WorkflowPipeline request={request} execution={execution}/>;
 }
 
 function Validation({migration: m, canDryRun}: {migration: Schemas["Migration"]; canDryRun: boolean}) {
