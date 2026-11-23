@@ -67,6 +67,7 @@ type executionRow struct {
 	heartbeatAt   *time.Time
 	workerID      *string
 	reconcile     bool
+	sqlSent       *string // SQL this attempt sent to the target, kept in its attempt record
 }
 
 const executionSelect = `SELECT e.id, e.number, e.database_id, e.migration_id, m.title, e.change_request_id, e.action, e.direction,

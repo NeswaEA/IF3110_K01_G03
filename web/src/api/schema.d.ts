@@ -1318,9 +1318,28 @@ export interface components {
             actor: components["schemas"]["Actor"];
             committed_at: components["schemas"]["Timestamp"];
         };
+        /** @description Migration history of one attempt, recorded whether it committed or failed. Append-only. */
+        AttemptRecord: {
+            execution_id: components["schemas"]["UUID"];
+            migration_id: components["schemas"]["UUID"];
+            migration_revision: number;
+            action: components["schemas"]["ExecutionAction"];
+            attempt: number;
+            /** @enum {string} */
+            status: "succeeded" | "failed" | "partial" | "partially_reverted" | "outcome_unknown";
+            retry_scheduled: boolean;
+            /** @description SQL this attempt sent to the target; null when it stopped before any SQL ran. */
+            sql_executed: string | null;
+            error: components["schemas"]["RunError"] | null;
+            reverts_execution_id: components["schemas"]["UUID"] | null;
+            history_seq: number | null;
+            actor: components["schemas"]["Actor"];
+            recorded_at: components["schemas"]["Timestamp"];
+        };
         TimelineEntry: {
             execution: components["schemas"]["Execution"];
             committed: components["schemas"]["HistoryRecord"] | null;
+            attempts: components["schemas"]["AttemptRecord"][];
         };
         DatabaseHead: {
             version: number;

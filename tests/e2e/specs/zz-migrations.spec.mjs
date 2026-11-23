@@ -115,8 +115,30 @@ test("creates, dry-runs, reviews and executes a migration through the SPA", asyn
       await approve(leader,request);
       await waitStatus(page,database,await execution(page,request),"succeeded");
     }
+    const brokenSQL=`INSERT INTO m2_missing_${suffix} VALUES (1)`;
+    const broken=await post(page,database+"/migrations",{title:`Gagal ${suffix}`,up_sql:brokenSQL,down_sql:"SELECT 1",mode:"normal"});
+    expect(broken.status).toBe(201);
+    const brokenRequest=await requestFromApi(page,database,broken.data.id,"apply");
+    await approve(reviewer,brokenRequest);
+    await approve(leader,brokenRequest);
+    await waitStatus(page,database,await execution(page,brokenRequest),"failed");
     await page.reload();
     await expect(page.getByRole("link",{name:new RegExp(title)})).toHaveCount(3);
+    // Every attempt, failed or committed, is listed with the SQL it ran.
+    const entry=(name)=>page.locator("ul > li").filter({has:page.getByRole("link",{name})});
+    const failedEntry=entry(new RegExp(`Gagal ${suffix}`));
+    await failedEntry.getByText("Riwayat attempt (1)").click();
+    const failedAttempt=failedEntry.locator("ol > li").filter({hasText:"Attempt 1"});
+    await expect(failedAttempt.getByText("Gagal",{exact:true})).toBeVisible();
+    await expect(failedAttempt).toContainText("SQL_EXECUTION_FAILED");
+    await expect(failedAttempt.getByText(brokenSQL)).toBeVisible();
+    const appliedEntry=entry(new RegExp(title)).last();
+    await appliedEntry.getByText("Riwayat attempt (1)").click();
+    const appliedAttempt=appliedEntry.locator("ol > li").filter({hasText:"Attempt 1"});
+    await expect(appliedAttempt.getByText("Berhasil",{exact:true})).toBeVisible();
+    await expect(appliedAttempt.getByText(`CREATE TABLE m2_e2e_${suffix}(id integer PRIMARY KEY)`)).toBeVisible();
+    await expectNoSideScroll(page);
+    await page.screenshot({path:info.outputPath("history-attempts.png"),fullPage:true});
     await page.getByLabel("Sembunyikan rollback").click();
     await expect(page).toHaveURL(/hide_rollback=true/);
     await expect(page.getByRole("link",{name:new RegExp(title)})).toHaveCount(1);

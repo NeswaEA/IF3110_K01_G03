@@ -143,6 +143,11 @@ func (x *Executor) transition(ctx context.Context, previous executionRow, change
 		if err != nil {
 			return result, internal(err)
 		}
+		if e.Action != "dry_run" {
+			if err := recordAttempt(ctx, tx, e, change, previous.sqlSent, code, message, seq, now); err != nil {
+				return result, err
+			}
+		}
 		if change.next == nil {
 			block, err := findBlock(ctx, tx, e.DatabaseID)
 			if err != nil {

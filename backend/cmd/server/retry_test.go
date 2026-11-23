@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -40,6 +41,17 @@ func TestTransientFailuresExhaustAttempts(t *testing.T) {
 	}
 	if !slices.Equal(attempts, []int{1, 2}) {
 		t.Fatalf("retry_scheduled logs by attempt: %v, want [1 2]", attempts)
+	}
+	entry := migrationResponse[[]migrations.TimelineEntry](t, f.call("GET", "/history", ""), 200).Data[0]
+	var recorded []string
+	for _, a := range entry.Attempts {
+		if a.SQLExecuted == nil || *a.SQLExecuted != "INSERT INTO busy_items VALUES (1)" || a.Status != "failed" {
+			t.Fatalf("retried attempt record: %+v", a)
+		}
+		recorded = append(recorded, fmt.Sprint(a.Attempt, a.RetryScheduled))
+	}
+	if entry.Execution.ID != e.ID || !slices.Equal(recorded, []string{"1 true", "2 true", "3 false"}) {
+		t.Fatalf("attempt history %v, want three failed attempts with two retries", recorded)
 	}
 	if err := holder.Rollback(); err != nil {
 		t.Fatal(err)

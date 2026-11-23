@@ -250,6 +250,9 @@ func (x *Executor) Handle(ctx context.Context, m contracts.JobMessage) contracts
 		}
 	}
 	history, failure := x.runNormal(work, target, lock, e)
+	if history != nil {
+		e.sqlSent = &history.SQLExecuted
+	}
 	switch {
 	case failure == nil:
 		return x.complete(ctx, e, "succeeded", nil, history, lock.Release)

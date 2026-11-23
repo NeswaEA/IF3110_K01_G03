@@ -272,6 +272,7 @@ func normalStatements(driver database.Driver, query string) ([]string, error) {
 	return statements, nil
 }
 
+// runNormal returns the history record on success, and also with a failure once the SQL was sent.
 func (x *Executor) runNormal(ctx context.Context, target database.TargetHandle, lock database.MigrationLock, e executionRow) (*HistoryRecord, *attemptFailure) {
 	t := normalTarget{conn: lock.Conn, target: target}
 	work := ctx
@@ -337,28 +338,29 @@ func (x *Executor) runNormal(ctx context.Context, target database.TargetHandle, 
 		defer cancel()
 		userCtx = timed
 	}
+	// From here on the SQL reached the target, so failures also return h for the attempt record.
 	if err := t.userSQL(userCtx, statements); err != nil {
 		if errors.Is(userCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
-			return nil, failed("STATEMENT_TIMEOUT", "Waktu maksimum statement terlampaui.")
+			return &h, failed("STATEMENT_TIMEOUT", "Waktu maksimum statement terlampaui.")
 		}
-		return nil, targetFailure(err)
+		return &h, targetFailure(err)
 	}
 	if target.Driver == database.Postgres {
 		if err := t.exec(ctx, "RESET ROLE"); err != nil {
-			return nil, targetFailure(err)
+			return &h, targetFailure(err)
 		}
 	}
 	h.CommittedAt = x.service.store.now()
 	if err := insertTargetHistory(ctx, t, target.Driver, h); err != nil {
-		return nil, targetFailure(err)
+		return &h, targetFailure(err)
 	}
 	select {
 	case <-lock.Lost:
-		return nil, &attemptFailure{detail: runFailure("TARGET_UNAVAILABLE", "Koneksi lock terputus."), uncertain: true}
+		return &h, &attemptFailure{detail: runFailure("TARGET_UNAVAILABLE", "Koneksi lock terputus."), uncertain: true}
 	default:
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, targetFailure(err)
+		return &h, targetFailure(err)
 	}
 	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
@@ -369,7 +371,7 @@ func (x *Executor) runNormal(ctx context.Context, target database.TargetHandle, 
 			committed = true // The connection was discarded. The next holder checks the evidence.
 			failure.uncertain = true
 		}
-		return nil, failure
+		return &h, failure
 	}
 	committed = true
 	return &h, nil

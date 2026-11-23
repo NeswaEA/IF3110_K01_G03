@@ -448,7 +448,7 @@ Biner dan service: `backend` (API, SPA, relay outbox, SSE), `worker` (2 replika:
   - Route halaman apa pun yang dibuka langsung atau di-refresh mendapat `index.html`; router SPA menampilkan halamannya atau 404.
   - `/assets/*` di-cache permanen, path `/api` yang tidak dikenal menjawab JSON 404, dan setiap respons membawa header CSP.
 - **Terdiri dari dua jenis database.**
-  - Database *metadata* menyimpan pengguna, session, hak akses, registry, migration beserta revisi, request, approval, eksekusi, mirror riwayat, dan outbox.
+  - Database *metadata* menyimpan pengguna, session, hak akses, registry, migration beserta revisi, request, approval, eksekusi, mirror riwayat committed, riwayat semua attempt (berhasil maupun gagal), dan outbox.
   - Database *target* adalah database yang dikelola pengguna.
   - Metadata tidak dapat didaftarkan sebagai target.
 - **Akses dicek di backend** pada setiap request API; tombol dan guard di SPA hanya kenyamanan.

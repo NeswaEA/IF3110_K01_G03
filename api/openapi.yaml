@@ -2271,15 +2271,39 @@ components:
         rows: { $ref: '#/components/schemas/BigIntString' }
         actor: { $ref: '#/components/schemas/Actor' }
         committed_at: { $ref: '#/components/schemas/Timestamp' }
+    AttemptRecord:
+      description: Migration history of one attempt, recorded whether it committed or failed. Append-only.
+      type: object
+      required: [execution_id, migration_id, migration_revision, action, attempt, status, retry_scheduled,
+        sql_executed, error, reverts_execution_id, history_seq, actor, recorded_at]
+      properties:
+        execution_id: { $ref: '#/components/schemas/UUID' }
+        migration_id: { $ref: '#/components/schemas/UUID' }
+        migration_revision: { type: integer }
+        action: { $ref: '#/components/schemas/ExecutionAction' }
+        attempt: { type: integer, minimum: 0 }
+        status: { type: string, enum: [succeeded, failed, partial, partially_reverted, outcome_unknown] }
+        retry_scheduled: { type: boolean }
+        sql_executed:
+          description: SQL this attempt sent to the target; null when it stopped before any SQL ran.
+          oneOf: [{ type: string }, { type: 'null' }]
+        error: { oneOf: [{ $ref: '#/components/schemas/RunError' }, { type: 'null' }] }
+        reverts_execution_id: { oneOf: [{ $ref: '#/components/schemas/UUID' }, { type: 'null' }] }
+        history_seq: { oneOf: [{ type: integer, minimum: 1 }, { type: 'null' }] }
+        actor: { $ref: '#/components/schemas/Actor' }
+        recorded_at: { $ref: '#/components/schemas/Timestamp' }
     TimelineEntry:
       type: object
-      required: [execution, committed]
+      required: [execution, committed, attempts]
       properties:
         execution: { $ref: '#/components/schemas/Execution' }
         committed:
           oneOf:
             - $ref: '#/components/schemas/HistoryRecord'
             - type: 'null'
+        attempts:
+          type: array
+          items: { $ref: '#/components/schemas/AttemptRecord' }
     DatabaseHead:
       type: object
       required: [version, migration_id, history_seq, blocked, blocking_execution_id]

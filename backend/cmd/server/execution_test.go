@@ -84,6 +84,16 @@ func TestQueuedNormalMigrations(t *testing.T) {
 				entries[1].Committed != nil || entries[2].Execution.ID != e1.ID || entries[2].Committed == nil {
 				t.Fatalf("filtered history: %+v", entries)
 			}
+			// Every attempt is in the database history, with the SQL it sent even when it failed.
+			if a := entries[1].Attempts; len(a) != 1 || a[0].Status != "failed" || a[0].RetryScheduled ||
+				a[0].SQLExecuted == nil || *a[0].SQLExecuted != "UPDATE execution_items SET value=99 WHERE id=1; INSERT INTO missing_table VALUES (1)" || a[0].HistorySeq != nil ||
+				a[0].Error == nil || a[0].Error.Code != "SQL_EXECUTION_FAILED" || a[0].Actor.ID == "" {
+				t.Fatalf("failed attempt record: %+v", a)
+			}
+			if a := entries[0].Attempts; len(a) != 1 || a[0].Status != "succeeded" || a[0].HistorySeq == nil ||
+				entries[0].Committed == nil || *a[0].HistorySeq != entries[0].Committed.Seq {
+				t.Fatalf("committed attempt record: %+v", a)
+			}
 
 			recovering := f.approved(t, "UPDATE execution_items SET value=value+1 WHERE id=1", "UPDATE execution_items SET value=value-1 WHERE id=1")
 			f.exec(t, `CREATE FUNCTION test_reject_history() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -124,6 +134,11 @@ func TestQueuedNormalMigrations(t *testing.T) {
 			current := migrationResponse[migrations.Migration](t, f.call("GET", "/migrations/"+diff.ID, ""), 200).Data
 			if current.Locked {
 				t.Fatal("a revalidation failure locked the revision")
+			}
+			latest := migrationResponse[[]migrations.TimelineEntry](t, f.call("GET", "/history", ""), 200).Data[0]
+			if a := latest.Attempts; latest.Execution.ID != e7.ID || len(a) != 1 || a[0].SQLExecuted != nil ||
+				a[0].Error == nil || a[0].Error.Code != "SCHEMA_CONFLICT" {
+				t.Fatalf("an attempt stopped before SQL must be recorded without SQL: %+v", latest)
 			}
 
 			historyTable := "_platform.migration_history"

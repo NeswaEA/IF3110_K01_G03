@@ -45,8 +45,8 @@ func TestMetadataSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	files, err := filepath.Glob(filepath.Join("..", "..", "migrations", "*.sql"))
-	if err != nil || len(files) != 9 {
-		t.Fatalf("expected 9 metadata migrations, got %d (%v)", len(files), err)
+	if err != nil || len(files) != 10 {
+		t.Fatalf("expected 10 metadata migrations, got %d (%v)", len(files), err)
 	}
 	sort.Strings(files)
 	for _, file := range files {
@@ -108,6 +108,7 @@ func TestMetadataSchema(t *testing.T) {
 	insertRequest := "INSERT INTO change_requests (id, database_id, migration_id, action, migration_revision, content_hash, head_at_request, target_execution_id, requested_by, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, now(), now())"
 	insertExecution := "INSERT INTO migration_executions (id, database_id, number, migration_id, change_request_id, action, direction, mode, migration_revision, content_hash, status, max_attempts, chain_root_id, enqueued_by, enqueued_by_name, enqueued_at) VALUES ($1, $2, $3, $4, $5, $6, 'up', 'normal', 1, $7, $8, 3, $1, $9, 'editor', now())"
 	insertHistory := "INSERT INTO migration_history (database_id, seq, execution_id, migration_id, migration_revision, action, version, head_after, reverts_execution_id, sql_executed, sql_hash, mode, actor_id, actor_name, committed_at) VALUES ($1, $2, $3, $4, 1, $5, 1, 1, NULL, 'ALTER TABLE items ADD COLUMN note text', $6, 'normal', $7, 'editor', now())"
+	insertAttempt := "INSERT INTO migration_attempts (database_id, execution_id, migration_id, migration_revision, action, attempt, status, retry_scheduled, sql_executed, history_seq, actor_id, actor_name, recorded_at) VALUES ($1, $2, $3, 1, 'apply', 1, $4, false, $5, $6, $7, 'editor', now())"
 	insertApproval := "INSERT INTO change_request_approvals (id, request_id, group_id, approver_id, decision, comment, migration_revision, created_at) VALUES ($1, $2, $3, $4, $5, $6, 1, now())"
 	exec("INSERT INTO users (id, username, password_hash) VALUES ($1, 'viewer', $2)", viewerID, hash)
 	exec("UPDATE groups SET leader_user_id=$2 WHERE id=$1", groupID, userID)
@@ -122,6 +123,8 @@ func TestMetadataSchema(t *testing.T) {
 	exec(insertExecution, otherDryRunID, databaseID, 3, pendingID, nil, "dry_run", contentHash, "queued", userID)
 	exec(insertExecution, unknownOutcomeID, databaseID, 4, pendingID, nil, "dry_run", contentHash, "outcome_unknown", userID)
 	exec(insertHistory, databaseID, 1, executionID, migrationID, "apply", contentHash, userID)
+	exec(insertAttempt, databaseID, executionID, migrationID, "failed", "ALTER TABLE items ADD COLUMN note text", nil, userID)
+	exec(insertAttempt, databaseID, executionID, migrationID, "succeeded", "ALTER TABLE items ADD COLUMN note text", 1, userID)
 	exec(insertApproval, approvalID, openRequestID, groupID, userID, "approved", nil)
 	exec("INSERT INTO outbox_messages (id, subject, payload) VALUES ($1, 'migrations.jobs.' || $2::text, '{}')", unknownID, databaseID)
 
@@ -197,6 +200,12 @@ func TestMetadataSchema(t *testing.T) {
 		{"history update", "UPDATE migration_history SET rows=5", "23514", nil},
 		{"history delete", "DELETE FROM migration_history", "23514", nil},
 		{"rollback history without reverted execution", insertHistory, "23514", []any{databaseID, 2, dryRunID, migrationID, "rollback", contentHash, userID}},
+		{"attempt update", "UPDATE migration_attempts SET error_code='X'", "23514", nil},
+		{"attempt delete", "DELETE FROM migration_attempts", "23514", nil},
+		{"succeeded attempt without history", insertAttempt, "23514", []any{databaseID, executionID, migrationID, "succeeded", "SELECT 1", nil, userID}},
+		{"succeeded attempt without SQL", insertAttempt, "23514", []any{databaseID, executionID, migrationID, "succeeded", nil, 1, userID}},
+		{"failed attempt with history", insertAttempt, "23514", []any{databaseID, executionID, migrationID, "failed", nil, 1, userID}},
+		{"attempt for unknown execution", insertAttempt, "23503", []any{databaseID, unknownID, migrationID, "failed", nil, nil, userID}},
 		{"second active approval", insertApproval, "23505", []any{unknownID, openRequestID, groupID, userID, "approved", nil}},
 		{"rejection without comment", insertApproval, "23514", []any{unknownID, openRequestID, unknownID, userID, "rejected", nil}},
 		{"approval decision change", "UPDATE change_request_approvals SET decision='rejected', comment='no' WHERE id=$1", "23514", []any{approvalID}},

@@ -170,6 +170,9 @@ func (x *Executor) handleBatch(ctx, work context.Context, target database.Target
 	e := g.executionRow
 	t := normalTarget{conn: lock.Conn, target: target}
 	h, progress, failure := x.runBatch(work, t, lock, g)
+	if h != nil {
+		e.sqlSent = &h.SQLExecuted
+	}
 	if failure == nil {
 		return x.complete(ctx, e, "succeeded", nil, h, lock.Release)
 	}
@@ -278,10 +281,12 @@ func (x *Executor) runBatch(ctx context.Context, t normalTarget, lock database.M
 	}
 	x.log(ctx, e, "execution.revalidated")
 	lastEvent := time.Time{}
+	var sent *HistoryRecord // set once this attempt sends batch SQL, for the attempt record
 	for {
 		if failure := x.batchStop(ctx, e); failure != nil {
-			return nil, progress, failure
+			return sent, progress, failure
 		}
+		sent = &h
 		r, failure := x.commitBatch(ctx, t, lock, e, &h, original, cursor, scope.to, n+1, batches, rows)
 		if failure != nil {
 			telemetry.RecordBatch(ctx, e.Direction, "failed", 0)
@@ -290,7 +295,7 @@ func (x *Executor) runBatch(ctx context.Context, t normalTarget, lock database.M
 				outcome.Status, outcome.Error = "failed", failure.detail
 				x.log(ctx, outcome, "batch.failed", "batch", n+1)
 			}
-			return nil, progress, failure
+			return sent, progress, failure
 		}
 		if r == nil {
 			h.Batches, h.Rows = batches, strconv.FormatInt(rows, 10)
@@ -302,7 +307,7 @@ func (x *Executor) runBatch(ctx context.Context, t normalTarget, lock database.M
 			cursor = r.from
 		}
 		if err := x.mirrorCheckpoint(ctx, e, *r); err != nil {
-			return nil, progress, &attemptFailure{detail: runFailure("INTERNAL_ERROR", "Checkpoint sudah tersimpan pada target."), uncertain: true}
+			return sent, progress, &attemptFailure{detail: runFailure("INTERNAL_ERROR", "Checkpoint sudah tersimpan pada target."), uncertain: true}
 		}
 		now := s.store.now()
 		if now.Sub(lastEvent) >= time.Second {
@@ -319,7 +324,7 @@ func (x *Executor) runBatch(ctx context.Context, t normalTarget, lock database.M
 					timer.Stop()
 				}
 				if failure := x.batchStop(ctx, e); failure != nil {
-					return nil, progress, failure
+					return sent, progress, failure
 				}
 			}
 		}

@@ -31,9 +31,73 @@ type HistoryRecord struct {
 	CommittedAt       time.Time `json:"committed_at"`
 }
 
+// AttemptRecord is the migration history of one attempt, kept whether or not it committed.
+type AttemptRecord struct {
+	ExecutionID       string    `json:"execution_id"`
+	MigrationID       string    `json:"migration_id"`
+	MigrationRevision int64     `json:"migration_revision"`
+	Action            string    `json:"action"`
+	Attempt           int       `json:"attempt"`
+	Status            string    `json:"status"`
+	RetryScheduled    bool      `json:"retry_scheduled"`
+	SQLExecuted       *string   `json:"sql_executed"`
+	Error             *RunError `json:"error"`
+	RevertsExecution  *string   `json:"reverts_execution_id"`
+	HistorySeq        *int64    `json:"history_seq"`
+	Actor             Actor     `json:"actor"`
+	RecordedAt        time.Time `json:"recorded_at"`
+}
+
 type TimelineEntry struct {
-	Execution Execution      `json:"execution"`
-	Committed *HistoryRecord `json:"committed"`
+	Execution Execution       `json:"execution"`
+	Committed *HistoryRecord  `json:"committed"`
+	Attempts  []AttemptRecord `json:"attempts"`
+}
+
+// recordAttempt appends the attempt that a transition ends. A scheduled retry
+// still running is an unverified commit; one back in the queue has failed.
+func recordAttempt(ctx context.Context, tx *sql.Tx, e executionRow, change executionTransition,
+	sent, code, message *string, seq *int64, now time.Time) error {
+	status := change.status
+	if change.next != nil {
+		status = "failed"
+		if change.status == "running" {
+			status = "outcome_unknown"
+		}
+	}
+	if change.history != nil {
+		sent = &change.history.SQLExecuted
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO migration_attempts (database_id, execution_id, migration_id,
+		migration_revision, action, attempt, status, retry_scheduled, sql_executed, error_code, error_message,
+		reverts_execution_id, history_seq, actor_id, actor_name, recorded_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+		e.DatabaseID, e.ID, e.MigrationID, e.MigrationRevision, e.Action, change.attempt, status, change.next != nil,
+		sent, code, message, e.RevertsExecution, seq, e.Actor.ID, e.Actor.Username, now)
+	if err != nil {
+		return internal(err)
+	}
+	return nil
+}
+
+func listAttempts(ctx context.Context, q contracts.Querier, executionID string) ([]AttemptRecord, error) {
+	rows, err := q.QueryContext(ctx, `SELECT execution_id, migration_id, migration_revision, action, attempt, status,
+		retry_scheduled, sql_executed, error_code, error_message, reverts_execution_id, history_seq, actor_id,
+		actor_name, recorded_at FROM migration_attempts WHERE execution_id=$1 ORDER BY id`, executionID)
+	if err != nil {
+		return nil, internal(err)
+	}
+	return collectRows(rows, func(row scanner) (AttemptRecord, error) {
+		var a AttemptRecord
+		var code, message *string
+		err := row.Scan(&a.ExecutionID, &a.MigrationID, &a.MigrationRevision, &a.Action, &a.Attempt, &a.Status,
+			&a.RetryScheduled, &a.SQLExecuted, &code, &message, &a.RevertsExecution, &a.HistorySeq,
+			&a.Actor.ID, &a.Actor.Username, &a.RecordedAt)
+		if code != nil && message != nil {
+			a.Error = &RunError{Code: *code, Message: *message}
+		}
+		return a, err
+	})
 }
 
 type DatabaseHead struct {
@@ -186,6 +250,9 @@ func (s *Service) listHistory(ctx context.Context, databaseID string, hide bool,
 		items := make([]TimelineEntry, 0, len(executions))
 		for _, e := range executions {
 			item := TimelineEntry{Execution: e.Execution}
+			if item.Attempts, err = listAttempts(ctx, tx, e.ID); err != nil {
+				return nil, err
+			}
 			if e.Status == "succeeded" {
 				h, err := scanHistory(tx.QueryRowContext(ctx, `SELECT `+historyColumns+`
 					FROM migration_history WHERE database_id=$1 AND execution_id=$2`, databaseID, e.ID), database.Postgres, true)
