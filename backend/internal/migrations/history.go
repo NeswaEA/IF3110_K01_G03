@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -49,9 +50,10 @@ type AttemptRecord struct {
 }
 
 type TimelineEntry struct {
-	Execution Execution       `json:"execution"`
-	Committed *HistoryRecord  `json:"committed"`
-	Attempts  []AttemptRecord `json:"attempts"`
+	Execution    Execution       `json:"execution"`
+	Committed    *HistoryRecord  `json:"committed"`
+	Attempts     []AttemptRecord `json:"attempts"`
+	AttemptsOnly bool            `json:"attempts_only,omitempty"`
 }
 
 // recordAttempt appends the attempt that a transition ends. A scheduled retry
@@ -65,19 +67,44 @@ func recordAttempt(ctx context.Context, tx *sql.Tx, e executionRow, change execu
 			status = "outcome_unknown"
 		}
 	}
-	if change.history != nil {
-		sent = &change.history.SQLExecuted
+	attempt := change.attempt
+	if change.history != nil && e.commitAttempt != nil && (attempt != *e.commitAttempt || sent == nil) {
+		attempt = *e.commitAttempt
+		sent = nil
+		err := tx.QueryRowContext(ctx, `SELECT sql_executed FROM migration_attempts
+			WHERE execution_id=$1 AND attempt=$2 AND sql_executed IS NOT NULL ORDER BY id DESC LIMIT 1`, e.ID, attempt).Scan(&sent)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return internal(err)
+		}
 	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO migration_attempts (database_id, execution_id, migration_id,
 		migration_revision, action, attempt, status, retry_scheduled, sql_executed, error_code, error_message,
 		reverts_execution_id, history_seq, actor_id, actor_name, recorded_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-		e.DatabaseID, e.ID, e.MigrationID, e.MigrationRevision, e.Action, change.attempt, status, change.next != nil,
+		e.DatabaseID, e.ID, e.MigrationID, e.MigrationRevision, e.Action, attempt, status, change.next != nil,
 		sent, code, message, e.RevertsExecution, seq, e.Actor.ID, e.Actor.Username, now)
 	if err != nil {
 		return internal(err)
 	}
 	return nil
+}
+
+func recordInterruptedAttempt(ctx context.Context, tx *sql.Tx, e executionRow, now time.Time) error {
+	if e.Action == "dry_run" || e.Status != "running" || e.Attempt == 0 {
+		return nil
+	}
+	var recorded bool
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM migration_attempts WHERE execution_id=$1 AND attempt=$2)`,
+		e.ID, e.Attempt).Scan(&recorded)
+	if err != nil {
+		return internal(err)
+	}
+	if recorded {
+		return nil
+	}
+	code, message := "EXECUTION_INTERRUPTED", "Worker berhenti sebelum hasil attempt dapat dicatat."
+	return recordAttempt(ctx, tx, e, executionTransition{status: "running", attempt: e.Attempt, next: &now},
+		e.sqlSent, &code, &message, nil, now)
 }
 
 func listAttempts(ctx context.Context, q contracts.Querier, executionID string) ([]AttemptRecord, error) {
@@ -236,24 +263,36 @@ func (s *Service) listHistory(ctx context.Context, databaseID string, hide bool,
 			SELECT h.execution_id, reverted.chain_root_id FROM migration_history h
 			JOIN migration_executions reverted ON reverted.id=h.reverts_execution_id
 			WHERE h.database_id=$1 AND h.action='rollback' AND $2
-		) `+executionSelect+` WHERE e.database_id=$1 AND e.action<>'dry_run'
-			AND NOT EXISTS (SELECT 1 FROM rollbacks r WHERE r.execution_id=e.id OR
-				(r.chain_root_id=e.chain_root_id AND e.status IN ('succeeded','partial','partially_reverted')))
+		) SELECT `+executionColumns+`, hidden.attempts_only`+executionFrom+`
+			CROSS JOIN LATERAL (SELECT EXISTS (SELECT 1 FROM rollbacks r WHERE r.execution_id=e.id OR
+				(r.chain_root_id=e.chain_root_id AND e.status IN ('succeeded','partial','partially_reverted'))) AS attempts_only) hidden
+			WHERE e.database_id=$1 AND e.action<>'dry_run'
+			AND (NOT hidden.attempts_only OR EXISTS (SELECT 1 FROM migration_attempts a
+				WHERE a.execution_id=e.id AND a.status IN ('failed','outcome_unknown')))
 			ORDER BY e.number DESC LIMIT $3 OFFSET $4`, databaseID, hide, limit, offset)
 		if err != nil {
 			return nil, internal(err)
 		}
-		executions, err := collectRows(rows, scanExecution)
+		items, err := collectRows(rows, func(row scanner) (TimelineEntry, error) {
+			var item TimelineEntry
+			e, err := scanExecutionWith(row, &item.AttemptsOnly)
+			item.Execution = e.Execution
+			return item, err
+		})
 		if err != nil {
 			return nil, err
 		}
-		items := make([]TimelineEntry, 0, len(executions))
-		for _, e := range executions {
-			item := TimelineEntry{Execution: e.Execution}
+		for i := range items {
+			item := &items[i]
+			e := item.Execution
 			if item.Attempts, err = listAttempts(ctx, tx, e.ID); err != nil {
 				return nil, err
 			}
-			if e.Status == "succeeded" {
+			if item.AttemptsOnly {
+				item.Attempts = slices.DeleteFunc(item.Attempts, func(a AttemptRecord) bool {
+					return a.Status != "failed" && a.Status != "outcome_unknown"
+				})
+			} else if e.Status == "succeeded" {
 				h, err := scanHistory(tx.QueryRowContext(ctx, `SELECT `+historyColumns+`
 					FROM migration_history WHERE database_id=$1 AND execution_id=$2`, databaseID, e.ID), database.Postgres, true)
 				switch {
@@ -263,7 +302,6 @@ func (s *Service) listHistory(ctx context.Context, databaseID string, hide bool,
 					return nil, internal(err)
 				}
 			}
-			items = append(items, item)
 		}
 		return items, nil
 	})

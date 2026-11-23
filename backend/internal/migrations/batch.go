@@ -1,13 +1,17 @@
 package migrations
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -21,8 +25,9 @@ import (
 var errInvalidBatch = errors.New("hasil atau konfigurasi batch tidak valid")
 
 type batchRange struct {
-	from, to int64
-	rows     int
+	from, to       int64
+	rows           int
+	keyFingerprint []byte
 }
 
 type checkpoint struct {
@@ -97,11 +102,21 @@ func runBatchSQL(ctx context.Context, t normalTarget, query string, from, to int
 	if err := batchRole(ctx, t); err != nil {
 		return batchRange{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return batchRange{}, err
+	}
 	rows, err := t.QueryContext(telemetry.WithUserSQL(ctx), query, from, to, size)
+	if rows != nil {
+		defer rows.Close()
+	}
+	if t.onUserSQL != nil {
+		if saveErr := t.onUserSQL(ctx, query); saveErr != nil {
+			return batchRange{}, saveErr
+		}
+	}
 	if err != nil {
 		return batchRange{}, err
 	}
-	defer rows.Close()
 	b := batchRange{from: from, to: from}
 	keys := make(map[int64]struct{})
 	for rows.Next() {
@@ -121,6 +136,14 @@ func runBatchSQL(ctx context.Context, t normalTarget, query string, from, to int
 		return b, err
 	}
 	rows.Close()
+	// RETURNING has no fixed order. Hash the sorted, fixed-width keys.
+	hash := sha256.New()
+	var encoded [8]byte
+	for _, key := range slices.Sorted(maps.Keys(keys)) {
+		binary.BigEndian.PutUint64(encoded[:], uint64(key))
+		_, _ = hash.Write(encoded[:])
+	}
+	b.keyFingerprint = hash.Sum(nil)
 	return b, t.exec(ctx, "RESET ROLE")
 }
 
@@ -153,13 +176,16 @@ func (x *Executor) dryRunBatch(ctx context.Context, t normalTarget, r Revision) 
 				result.Reversible = new(false)
 				return result
 			}
-			out.Reversible = new(down.rows == up.rows && down.to == up.to)
+			out.Reversible = new(bytes.Equal(down.keyFingerprint, up.keyFingerprint))
 		}
 	}
 	return out
 }
 
 func batchFailure(err error) *attemptFailure {
+	if errors.Is(err, errAttemptProgress) {
+		return metadataFailure()
+	}
 	if errors.Is(err, errInvalidBatch) {
 		return failed("INVALID_BATCH_RESULT", "Key atau hasil RETURNING batch tidak valid.")
 	}
@@ -168,11 +194,18 @@ func batchFailure(err error) *attemptFailure {
 
 func (x *Executor) handleBatch(ctx, work context.Context, target database.TargetHandle, lock database.MigrationLock, g executionGate) contracts.JobResult {
 	e := g.executionRow
-	t := normalTarget{conn: lock.Conn, target: target}
+	sent := false
+	t := normalTarget{conn: lock.Conn, target: target, onUserSQL: func(ctx context.Context, statement string) error {
+		if sent {
+			return nil
+		}
+		if err := x.saveAttemptProgress(ctx, e, &statement, false); err != nil {
+			return err
+		}
+		sent = true
+		return nil
+	}}
 	h, progress, failure := x.runBatch(work, t, lock, g)
-	if h != nil {
-		e.sqlSent = &h.SQLExecuted
-	}
 	if failure == nil {
 		return x.complete(ctx, e, "succeeded", nil, h, lock.Release)
 	}
@@ -261,6 +294,9 @@ func (x *Executor) runBatch(ctx context.Context, t normalTarget, lock database.M
 	if !t.target.MigrationReady || m.Current.Batch == nil {
 		return nil, progress, failed("TARGET_NOT_READY", "Database target belum siap untuk batch.")
 	}
+	if err := x.ensureCheckpointFingerprint(ctx, t); err != nil {
+		return nil, progress, batchFailure(err)
+	}
 	spec := *m.Current.Batch
 	scope, h, original, failure := x.batchPosition(ctx, t, e, root, m, progress)
 	if failure != nil {
@@ -281,12 +317,10 @@ func (x *Executor) runBatch(ctx context.Context, t normalTarget, lock database.M
 	}
 	x.log(ctx, e, "execution.revalidated")
 	lastEvent := time.Time{}
-	var sent *HistoryRecord // set once this attempt sends batch SQL, for the attempt record
 	for {
 		if failure := x.batchStop(ctx, e); failure != nil {
-			return sent, progress, failure
+			return nil, progress, failure
 		}
-		sent = &h
 		r, failure := x.commitBatch(ctx, t, lock, e, &h, original, cursor, scope.to, n+1, batches, rows)
 		if failure != nil {
 			telemetry.RecordBatch(ctx, e.Direction, "failed", 0)
@@ -295,7 +329,7 @@ func (x *Executor) runBatch(ctx context.Context, t normalTarget, lock database.M
 				outcome.Status, outcome.Error = "failed", failure.detail
 				x.log(ctx, outcome, "batch.failed", "batch", n+1)
 			}
-			return sent, progress, failure
+			return nil, progress, failure
 		}
 		if r == nil {
 			h.Batches, h.Rows = batches, strconv.FormatInt(rows, 10)
@@ -307,7 +341,7 @@ func (x *Executor) runBatch(ctx context.Context, t normalTarget, lock database.M
 			cursor = r.from
 		}
 		if err := x.mirrorCheckpoint(ctx, e, *r); err != nil {
-			return sent, progress, &attemptFailure{detail: runFailure("INTERNAL_ERROR", "Checkpoint sudah tersimpan pada target."), uncertain: true}
+			return nil, progress, &attemptFailure{detail: runFailure("INTERNAL_ERROR", "Checkpoint sudah tersimpan pada target."), uncertain: true}
 		}
 		now := s.store.now()
 		if now.Sub(lastEvent) >= time.Second {
@@ -324,11 +358,23 @@ func (x *Executor) runBatch(ctx context.Context, t normalTarget, lock database.M
 					timer.Stop()
 				}
 				if failure := x.batchStop(ctx, e); failure != nil {
-					return sent, progress, failure
+					return nil, progress, failure
 				}
 			}
 		}
 	}
+}
+
+func (x *Executor) ensureCheckpointFingerprint(ctx context.Context, t normalTarget) error {
+	var exists bool
+	err := t.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM pg_attribute
+		WHERE attrelid='_platform.migration_checkpoints'::regclass AND attname='key_fingerprint' AND NOT attisdropped)`).Scan(&exists)
+	if err != nil || exists {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, x.options.LockTimeout)
+	defer cancel()
+	return t.exec(ctx, addCheckpointFingerprint)
 }
 
 func (x *Executor) batchStop(ctx context.Context, e executionRow) *attemptFailure {
@@ -385,6 +431,14 @@ func (x *Executor) batchPosition(ctx context.Context, t normalTarget, e, root ex
 			return scope, h, "", metadataFailure()
 		}
 		original = previous.ChainRootID
+		var missingKeys bool
+		if err := t.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM _platform.migration_checkpoints
+			WHERE chain_root_id=$1 AND direction='up' AND key_fingerprint IS NULL)`, original).Scan(&missingKeys); err != nil {
+			return scope, h, "", batchFailure(err)
+		}
+		if missingKeys {
+			return scope, h, "", failed("LEDGER_INCOMPATIBLE", "Checkpoint lama tidak menyimpan bukti key untuk rollback yang aman.")
+		}
 		if previous.Status == "partial" && previous.Direction == "up" && m.Status == "partial" {
 			h, err = x.partialRevertHistory(ctx, t, e, m)
 			if err != nil {
@@ -459,14 +513,14 @@ func (x *Executor) commitBatch(ctx context.Context, t normalTarget, lock databas
 		r, err = runBatchSQL(ctx, t, h.SQLExecuted, cursor, end, e.Batch.BatchSize)
 	} else if original != "" {
 		var source batchRange
-		err = t.QueryRowContext(ctx, `SELECT cursor_from,cursor_to,rows FROM _platform.migration_checkpoints
+		err = t.QueryRowContext(ctx, `SELECT cursor_from,cursor_to,rows,key_fingerprint FROM _platform.migration_checkpoints
 			WHERE chain_root_id=$1 AND direction='up' AND cursor_to<=$2 ORDER BY cursor_to DESC LIMIT 1`,
-			original, cursor).Scan(&source.from, &source.to, &source.rows)
+			original, cursor).Scan(&source.from, &source.to, &source.rows, &source.keyFingerprint)
 		if errors.Is(err, sql.ErrNoRows) {
 			err = nil
 		} else if err == nil {
 			r, err = runBatchSQL(ctx, t, h.SQLExecuted, source.from, source.to, source.rows)
-			if err == nil && (r.rows != source.rows || r.to != source.to) {
+			if err == nil && !bytes.Equal(r.keyFingerprint, source.keyFingerprint) {
 				err = errInvalidBatch
 			}
 		}
@@ -479,11 +533,14 @@ func (x *Executor) commitBatch(ctx context.Context, t normalTarget, lock databas
 	if r.rows == 0 {
 		h.Batches, h.Rows, h.CommittedAt = batches, strconv.FormatInt(total, 10), now
 		err = insertTargetHistory(ctx, t, t.target.Driver, *h)
+		if err == nil {
+			err = x.saveAttemptProgress(ctx, e, nil, true)
+		}
 	} else {
 		cp = &checkpoint{batchRange: r, number: number, at: now}
 		err = t.exec(ctx, `INSERT INTO _platform.migration_checkpoints
-			(execution_id,batch_no,chain_root_id,direction,cursor_from,cursor_to,rows,committed_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, e.ID, number, e.ChainRootID, e.Direction, r.from, r.to, r.rows, now)
+			(execution_id,batch_no,chain_root_id,direction,cursor_from,cursor_to,rows,committed_at,key_fingerprint)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, e.ID, number, e.ChainRootID, e.Direction, r.from, r.to, r.rows, now, r.keyFingerprint)
 	}
 	if err != nil {
 		return nil, batchFailure(err)

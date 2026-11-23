@@ -16,7 +16,7 @@ func unsupported() error {
 	return problem("UNSUPPORTED_SQL", "SQL memuat operasi di luar migrasi transaksional yang didukung.")
 }
 
-func postgresStatements(query string) ([]string, error) {
+func postgresStatements(query string) ([]normalStatement, error) {
 	tree, err := pgquery.Parse(query)
 	if err != nil {
 		return nil, problem("SQL_EXECUTION_FAILED", "Sintaks SQL PostgreSQL tidak valid.")
@@ -34,13 +34,13 @@ func postgresStatements(query string) ([]string, error) {
 			return nil, unsupported()
 		}
 	}
-	statements := make([]string, 0, len(tree.Stmts))
+	statements := make([]normalStatement, 0, len(tree.Stmts))
 	for _, raw := range tree.Stmts {
 		start, end := int(raw.StmtLocation), len(query)
 		if raw.StmtLen > 0 {
 			end = start + int(raw.StmtLen)
 		}
-		statements = append(statements, query[start:end])
+		statements = append(statements, normalStatement{query: query[start:end], end: end})
 	}
 	return statements, nil
 }

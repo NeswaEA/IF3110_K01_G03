@@ -67,30 +67,39 @@ type executionRow struct {
 	heartbeatAt   *time.Time
 	workerID      *string
 	reconcile     bool
-	sqlSent       *string // SQL this attempt sent to the target, kept in its attempt record
+	sqlSent       *string
+	commitAttempt *int
 }
 
-const executionSelect = `SELECT e.id, e.number, e.database_id, e.migration_id, m.title, e.change_request_id, e.action, e.direction,
+const executionColumns = `e.id, e.number, e.database_id, e.migration_id, m.title, e.change_request_id, e.action, e.direction,
 	e.mode, e.status, e.attempt, e.max_attempts, e.migration_revision, e.version, e.reverts_execution_id,
 	e.resumes_execution_id, e.chain_root_id, e.held_reason, e.enqueued_by, e.enqueued_by_name, e.enqueued_at,
 	e.started_at, e.finished_at, e.error_code, e.error_message, e.trace_id, e.history_seq, e.result,
 	e.content_hash, e.next_attempt_at, e.lock_requested_at, e.heartbeat_at, e.worker_id, e.reconcile_requested,
-	e.batch_size, e.scope_from, e.scope_to, e.cursor, e.batches_committed, e.rows_committed, e.stop_requested_at IS NOT NULL
-	FROM migration_executions e JOIN migrations m ON m.id=e.migration_id`
+	e.batch_size, e.scope_from, e.scope_to, e.cursor, e.batches_committed, e.rows_committed, e.stop_requested_at IS NOT NULL,
+	e.attempt_progress_sql, e.commit_attempt`
+
+const executionFrom = ` FROM migration_executions e JOIN migrations m ON m.id=e.migration_id`
+const executionSelect = `SELECT ` + executionColumns + executionFrom
 
 func scanExecution(row scanner) (executionRow, error) {
+	return scanExecutionWith(row)
+}
+
+func scanExecutionWith(row scanner, extra ...any) (executionRow, error) {
 	var e executionRow
 	var code, message *string
 	var result []byte
 	var size, from, to, cursor *int64
 	var rows int64
 	var batch ExecutionBatch
-	if err := row.Scan(&e.ID, &e.Number, &e.DatabaseID, &e.MigrationID, &e.MigrationTitle, &e.ChangeRequestID,
+	dest := []any{&e.ID, &e.Number, &e.DatabaseID, &e.MigrationID, &e.MigrationTitle, &e.ChangeRequestID,
 		&e.Action, &e.Direction, &e.Mode, &e.Status, &e.Attempt, &e.MaxAttempts, &e.MigrationRevision,
 		&e.Version, &e.RevertsExecution, &e.ResumesExecution, &e.ChainRootID, &e.HeldReason, &e.Actor.ID,
 		&e.Actor.Username, &e.EnqueuedAt, &e.StartedAt, &e.FinishedAt, &code, &message, &e.TraceID, &e.HistorySeq, &result,
 		&e.contentHash, &e.nextAttemptAt, &e.lockRequested, &e.heartbeatAt, &e.workerID, &e.reconcile,
-		&size, &from, &to, &cursor, &batch.BatchesCommitted, &rows, &batch.StopRequested); err != nil {
+		&size, &from, &to, &cursor, &batch.BatchesCommitted, &rows, &batch.StopRequested, &e.sqlSent, &e.commitAttempt}
+	if err := row.Scan(append(dest, extra...)...); err != nil {
 		return e, err
 	}
 	if code != nil {

@@ -2285,7 +2285,7 @@ components:
         status: { type: string, enum: [succeeded, failed, partial, partially_reverted, outcome_unknown] }
         retry_scheduled: { type: boolean }
         sql_executed:
-          description: SQL this attempt sent to the target; null when it stopped before any SQL ran.
+          description: SQL recorded as sent in this attempt. Null means no SQL was recorded.
           oneOf: [{ type: string }, { type: 'null' }]
         error: { oneOf: [{ $ref: '#/components/schemas/RunError' }, { type: 'null' }] }
         reverts_execution_id: { oneOf: [{ $ref: '#/components/schemas/UUID' }, { type: 'null' }] }
@@ -2304,6 +2304,9 @@ components:
         attempts:
           type: array
           items: { $ref: '#/components/schemas/AttemptRecord' }
+        attempts_only:
+          type: boolean
+          description: True when the rollback filter retains only failed or unverified attempts from this execution.
     DatabaseHead:
       type: object
       required: [version, migration_id, history_seq, blocked, blocking_execution_id]

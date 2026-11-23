@@ -23,6 +23,24 @@ type executionTransition struct {
 	releaseLock func()
 }
 
+var errAttemptProgress = errors.New("attempt progress unavailable")
+
+func (x *Executor) saveAttemptProgress(ctx context.Context, e executionRow, statement *string, committing bool) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	res, err := x.service.store.DB.ExecContext(ctx, `UPDATE migration_executions SET
+		attempt_progress_sql=COALESCE($4,attempt_progress_sql),
+		commit_attempt=CASE WHEN $5 THEN attempt ELSE commit_attempt END
+		WHERE id=$1 AND attempt=$2 AND worker_id=$3 AND status='running'`, e.ID, e.Attempt, e.workerID, statement, committing)
+	if err != nil {
+		return errAttemptProgress
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		return errAttemptProgress
+	}
+	return nil
+}
+
 func (x *Executor) retryDelay(attempt int) time.Duration {
 	return database.Backoff(x.options.RetryBaseDelay, x.options.RetryMaxDelay, attempt)
 }
@@ -113,6 +131,13 @@ func (x *Executor) transition(ctx context.Context, previous executionRow, change
 		if staleOnly && e.heartbeatAt != nil && now.Sub(*e.heartbeatAt) < x.options.StaleAfter {
 			return result, nil
 		}
+		sent := e.sqlSent
+		if change.attempt != e.Attempt {
+			if err := recordInterruptedAttempt(ctx, tx, e, now); err != nil {
+				return result, err
+			}
+			sent = nil
+		}
 		var code, message *string
 		if change.detail != nil {
 			code, message = &change.detail.Code, &change.detail.Message
@@ -138,13 +163,14 @@ func (x *Executor) transition(ctx context.Context, previous executionRow, change
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE migration_executions SET status=$2, attempt=$3, next_attempt_at=$4,
 			error_code=$5, error_message=$6, finished_at=$7, reconcile_requested=$8,
-			version=COALESCE($9,version), history_seq=COALESCE($10,history_seq), result=COALESCE($11,result) WHERE id=$1`,
+			version=COALESCE($9,version), history_seq=COALESCE($10,history_seq), result=COALESCE($11,result),
+			attempt_progress_sql=NULL WHERE id=$1`,
 			e.ID, change.status, change.attempt, change.next, code, message, finished, reconcile, version, seq, change.report)
 		if err != nil {
 			return result, internal(err)
 		}
 		if e.Action != "dry_run" {
-			if err := recordAttempt(ctx, tx, e, change, previous.sqlSent, code, message, seq, now); err != nil {
+			if err := recordAttempt(ctx, tx, e, change, sent, code, message, seq, now); err != nil {
 				return result, err
 			}
 		}

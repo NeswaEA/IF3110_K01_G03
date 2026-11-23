@@ -54,7 +54,10 @@ var postgresCheckpointColumns = map[string]column{
 	"execution_id": {typ: "uuid"}, "batch_no": {typ: "integer"}, "chain_root_id": {typ: "uuid"},
 	"direction": {typ: "text"}, "cursor_from": {typ: "bigint"}, "cursor_to": {typ: "bigint"},
 	"rows": {typ: "integer"}, "committed_at": {typ: "timestamp with time zone"},
+	"key_fingerprint": {typ: "bytea", nullable: true},
 }
+
+const addCheckpointFingerprint = `ALTER TABLE _platform.migration_checkpoints ADD COLUMN IF NOT EXISTS key_fingerprint bytea`
 
 func ensurePostgresHistory(ctx context.Context, q executor, role string) error {
 	var safe bool
@@ -89,7 +92,8 @@ func ensurePostgresHistory(ctx context.Context, q executor, role string) error {
 		 execution_id uuid NOT NULL, batch_no integer NOT NULL, chain_root_id uuid NOT NULL,
 		 direction text NOT NULL CHECK (direction IN ('up','down')),
 		 cursor_from bigint NOT NULL, cursor_to bigint NOT NULL, rows integer NOT NULL,
-		 committed_at timestamptz NOT NULL, PRIMARY KEY (execution_id, batch_no))`,
+		 committed_at timestamptz NOT NULL, key_fingerprint bytea, PRIMARY KEY (execution_id, batch_no))`,
+		addCheckpointFingerprint,
 		`CREATE INDEX IF NOT EXISTS migration_checkpoints_chain_cursor_idx
 		  ON _platform.migration_checkpoints (chain_root_id,direction,cursor_to)`,
 		`REVOKE ALL ON TABLE _platform.migration_history, _platform.migration_checkpoints FROM PUBLIC, ` + editor,

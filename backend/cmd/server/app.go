@@ -159,6 +159,12 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	explain.RegisterRoutes(protected, explain.NewHandler(explainService, policy, auth.PrincipalFromContext))
 	schemadiff.RegisterRoutes(protected, schemadiff.NewHandler(diffService, auth.PrincipalFromContext))
 	sse := jobs.NewEventsHandler(events, policy, auth.PrincipalFromContext)
+	sse.Revalidate = func(ctx context.Context, p contracts.Principal, databaseID string) error {
+		if err := sessions.RequireActiveSession(ctx, p); err != nil {
+			return err
+		}
+		return policy.Require(ctx, p, contracts.ViewDatabase, databaseID)
+	}
 	if runtime.SSEHeartbeat > 0 {
 		sse.Heartbeat = runtime.SSEHeartbeat
 	}

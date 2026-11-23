@@ -6,9 +6,7 @@ Admin mendaftarkan database target (PostgreSQL atau SQLite) dan memberi hak akse
 
 - dengan akses **lihat**, pengguna dapat membaca schema, data, dan riwayat migrasi;
 - dengan akses **edit**, pengguna juga dapat membandingkan schema dan menyiapkan perubahan.
-
-> **Status Milestone 2.** Migration memakai revisi immutable, review dengan approval leader, dan eksekusi lewat antrean worker. PostgreSQL mendukung mode normal dan batch. SQLite mendukung mode normal. Schema metadata workflow ada di migrasi `0005`–`0009`, dengan riwayat di target. Target Milestone 1 yang masih memiliki ledger lama menghasilkan `LEDGER_INCOMPATIBLE`. Untuk memulai dengan volume development kosong, jalankan `sh scripts/dev-up.sh down -v`.
-
+- 
 ## Fitur
 
 | Fitur | Keterangan |
@@ -154,6 +152,8 @@ Uji lokal 17 November 2026 memakai Apple M4, RAM 16 GiB, SSD internal 494,4 GB, 
 | Batch via worker | 3,968 dtk | 0,203 dtk | 0,461 ms |
 
 Rollback normal yang mereset dataset selesai dalam 2,854 detik. Eksekusi batch menyimpan 100 checkpoint untuk 1.000.000 baris. Jumlah harga akhir yang diharapkan dan terukur adalah `605495000.00`. Sesi pengamat mengambil sampel `RowExclusiveLock` di `pg_locks` per transaksi dengan jeda 8 ms, sambil menjalankan `SELECT price FROM public.big_items WHERE id=500000`. Durasi lock memakai selisih sampel pertama dan terakhir pada transaksi yang sama. p95 SELECT memakai 281 sampel mode normal dan 409 sampel mode batch. Angka berasal dari satu run lokal.
+
+Checkpoint batch baru menyimpan sidik jari key yang dikembalikan SQL. SQL down harus mengembalikan kumpulan key yang sama untuk setiap checkpoint. Untuk checkpoint lama yang belum punya bukti key, rollback otomatis berhenti dengan `LEDGER_INCOMPATIBLE`. Pemulihan data lama memerlukan migration korektif yang bisa direview atau backup yang sudah diverifikasi.
 
 Pada uji pemulihan terpisah di stack yang sama, satu worker dimatikan dengan SIGKILL setelah paling sedikit tiga checkpoint. Worker kedua menuntaskan job pada percobaan kedua dengan tepat 100 checkpoint dan 1.000.000 baris. `docker stats` mencatat 11,5–19,4 MiB memori per worker selama pengukuran dataset dan uji pemulihan.
 

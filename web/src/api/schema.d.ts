@@ -1328,7 +1328,7 @@ export interface components {
             /** @enum {string} */
             status: "succeeded" | "failed" | "partial" | "partially_reverted" | "outcome_unknown";
             retry_scheduled: boolean;
-            /** @description SQL this attempt sent to the target; null when it stopped before any SQL ran. */
+            /** @description SQL recorded as sent in this attempt. Null means no SQL was recorded. */
             sql_executed: string | null;
             error: components["schemas"]["RunError"] | null;
             reverts_execution_id: components["schemas"]["UUID"] | null;
@@ -1340,6 +1340,8 @@ export interface components {
             execution: components["schemas"]["Execution"];
             committed: components["schemas"]["HistoryRecord"] | null;
             attempts: components["schemas"]["AttemptRecord"][];
+            /** @description True when the rollback filter retains only failed or unverified attempts from this execution. */
+            attempts_only?: boolean;
         };
         DatabaseHead: {
             version: number;

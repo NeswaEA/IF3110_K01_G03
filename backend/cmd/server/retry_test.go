@@ -117,6 +117,16 @@ func TestUncertainCommitRecoversWithoutReapplying(t *testing.T) {
 	if n := f.proxy.UserQueries(); n != 1 {
 		t.Fatalf("user SQL ran %d times", n)
 	}
+	entry := migrationResponse[[]migrations.TimelineEntry](t, f.call("GET", "/history", ""), 200).Data[0]
+	if entry.Execution.ID != e.ID || len(entry.Attempts) != 2 {
+		t.Fatalf("expected the uncertain outcome and its resolution: %+v", entry)
+	}
+	uncertain, committed := entry.Attempts[0], entry.Attempts[1]
+	if uncertain.Attempt != 1 || uncertain.Status != "outcome_unknown" || committed.Attempt != 1 ||
+		committed.Status != "succeeded" || committed.HistorySeq == nil || committed.SQLExecuted == nil ||
+		*committed.SQLExecuted != "UPDATE execution_items SET value=value+1 WHERE id=1" {
+		t.Fatalf("commit must resolve the original attempt: %+v", entry.Attempts)
+	}
 }
 
 // RTY-06: the target stays unreachable while the worker looks for commit evidence. The execution

@@ -127,6 +127,59 @@ func TestBatchStopResumeRollback(t *testing.T) {
 	f.assertBatchPrices(t, 0)
 }
 
+func TestBatchRollbackVerifiesReturnedKeys(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		name := "mismatched keys"
+		wantError := "INVALID_BATCH_RESULT"
+		if legacy {
+			name = "legacy checkpoint"
+			wantError = "LEDGER_INCOMPATIBLE"
+		}
+		t.Run(name, func(t *testing.T) {
+			f := newExecutionFixture(t, database.Postgres)
+			f.startWorker(t)
+			setup := f.approved(t, "CREATE TABLE batch_items(id bigint PRIMARY KEY,price integer); INSERT INTO batch_items SELECT id,0 FROM generate_series(1,3) id", "DROP TABLE batch_items")
+			f.await(t, f.execute(t, setup, 202).ID, "succeeded")
+			template := func(filter, expr string) string {
+				return "WITH b AS (SELECT id FROM batch_items WHERE id > $1 AND id <= $2 AND " + filter +
+					" ORDER BY id LIMIT $3) UPDATE batch_items SET price=" + expr + " FROM b WHERE batch_items.id=b.id RETURNING batch_items.id"
+			}
+			downFilter := "id<>1"
+			if legacy {
+				downFilter = "id<>2"
+			}
+			body, err := json.Marshal(map[string]any{
+				"title": name, "mode": "batch", "up_sql": template("id<>2", "price+1"), "down_sql": template(downFilter, "price-1"),
+				"batch": map[string]any{"schema": "public", "table": "batch_items", "key_column": "id", "batch_size": 2, "pause_ms": 0},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			m := migrationResponse[migrations.Migration](t, f.call("POST", "/migrations", string(body)), 201).Data
+			dry := migrationResponse[migrations.Execution](t, f.call("POST", "/migrations/"+m.ID+"/dry-run", `{}`), 202).Data
+			var report migrations.DryRunReport
+			if err := json.Unmarshal(f.await(t, dry.ID, "succeeded").DryRun, &report); err != nil || report.Reversible == nil || *report.Reversible != legacy {
+				t.Fatalf("dry run must compare returned keys: %+v (%v)", report, err)
+			}
+			f.await(t, f.execute(t, f.request(t, m.ID, "apply"), 202).ID, "succeeded")
+			if legacy {
+				if _, err := f.target.Exec("ALTER TABLE _platform.migration_checkpoints DROP COLUMN key_fingerprint"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			rollback := f.execute(t, f.request(t, m.ID, "rollback"), 202)
+			outcome := f.await(t, rollback.ID, "failed")
+			if outcome.Error == nil || outcome.Error.Code != wantError {
+				t.Fatalf("expected %s, got %+v", wantError, outcome.Error)
+			}
+			var prices string
+			if err := f.target.QueryRow("SELECT string_agg(price::text, ',' ORDER BY id) FROM batch_items").Scan(&prices); err != nil || prices != "1,0,1" {
+				t.Fatalf("rejected rollback changed target rows: %s (%v)", prices, err)
+			}
+		})
+	}
+}
+
 func TestBatchRevertsCommittedRangesAfterFailure(t *testing.T) {
 	logs := captureBatchLogs(t)
 	f := newExecutionFixture(t, database.Postgres)

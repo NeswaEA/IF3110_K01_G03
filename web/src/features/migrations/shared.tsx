@@ -34,7 +34,7 @@ export function useDatabaseMutation<T, Input>(id: string, mutationFn: (input: In
 
 export function PageButtons({ page, onOffset }: {page: Schemas["Page"]; onOffset: (offset: number) => void}) {
   return <div className="flex flex-wrap gap-2">
-    <Button variant="outline" disabled={page.offset === 0} onClick={() => onOffset(Math.max(0, page.offset - page.limit))}>Sebelumnya</Button>
-    <Button variant="outline" disabled={!page.has_more} onClick={() => onOffset(page.offset + page.limit)}>Berikutnya</Button>
+    <Button className="min-h-10 min-w-10" variant="outline" disabled={page.offset === 0} onClick={() => onOffset(Math.max(0, page.offset - page.limit))}>Sebelumnya</Button>
+    <Button className="min-h-10 min-w-10" variant="outline" disabled={!page.has_more} onClick={() => onOffset(page.offset + page.limit)}>Berikutnya</Button>
   </div>;
 }

@@ -142,6 +142,9 @@ func (x *Executor) gate(ctx context.Context, m contracts.JobMessage, claim bool)
 			return g, nil
 		}
 		g.recover = e.Status == "running" || e.StartedAt != nil || e.reconcile
+		if err := recordInterruptedAttempt(ctx, tx, e, now); err != nil {
+			return g, err
+		}
 		g.exhausted = e.Attempt >= e.MaxAttempts
 		g.Attempt = min(e.Attempt+1, e.MaxAttempts)
 		g.Status = "running"
@@ -156,11 +159,12 @@ func (x *Executor) gate(ctx context.Context, m contracts.JobMessage, claim bool)
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE migration_executions SET status='running', attempt=$2,
 			worker_id=$3, heartbeat_at=$4, started_at=$5, next_attempt_at=NULL, error_code=NULL,
-			error_message=NULL, trace_id=$6 WHERE id=$1`,
+			error_message=NULL, trace_id=$6, attempt_progress_sql=NULL WHERE id=$1`,
 			e.ID, g.Attempt, x.options.WorkerID, now, g.StartedAt, g.TraceID)
 		if err != nil {
 			return g, internal(err)
 		}
+		g.sqlSent = nil
 		return g, nil
 	})
 }
@@ -250,9 +254,6 @@ func (x *Executor) Handle(ctx context.Context, m contracts.JobMessage) contracts
 		}
 	}
 	history, failure := x.runNormal(work, target, lock, e)
-	if history != nil {
-		e.sqlSent = &history.SQLExecuted
-	}
 	switch {
 	case failure == nil:
 		return x.complete(ctx, e, "succeeded", nil, history, lock.Release)

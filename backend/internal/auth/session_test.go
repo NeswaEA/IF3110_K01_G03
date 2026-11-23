@@ -204,6 +204,33 @@ func TestSessionCreationAndPrivacy(t *testing.T) {
 	requireSessionError(t, err, "UNAUTHENTICATED")
 }
 
+func TestEstablishedSessionRevalidation(t *testing.T) {
+	f := newSessionFixture(t)
+	idle := f.create(t, sessionUser)
+	revoked := f.create(t, sessionUser)
+	other := f.create(t, otherSessionUser)
+	f.clock.Advance(20 * time.Minute)
+	if err := f.store.RequireActiveSession(t.Context(), idle.Principal); err != nil {
+		t.Fatal(err)
+	}
+	f.change(t, true, func(tx *sql.Tx) error { return f.store.RevokeInTx(t.Context(), tx, revoked.ID) })
+	requireSessionError(t, f.store.RequireActiveSession(t.Context(), revoked.Principal), "UNAUTHENTICATED")
+	wrongUser := idle.Principal
+	wrongUser.UserID = other.Principal.UserID
+	requireSessionError(t, f.store.RequireActiveSession(t.Context(), wrongUser), "UNAUTHENTICATED")
+	f.clock.Advance(10 * time.Minute)
+	requireSessionError(t, f.store.RequireActiveSession(t.Context(), idle.Principal), "UNAUTHENTICATED")
+	f.clock.Advance(7*time.Hour + 29*time.Minute)
+	if _, err := f.db.Exec(`UPDATE sessions SET last_seen_at=absolute_expires_at-interval '1 minute' WHERE id=$1`, other.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.RequireActiveSession(t.Context(), other.Principal); err != nil {
+		t.Fatal(err)
+	}
+	f.clock.Advance(time.Minute)
+	requireSessionError(t, f.store.RequireActiveSession(t.Context(), other.Principal), "UNAUTHENTICATED")
+}
+
 func TestSessionExpiryBoundaries(t *testing.T) {
 	for _, kind := range []string{"prelogin", "idle", "absolute"} {
 		t.Run(kind, func(t *testing.T) {

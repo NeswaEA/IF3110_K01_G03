@@ -144,6 +144,13 @@ test("creates, dry-runs, reviews and executes a migration through the SPA", asyn
     await expect(page.getByRole("link",{name:new RegExp(title)})).toHaveCount(1);
     await page.reload();
     await expect(page.getByLabel("Sembunyikan rollback")).toBeChecked();
+    await page.goto(database+"/history?offset=1");
+    for (const name of ["Sebelumnya", "Berikutnya"]) {
+      const button = page.getByRole("button", {name, exact:true});
+      await expect(button).toBeVisible();
+      expect((await button.boundingBox()).height).toBeGreaterThanOrEqual(40);
+    }
+    await expectNoSideScroll(page);
     await page.goto(detail);
     await expect(page.getByLabel("SQL up",{exact:true})).not.toBeEditable();
     await expect(page.getByRole("list",{name:"Alur migrasi"}).locator("[aria-current=step]")).toHaveText(/Selesai.*Berhasil/);

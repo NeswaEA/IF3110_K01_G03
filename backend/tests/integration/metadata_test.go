@@ -45,8 +45,8 @@ func TestMetadataSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	files, err := filepath.Glob(filepath.Join("..", "..", "migrations", "*.sql"))
-	if err != nil || len(files) != 10 {
-		t.Fatalf("expected 10 metadata migrations, got %d (%v)", len(files), err)
+	if err != nil || len(files) != 11 {
+		t.Fatalf("expected 11 metadata migrations, got %d (%v)", len(files), err)
 	}
 	sort.Strings(files)
 	for _, file := range files {
@@ -203,7 +203,6 @@ func TestMetadataSchema(t *testing.T) {
 		{"attempt update", "UPDATE migration_attempts SET error_code='X'", "23514", nil},
 		{"attempt delete", "DELETE FROM migration_attempts", "23514", nil},
 		{"succeeded attempt without history", insertAttempt, "23514", []any{databaseID, executionID, migrationID, "succeeded", "SELECT 1", nil, userID}},
-		{"succeeded attempt without SQL", insertAttempt, "23514", []any{databaseID, executionID, migrationID, "succeeded", nil, 1, userID}},
 		{"failed attempt with history", insertAttempt, "23514", []any{databaseID, executionID, migrationID, "failed", nil, 1, userID}},
 		{"attempt for unknown execution", insertAttempt, "23503", []any{databaseID, unknownID, migrationID, "failed", nil, nil, userID}},
 		{"second active approval", insertApproval, "23505", []any{unknownID, openRequestID, groupID, userID, "approved", nil}},
@@ -213,6 +212,9 @@ func TestMetadataSchema(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) { expectSQLState(t, tt.code, tt.query, tt.args...) })
 	}
+	t.Run("batch finalization can record history without sending SQL", func(t *testing.T) {
+		exec(insertAttempt, databaseID, executionID, migrationID, "succeeded", nil, 1, userID)
+	})
 	t.Run("batch revision", func(t *testing.T) {
 		exec(insertRevision, pendingID, 2, "UPDATE items SET note = NULL", nil, "batch", validBatch, contentHash, userID)
 	})

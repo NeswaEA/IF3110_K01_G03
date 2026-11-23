@@ -101,8 +101,9 @@ func (x *Executor) checkInputs(ctx context.Context, q contracts.Querier, e execu
 }
 
 type normalTarget struct {
-	conn   *sql.Conn
-	target database.TargetHandle
+	conn      *sql.Conn
+	target    database.TargetHandle
+	onUserSQL func(context.Context, string) error
 }
 
 func (t normalTarget) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
@@ -235,22 +236,35 @@ func (t normalTarget) checkPosition(ctx context.Context, e executionRow, m Migra
 	return h, nil
 }
 
-func (t normalTarget) userSQL(ctx context.Context, statements []string) error {
+type normalStatement struct {
+	query string
+	end   int
+}
+
+func (t normalTarget) userSQL(ctx context.Context, source string, statements []normalStatement) error {
 	ctx = telemetry.WithUserSQL(ctx)
-	for _, statement := range statements {
+	for i, statement := range statements {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		var err error
 		if t.target.Driver == database.Postgres {
-			if err := t.exec(ctx, statement); err != nil {
-				return err
-			}
-			continue
+			err = t.exec(ctx, statement.query)
+		} else {
+			start := time.Now()
+			err = sqliteUserSQL(ctx, t.conn, statement.query)
+			telemetry.ObserveSQL(ctx, telemetry.SQLEvent{Pool: "target", DatabaseID: t.target.DatabaseID,
+				Query: statement.query, Start: start, Rows: -1, Err: err})
 		}
-		start := time.Now()
-		err := sqliteUserSQL(ctx, t.conn, statement)
-		telemetry.ObserveSQL(ctx, telemetry.SQLEvent{Pool: "target", DatabaseID: t.target.DatabaseID,
-			Query: statement, Start: start, Rows: -1, Err: err})
+		if t.onUserSQL != nil {
+			end := statement.end
+			if i == len(statements)-1 {
+				end = len(source)
+			}
+			if saveErr := t.onUserSQL(ctx, source[:end]); saveErr != nil {
+				return saveErr
+			}
+		}
 		if err != nil {
 			return err
 		}
@@ -258,13 +272,13 @@ func (t normalTarget) userSQL(ctx context.Context, statements []string) error {
 	return nil
 }
 
-func normalStatements(driver database.Driver, query string) ([]string, error) {
+func normalStatements(driver database.Driver, query string) ([]normalStatement, error) {
 	if driver == database.Postgres {
 		return postgresStatements(query)
 	}
-	var statements []string
+	var statements []normalStatement
 	for _, statement := range sqliteStatements(query) {
-		statements = append(statements, statement.query)
+		statements = append(statements, normalStatement{query: statement.query, end: statement.tokens[len(statement.tokens)-1].end})
 	}
 	if len(statements) == 0 {
 		return nil, unsupported()
@@ -272,9 +286,10 @@ func normalStatements(driver database.Driver, query string) ([]string, error) {
 	return statements, nil
 }
 
-// runNormal returns the history record on success, and also with a failure once the SQL was sent.
 func (x *Executor) runNormal(ctx context.Context, target database.TargetHandle, lock database.MigrationLock, e executionRow) (*HistoryRecord, *attemptFailure) {
-	t := normalTarget{conn: lock.Conn, target: target}
+	t := normalTarget{conn: lock.Conn, target: target, onUserSQL: func(ctx context.Context, statement string) error {
+		return x.saveAttemptProgress(ctx, e, &statement, false)
+	}}
 	work := ctx
 	ctx, revalidate := telemetry.Tracer().Start(ctx, "execution.revalidate")
 	defer revalidate.End()
@@ -338,29 +353,34 @@ func (x *Executor) runNormal(ctx context.Context, target database.TargetHandle, 
 		defer cancel()
 		userCtx = timed
 	}
-	// From here on the SQL reached the target, so failures also return h for the attempt record.
-	if err := t.userSQL(userCtx, statements); err != nil {
-		if errors.Is(userCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
-			return &h, failed("STATEMENT_TIMEOUT", "Waktu maksimum statement terlampaui.")
+	if err := t.userSQL(userCtx, h.SQLExecuted, statements); err != nil {
+		if errors.Is(err, errAttemptProgress) {
+			return nil, metadataFailure()
 		}
-		return &h, targetFailure(err)
+		if errors.Is(userCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+			return nil, failed("STATEMENT_TIMEOUT", "Waktu maksimum statement terlampaui.")
+		}
+		return nil, targetFailure(err)
 	}
 	if target.Driver == database.Postgres {
 		if err := t.exec(ctx, "RESET ROLE"); err != nil {
-			return &h, targetFailure(err)
+			return nil, targetFailure(err)
 		}
 	}
 	h.CommittedAt = x.service.store.now()
 	if err := insertTargetHistory(ctx, t, target.Driver, h); err != nil {
-		return &h, targetFailure(err)
+		return nil, targetFailure(err)
+	}
+	if err := x.saveAttemptProgress(ctx, e, nil, true); err != nil {
+		return nil, metadataFailure()
 	}
 	select {
 	case <-lock.Lost:
-		return &h, &attemptFailure{detail: runFailure("TARGET_UNAVAILABLE", "Koneksi lock terputus."), uncertain: true}
+		return nil, &attemptFailure{detail: runFailure("TARGET_UNAVAILABLE", "Koneksi lock terputus."), uncertain: true}
 	default:
 	}
 	if err := ctx.Err(); err != nil {
-		return &h, targetFailure(err)
+		return nil, targetFailure(err)
 	}
 	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
@@ -371,7 +391,7 @@ func (x *Executor) runNormal(ctx context.Context, target database.TargetHandle, 
 			committed = true // The connection was discarded. The next holder checks the evidence.
 			failure.uncertain = true
 		}
-		return &h, failure
+		return nil, failure
 	}
 	committed = true
 	return &h, nil

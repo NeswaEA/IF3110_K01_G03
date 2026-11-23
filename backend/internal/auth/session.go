@@ -185,6 +185,27 @@ func (s *SessionStore) Resolve(ctx context.Context, token string) (Session, erro
 	return result, nil
 }
 
+// RequireActiveSession rechecks an established stream without refreshing idle time
+// or rotating the cookie. Normal HTTP requests continue to use Resolve.
+func (s *SessionStore) RequireActiveSession(ctx context.Context, p contracts.Principal) error {
+	if p.SessionID == "" || p.UserID == "" {
+		return unauthenticated()
+	}
+	var valid bool
+	now := s.now()
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id
+		WHERE s.id=$1 AND u.id=$2 AND u.active AND s.revoked_at IS NULL
+		AND s.absolute_expires_at>GREATEST($3,s.last_seen_at) AND s.last_seen_at>$4)`,
+		p.SessionID, p.UserID, now, now.Add(-s.options.IdleTimeout)).Scan(&valid)
+	if err != nil {
+		return sessionFailure(err)
+	}
+	if !valid {
+		return unauthenticated()
+	}
+	return nil
+}
+
 // load reads the session behind a token hash and applies every rejection rule; lock takes the session row lock.
 func (s *SessionStore) load(ctx context.Context, q contracts.Querier, hash []byte, lock bool) (sessionState, error) {
 	var st sessionState

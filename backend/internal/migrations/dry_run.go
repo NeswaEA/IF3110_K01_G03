@@ -144,7 +144,7 @@ func (x *Executor) dryRun(ctx context.Context, e executionRow, target database.T
 				return err
 			}
 		}
-		if err := t.userSQL(ctx, statements); err != nil {
+		if err := t.userSQL(ctx, query, statements); err != nil {
 			return err
 		}
 		if target.Driver == database.Postgres {
