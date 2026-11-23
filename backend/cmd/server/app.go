@@ -44,6 +44,7 @@ type runtimeConfig struct {
 	// OutboxPollInterval and SSEHeartbeat stay zero when unset; the relay and SSE handler apply their defaults.
 	OutboxPollInterval time.Duration
 	SSEHeartbeat       time.Duration
+	SSERecheck         time.Duration // tests only; zero keeps the 30s session and access recheck
 }
 
 func loadRuntimeConfig() (runtimeConfig, error) {
@@ -167,6 +168,9 @@ func newApp(ctx context.Context, db *sql.DB, cfg platform.Config, runtime runtim
 	}
 	if runtime.SSEHeartbeat > 0 {
 		sse.Heartbeat = runtime.SSEHeartbeat
+	}
+	if runtime.SSERecheck > 0 {
+		sse.Recheck = runtime.SSERecheck
 	}
 	jobs.RegisterRoutes(protected, sse)
 	unknownAPI := func(w http.ResponseWriter, r *http.Request) {

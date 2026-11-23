@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -130,7 +131,7 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 		}
 	}
 	cfg := platform.Config{AppEnv: "test", AppOrigin: "http://localhost:8080", MetadataDatabaseURL: dsn, SessionIdleTimeout: 30 * time.Minute, SessionAbsoluteTimeout: 8 * time.Hour, SessionRotationInterval: 15 * time.Minute, SessionGracePeriod: 30 * time.Second}
-	h, close, err := newApp(t.Context(), db, cfg, runtimeConfig{EncryptionKey: key, SQLiteDir: dir, WebDir: testWeb(t), AtlasBin: filepath.Join(dir, "absent-atlas"), ConnectTimeout: time.Second, QueryTimeout: time.Second}, testEvents(t))
+	h, close, err := newApp(t.Context(), db, cfg, runtimeConfig{EncryptionKey: key, SQLiteDir: dir, WebDir: testWeb(t), AtlasBin: filepath.Join(dir, "absent-atlas"), ConnectTimeout: time.Second, QueryTimeout: time.Second, SSERecheck: 100 * time.Millisecond}, testEvents(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,6 +300,27 @@ func TestAppAuthenticationViewerExplainAndDisable(t *testing.T) {
 	}
 	if w := request("GET", "/api/v1/databases/"+databaseID+"/events", "", nil, ""); w.Code != http.StatusUnauthorized || !strings.Contains(w.Body.String(), "UNAUTHENTICATED") {
 		t.Fatal("the event stream must require a session", w.Code, w.Body.String())
+	}
+	// An open stream closes after logout although the user's grant is unchanged.
+	server := httptest.NewServer(h)
+	defer server.Close()
+	streamer := login("viewer")
+	streamReq, _ := http.NewRequestWithContext(t.Context(), "GET", server.URL+"/api/v1/databases/"+databaseID+"/events", nil)
+	streamReq.AddCookie(streamer.cookie)
+	stream, err := server.Client().Do(streamReq)
+	if err != nil || stream.StatusCode != http.StatusOK {
+		t.Fatal("the event stream did not open", err)
+	}
+	defer stream.Body.Close()
+	if w := request("POST", "/api/v1/auth/logout", "{}", streamer.cookie, streamer.csrf); w.Code >= 300 {
+		t.Fatal("logout failed", w.Code)
+	}
+	streamClosed := make(chan struct{}, 1) // close is shadowed by the app cleanup here
+	go func() { _, _ = io.Copy(io.Discard, stream.Body); streamClosed <- struct{}{} }()
+	select {
+	case <-streamClosed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the event stream stayed open after logout")
 	}
 	w := request("GET", "/api/v1/databases", "", edit.cookie, "")
 	if !strings.Contains(w.Body.String(), `"transactional_migrations":true`) || !strings.Contains(w.Body.String(), `"schema_diff":true`) {
